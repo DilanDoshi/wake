@@ -1936,7 +1936,7 @@ None of these are wrong. All are unmeasured at the scale the product claims.
   columns at distinct widths and a plan card, the tiled board's tile width, one reserved for the copy
   path — and fails if the constant disagrees. A wider terminal can draw more widths; a miss costs one
   build per block rendered, and a block renders on an event or a re-wrap, never on a frame.
-- **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake. Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
+- **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake - **amended 2026-11-11 (owner): only while the daemon lives; every daemon exit sweeps them, `decisions.md` 2026-11-11.** Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
   paths. An agent that finishes normally after `npm run dev &` leaves the dev server behind.
   Policy belongs to the pool; the *mechanism* cannot — `cmd.Process.Pid` dies with `finish`, so
   it must be a pgid recorded on `Session` at spawn.
@@ -6438,3 +6438,37 @@ Left out:
   a copy that keeps dates replaces the file (a new identity, which the cache catches); only a write into the
   same file that changes no byte count and sets the mtime back slips through, which no writer does. *Closes
   with:* the file's change time in the key, which `Stat_t` spells differently on each platform.
+
+- **A process an agent's shell left behind after the shell exited outlives the fleet** (BUG-73's residual, found
+  live 2026-11-12). `nohup cmd &` in a foreground Bash call, and a `SessionStart` hook's background command,
+  end as an orphan under launchd in the exited shell's group, with no listed parent: the ppid snapshot
+  (`world.go`) names only groups led by a *live* child of the agent's. *Closes with:* a Linux subreaper on the
+  launcher (it adopts the orphans; macOS has none), or the env-marker walk below. **The env-marker walk is
+  refused as it stands:** a marker inherited through an agent's tree follows `wake new` run by an agent into
+  another fleet (its daemon and agents carry the first fleet's marker), so one fleet's `wake stop` would end
+  another's; it also reads every same-user process's environment at each ending (`KERN_PROCARGS2`, `/proc`)
+  and ends what the operator daemonised on purpose. Only with a marker the second fleet overwrites at its own
+  daemon would it be safe.
+- **A daemon that is SIGKILLed or crashes leaves the groups its agents started.** The roster holds one pid per
+  agent and the reaper (`reap.go`) signals that group alone, so a background shell outlives a crashed fleet.
+  The world ledger is memory. *Closes with:* the roster (or `parkready.json`) carrying each noted group's
+  members as pid and start time, which the reaper would prove by the same rule `sweepable` does.
+- **A shell that starts and exits between two looks is never noted.** The snapshot is taken at a stop, at a
+  shell's `task_started` (`noteWorldEvent`, coalesced per agent: a burst costs one `ps` and at most one more,
+  about 33 ms each on this machine at 1,600 processes) and at the fleet's shutdown. A claude that exits or
+  crashes on its own with no Wake-initiated stop has the last look it had; a shell started after the last look
+  of a stop that lets the turn run is noted by the turn's own end (`endIfHeldOpen`'s refresh), or by the
+  shell's `task_started`. *Closes with:* the launcher reporting its group's members.
+- **Ending a parked-held-open claude takes its own group with it.** `endIfHeldOpen` ends claude by cancelling its
+  context, which kills the agent's whole group, so a child a foreground command left *in* the group (rare:
+  claude gives each shell a group of its own) is gone at a park that claude held open, where a park that
+  claude ends itself keeps it. The shell's own group, the held-open reason, is kept.
+- **Smaller edges of the same change** (adversarial and code review, 2026-11-12). `FrameKill` ends an agent
+  without noting its world first (it has no producer, and its handler must not block on a `ps`); a daemon's
+  SIGHUP and SIGQUIT bypass `shutdown`, as before; `lstart` is one-second resolution and busybox's `ps` has none,
+  which fails closed (nothing is swept); the ledger keeps one entry per parked session until the daemon exits;
+  a stamp-less message Wake sent is not counted against `endIfHeldOpen`; a `ps` per background-shell start per
+  agent is not shared across a fleet (about 33 ms, event-driven, coalesced within an agent), so thirty agents
+  starting shells at once cost thirty. *Closes with:* one shared listing with a short cache, if it is ever felt.
+- **Only a shell is known to hold claude open.** A Monitor's, or any other unrecorded, `task_type` reads as
+  `TaskKindUnknown` and neither notes nor ends. *Closes with:* a recording of one.

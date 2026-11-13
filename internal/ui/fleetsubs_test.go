@@ -8,6 +8,7 @@ package ui
 // TestOpeningADispatchWithNothingInItIsEmptyRatherThanTheConversation).
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -64,24 +65,52 @@ func TestASubBacklogForNothingForwardedIsNil(t *testing.T) {
 	}
 }
 
-// /clear drops the pre-clear backlog, the same way DM.clearedBySessionReset
-// blanks a DM's own copy - an adversarial review's second finding: without
-// this, a dispatch running across a /clear kept its pre-clear speech in the
-// fleet, and opening it afterward would resurrect words about a conversation
-// the model no longer has. Fleet.tasks shares the exact same gap for the same
-// reason, so both are cleared together rather than only the one this file adds.
-func TestASessionResetDropsItsFleetLevelBacklogAndTaskRows(t *testing.T) {
+// /clear empties the model's conversation and nothing else: claude 2.1.319 no
+// longer kills the background agents, shells and workflows that were running,
+// and their frames go on arriving. So what is still running keeps its row and
+// its backlog, and what had finished is the conversation's history and goes.
+// Dropping a running row left its ending nameless and the done line drawn
+// while the work ran.
+func TestASessionResetKeepsWhatIsRunningAndDropsWhatFinished(t *testing.T) {
+	const finishedDispatch = "toolu_finished"
 	f := NewFleet()
 	f, _ = f.Observe(started("a1", subDispatch, "Auditing", "code-reviewer", core.TaskAgent), "sess-1")
 	f, _ = f.Observe(spoke(subDispatch, subSaid), "sess-1")
+	f, _ = f.Observe(started("a2", finishedDispatch, "Reading", "general-purpose", core.TaskAgent), "sess-1")
+	f, _ = f.Observe(spoke(finishedDispatch, "done reading"), "sess-1")
+	f, _ = f.Observe(ended("a2", core.TaskDone), "sess-1")
+	f, _ = f.Observe(started("s1", "", "Run the dev server", "", core.TaskShell), "sess-1")
 
 	f, _ = f.Observe(core.Event{Kind: core.KindSessionReset, SessionID: "sess-1"}, "sess-1")
 
-	if got := f.SubBacklog("sess-1", subDispatch); got != nil {
-		t.Errorf("the backlog survived the reset: %+v", got)
+	var kept []string
+	for _, row := range f.tasks["sess-1"].Rows() {
+		kept = append(kept, row.ID)
 	}
-	if got := f.tasks["sess-1"].Rows(); len(got) != 0 {
-		t.Errorf("the task rows survived the reset: %+v", got)
+	if !slices.Equal(kept, []string{"a1", "s1"}) {
+		t.Errorf("rows after the reset = %v, want the two still running, a1 and s1", kept)
+	}
+	if got := len(f.RunningTasks("sess-1")); got != 2 {
+		t.Errorf("%d rows listed as running, want 2", got)
+	}
+	if got := f.SubBacklog("sess-1", subDispatch); len(got) != 1 {
+		t.Errorf("the running dispatch's backlog = %+v, want what it said kept", got)
+	}
+	if got := f.SubBacklog("sess-1", finishedDispatch); got != nil {
+		t.Errorf("the finished dispatch's backlog survived the reset: %+v", got)
+	}
+}
+
+// A reset with nothing running leaves no empty entry behind.
+func TestASessionResetWithNothingRunningLeavesNoTaskEntry(t *testing.T) {
+	f := NewFleet()
+	f, _ = f.Observe(started("a1", subDispatch, "Auditing", "code-reviewer", core.TaskAgent), "sess-1")
+	f, _ = f.Observe(ended("a1", core.TaskDone), "sess-1")
+
+	f, _ = f.Observe(core.Event{Kind: core.KindSessionReset, SessionID: "sess-1"}, "sess-1")
+
+	if _, held := f.tasks["sess-1"]; held {
+		t.Errorf("a reset with nothing running left tasks %+v", f.tasks["sess-1"])
 	}
 }
 

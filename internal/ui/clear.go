@@ -11,8 +11,10 @@ import "github.com/DilanDoshi/wake/internal/core"
 // dropped everything this transcript describes, so it is history the agent no
 // longer has. Identity, size, the composer and the status bar stay - they are
 // the session, and /clear changed the conversation, not the session. Everything
-// else is an accumulation over the gone events: the subagent transcripts and the
-// view onto one, the board of tasks the model set itself, the last-read marks,
+// else is an accumulation over the gone events: the DM's copy of the subagent
+// transcripts and the view onto one (what still runs keeps its backlog in the
+// Fleet, which seeds it again on open - fleettasks.go's keepRunning), the board
+// of tasks the model set itself, the last-read marks,
 // the tool-call state, the live run fold, and the preview of a block that will
 // never complete. The empty re-render is one banner, the same one a brand-new DM
 // draws, and drawnLayout reclaims the rows the board no longer needs.

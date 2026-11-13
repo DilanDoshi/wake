@@ -18,6 +18,9 @@ package daemon
 func (s *server) stopForShutdown(a *agent, interrupt bool) {
 	if !interrupt || !a.inputOpen() {
 		stopLogged(a)
+		if !interrupt {
+			a.endIfHeldOpen(false) // a stop that waits out the grace for a shell it would then kill
+		}
 		return
 	}
 	s.start(func() {

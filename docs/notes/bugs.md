@@ -1815,6 +1815,12 @@ children by ppid before closing its stdin and kill each one's group once claude 
 park). That leaves a hook's escapee whose shell already exited, reachable only through an inherited
 marker (its environment, read with `sysctl`) - a larger change.
 
+**Fixed 2026-11-12** (`fix/no-processes-outlive-their-fleet`, #241), as that sketch said and with the park
+question answered (owner, 2026-11-11): a `⌃C` park inside a live daemon keeps the groups, and every daemon exit
+sweeps them (`decisions.md`, 2026-11-11). The ppid snapshot is in `internal/daemon/world.go`. The hook's escapee
+is **not** reached, and the marker walk is refused (it follows `wake new` into another fleet): see
+`deferred.md` and the live acceptance below, BUG-75, BUG-76.
+
 ## BUG-74 — an orphaned inner subagent's report reaches the agent and Wake shows none of it
 
 **Found 2026-11-11 by wake-imp-subending's 2.1.322 recording** (`subagent-nested-background.jsonl`, on
@@ -1829,3 +1835,69 @@ the outer alive until its children end. A headless outer is recorded waiting on 
 
 **Directions, not chosen:** draw a hand-back in the conversation it reaches (a ruling for every subagent's
 hand-back, not only an orphan's), or attribute an orphan's report to the outer it belonged to.
+
+---
+
+## BUG-75 — `/quit` of an agent with a background shell never ends it
+
+**Found 2026-11-12** with the branch binary's live acceptance of BUG-73's fix (claude 2.1.322, a scratch fleet,
+`--model haiku`, a `sleep 7312` run in the background). `/quit` (`FrameStop`) closes the agent's stdin and
+lets the turn finish; **a headless claude does not exit on stdin EOF while a background shell runs**, so the
+agent never ended: the row sat `idle` indefinitely, `retire` never ran, and claude, its launcher and the shell
+survived until the daemon exited. Reproduced on `origin/main`: 6 survivors a minute after the stop.
+
+**Fixed** with BUG-73 (`fix/no-processes-outlive-their-fleet`): a stopped agent that is between turns with a
+shell in `runningTasks` has its process ended (`agent.endIfHeldOpen`), at the stop and at the turn end of one
+stopped mid-turn; `retire` then sweeps its own group and the groups it started. `wake stop` no longer waits out
+the 30 s grace for such an agent either. Tests: `TestAStopEndsAnAgentItsShellWouldHoldOpen`,
+`TestAStopMidTurnEndsAnAgentItsShellWouldHoldOpenOnceTheTurnIsDone`,
+`TestWakeStopDoesNotWaitOutTheGraceForAnAgentItsShellHoldsOpen`, and
+`TestAnAgentThatWasNotStoppedIsNotEndedWhenATurnEndsWithAShellRunning` (a shell running is not a reason).
+The adversarial review found the first cut too eager and each is held now: a turn claude opened itself
+(`TestAParkInATurnTheAgentStartedItselfLetsTheTurnFinish`), a message typed before the stop
+(`TestAMessageQueuedBeforeTheStopIsAnsweredEvenWithAShellRunning`) and a shell started after the stop's listing
+(`TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent`). Only a shell was probed.
+
+## BUG-76 — a `⌃C` park of an agent with a background shell never completes
+
+The same cause: the park closes stdin, claude stays for its shell, and the agent never reaches `parked` (the
+row reads `idle`). Found in the same probe (2026-11-12); on `origin/main` it was still not parked after 60 s.
+So a hand park with a dev server running did nothing, and "a park keeps the processes" had never been
+exercised on the real thing. **Fixed** by BUG-75's mechanism: `endProcess` keeps the park label, `completePark`
+books it, and the shell's group is held in the daemon's ledger for the wake. `TestAParkEndsAnAgentItsShellWouldHoldOpenAndKeepsTheShell`.
+Ending claude takes its own group with it (as the grace's kill always did); the shell is what stays.
+
+## BUG-77 — a `/clear` dropped the rows of work it did not kill
+
+Claude 2.1.319 stopped killing the background agents, shells and workflows a `/clear` finds running; their
+`task_updated` and `task_notification` arrive under the new session id. Wake dropped the rows at the reset
+(`Fleet.fold`, the daemon's `runningTasks`), so running work left the sidebar, its ending arrived as a nameless
+row and an unnamed `● … finished`, the done line could draw while it ran, and a late window disagreed with the
+daemon. **Fixed:** a reset keeps the running rows and their backlog and drops the finished ones
+(`Fleet.keepRunning`; the daemon's replay map is left alone). Recorded in
+`testdata/stream/clear-keeps-background.jsonl` (the recording's `ui_invalidate` frame, which this decoder
+does not read until #235, is left out, and its init frames' command lists are cut to the allowlist).
+
+## Live acceptance of BUG-73, 75, 76 (2026-11-12, claude 2.1.322, `--model haiku`)
+
+A scratch fleet per take (a fresh socket directory, a `/tmp` project, the operator's own login), a background
+`sleep NNNN`, processes snapshotted by pid and start time before and after; only own leftovers killed, by
+literal pid.
+
+| Ending | `origin/main` | this branch |
+|---|---|---|
+| `wake stop` | shell + sleep survive (2) | 0 |
+| `/quit` | agent never ends, 6 survive | agent ends, 0 |
+| ⌃Q⌃Q, daemon exits | 0 (claude ends its tasks on an interrupted clean exit) | 0 |
+| ⌃C park, then `wake stop` | never parks; 2 survive the stop | parks, shell kept, then 0 |
+
+A session parked this way, then woken (`wake`), answered a turn on the same claude (2026-11-12).
+⌃Q⌃Q needed nothing for a plain background shell: claude ends its own tasks when it exits after the interrupt.
+The daemon's exit sweep is for what claude leaves, an own-group child of a parked agent (`npm run dev &`).
+The contract tests, with fakes that leave one, hold it.
+
+**Residual, probed and recorded (BUG-73's hook and foreground shapes):** a shell that has *exited* before the
+ending leaves its child orphaned under launchd in a group of its own, with no parent to find it by. Both
+survive a `wake stop`: `nohup sleep NNNN &` run in a *foreground* Bash call, and a `SessionStart` hook
+command that backgrounds one. Claude starts the foreground shell in a group of its own too, and it exits
+before anything lists the tree. `deferred.md` carries why they stay.

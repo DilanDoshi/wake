@@ -201,6 +201,9 @@ func (s *server) needsSupervision() bool {
 // refuses through a.parking rather than through this error. See agent.kill.
 func (s *server) completePark(a *agent, err error) {
 	a.markParked()
+	// Kept, not swept: a woken session needs the world it spawned. The ledger is
+	// what lets the next stop, or this daemon's exit, still end it.
+	s.worlds.hold([]string{a.id, a.conversation()}, a.worldGroups())
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: session %s could not be removed from the roster: %v", a.id, rerr)
 	}

@@ -724,6 +724,7 @@ func (s *server) retire(a *agent) {
 	if serr := core.KillGroup(a.sess.Pgid()); serr != nil && !errors.Is(serr, os.ErrProcessDone) {
 		logf("wake: session %s left a process group that could not be swept: %v", a.id, serr)
 	}
+	s.sweepWorld(a)
 
 	ended := a.snapshot()
 	// The name goes back to the pool here rather than when the ending is

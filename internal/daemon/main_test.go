@@ -74,6 +74,9 @@ const (
 	psHangs   = "hang"
 	psQuiet   = "quiet"
 	psPartial = "partial"
+	// psElsewhere answers world.go's four columns with rows that read as another
+	// machine's: well formed, and without the asker.
+	psElsewhere = "elsewhere"
 )
 
 // lingerFor is how long a grandchild holds what it inherited. Long enough
@@ -122,6 +125,8 @@ func TestMain(m *testing.M) {
 		os.Exit(runFakeMCP())
 	case os.Getenv(fakeLingerEnv) == "1":
 		os.Exit(runLinger())
+	case os.Getenv(fakeLeaderEnv) == "1":
+		os.Exit(runGroupLeader())
 	case os.Getenv(fakeDaemonEnv) == "1":
 		os.Exit(runFakeDaemon())
 	case core.AgentLauncherRequested():
@@ -179,6 +184,10 @@ func runFakePs() int {
 		time.Sleep(lingerFor)
 		return 0
 	case psQuiet:
+		return 0
+	case psElsewhere:
+		fmt.Println("    1     0     1 Mon Jan  1 00:00:00 2001")
+		fmt.Println("    2     1     2 Mon Jan  1 00:00:01 2001")
 		return 0
 	case psPartial:
 		// Exits 0 with a listing that is well formed and incomplete. No stock
@@ -292,6 +301,8 @@ func runFakeClaude() int {
 		return fakeDeaf(sid)
 	case "leak":
 		return fakeLeak(sid)
+	case "shellgroup":
+		return fakeShellGroup(sid) // see world_fakes_test.go
 	case "cwd":
 		return fakeCwd(sid)
 	case "supervised":

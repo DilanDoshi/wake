@@ -45,6 +45,7 @@ func (s *server) fanOut(a *agent) {
 		if a.observe(ev) {
 			s.noteReady(a)
 		}
+		s.noteWorldEvent(a, ev)
 		// Before the broadcast, so the resume is armed by the time a client
 		// draws the limit; a turn end on a stopped agent may free it to resume.
 		if a.noteLimit(ev, now) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {

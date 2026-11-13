@@ -264,6 +264,18 @@ type agent struct {
 	// the bounded residual internal/ui's own Tasks.Rows() already carries.
 	runningTasks map[string]core.Event
 
+	// world is the process groups this session started, noted while it ran so an
+	// ending can sweep them (world.go); worldBusy and worldAgain coalesce the
+	// listings a burst of shell starts asks for.
+	world                 world
+	worldBusy, worldAgain bool
+
+	// turnOpen is claude's turn running, whoever asked for it; unstarted is the
+	// Wake-stamped messages written and not yet taken up or cancelled. Neither is
+	// what owed is, and endIfHeldOpen needs both (heldopen.go).
+	turnOpen  bool
+	unstarted map[string]struct{}
+
 	// mcpAskers is the client behind each MCP ask not yet answered, by request
 	// id, so the answer goes to it alone - nil for the daemon's own. initID is
 	// the handshake's, until its reply arrives. See askMCP and handshake.
@@ -530,6 +542,10 @@ func (a *agent) observe(ev core.Event) (learned bool) {
 		}
 	}
 
+	if opensTurn(ev) {
+		a.turnOpen = true
+	}
+
 	switch ev.Kind {
 	case core.KindSessionReset:
 		// Cleared rather than set from the frame: conversation_reset names the
@@ -550,16 +566,19 @@ func (a *agent) observe(ev core.Event) (learned bool) {
 		// the used half goes with it - the UI's fleet.go reset. The window stays:
 		// the model, and so its window, is unchanged.
 		a.contextTokens = 0
-		// A dispatch from the pre-clear conversation is gone with it, so a late
-		// client must not have it replayed: the mirror of internal/ui's own
-		// Fleet.Observe dropping f.tasks on a reset. See taskreplay.go.
-		clear(a.runningTasks)
+		// runningTasks is left alone: claude 2.1.319 no longer kills the background
+		// agents, shells and workflows a /clear finds running, and their endings
+		// arrive under the new conversation. A late client is still told what runs,
+		// as internal/ui's Fleet.Observe keeps it. See taskreplay.go.
 	case core.KindMessageState:
 		// A message still queued when the last turn ended opens a turn of its own
 		// after that turn's result cleared owed; its start owes the next result.
 		// A no-op for one taken into a running turn, which already owes it.
 		if ev.MessageStarted() {
 			a.owed = true
+		}
+		if ev.Text != "queued" {
+			delete(a.unstarted, ev.MessageID) // started, or will never run
 		}
 		a.loop = foldWakeup(a.loop, ev, core.LoopKeepsAlive())
 	case core.KindToolUse:
@@ -615,7 +634,7 @@ func (a *agent) observe(ev core.Event) (learned bool) {
 		// its turn closes. It is also why the case above cannot be tested
 		// through a fake that ends the turn in the same breath - see
 		// fakeWithdrawTheAsk.
-		a.owed = false
+		a.owed, a.turnOpen = false, false
 		a.login = loginTry{} // its failure, if any, came first: under the same lock as owed
 		a.pending = nil
 		// And nothing is being run any more. Cleared here rather than on the

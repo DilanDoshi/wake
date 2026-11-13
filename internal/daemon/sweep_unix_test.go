@@ -7,7 +7,9 @@
 // being cancelled - so an agent that finishes normally after `npm run dev &`
 // used to leave the dev server behind. The sweep lives in the daemon's retire
 // rather than in core because only the pool can tell a park's clean exit (its
-// children are the woken session's world) from an ordinary one. These are
+// children are the woken session's world) from an ordinary one. The park keeps
+// that world only while the daemon lives: every daemon exit sweeps it
+// (world_unix_test.go, decisions.md 2026-11-11). These are
 // Unix-only because the observation is: they ask the OS whether a specific pid
 // is still alive after the session ends, which is the only thing that would
 // have caught the leak.
