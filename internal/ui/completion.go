@@ -29,6 +29,10 @@ package ui
 // 2026-09-27 ruling that the menu never takes `↵` (owner, 2026-10-12): `↵` sent a
 // half-typed word while the menu on screen offered to finish it.
 //
+// **The menu keeps every match and draws a window over them** (completionwindow.go):
+// offers is the list to completionCeiling, ↓ walks all of it, and the pane's rows
+// scroll to the cursor.
+//
 // ⇥ over a word the menu was built for is the draft's whether or not anything
 // matches. It used to fall through to the conversation ring when a misspelled
 // skill left no menu, and land somewhere unexpected; typingWord is that word.
@@ -48,7 +52,6 @@ package ui
 // walk keys and the text area's own line movement.
 
 import (
-	"fmt"
 	"iter"
 	"os"
 	"slices"
@@ -68,10 +71,13 @@ const (
 	// 133 matching commands is a menu taller than any terminal.
 	minCompletionRows = 8
 
-	// moreFormat says what the bound left out. A bound that is silent reads as
-	// a complete list, which is the failure a menu over 133 commands makes
-	// expensive.
-	moreFormat = "%d more - keep typing"
+	// completionCeiling is the most offers one menu keeps and walks: the most a
+	// directory read takes, so the listing and the ranked search stop at one bound.
+	completionCeiling = pathScanMax
+
+	// keepTyping is what the key line says of matches ↓ cannot reach: a bound
+	// that is silent reads as a complete list.
+	keepTyping = "keep typing"
 
 	// completionKeys is what the menu advertises about itself: ⇥ or ↵ to accept
 	// and ↑↓ to walk. ⌃N/⌃P walk too and stay bound as aliases, unadvertised to
@@ -168,10 +174,15 @@ type completion struct {
 	// completionpeers.go.
 	peers peerMenu
 
-	// offers are what could finish the token, already bounded, in the order
-	// they are drawn. more is how many matched beyond them.
+	// offers are what could finish the token, in the order they are drawn, cut
+	// at completionCeiling; more is how many matched beyond that, and cut says
+	// the directory listing behind them was. The menu draws rows of them from
+	// top, which moves only as far as the cursor needs (completionwindow.go).
 	offers []string
 	more   int
+	cut    bool
+	top    int
+	rows   int
 
 	cursor int
 }
@@ -199,7 +210,7 @@ func (c completion) open() bool { return len(c.offers) > 0 }
 // listings are carried instead, and so is an opening's ask.
 func (a App) recompleted() App {
 	a.completion = a.completing().carried(a.completion).bounded().keepingCursor(a.completion)
-	return a
+	return a.windowed()
 }
 
 // carried is a new menu with what the one it replaces holds: the read in
@@ -445,10 +456,11 @@ func (a App) liveAgentNamed(name string) bool {
 // Wake's twelve verbs filling the bound first was a bare `/` that never showed
 // the operator's own Claude Code skills: they sat in the "N more" overflow,
 // reachable only by typing past Wake's set. The session's come first so a bare
-// slash surfaces them; Wake's verbs follow, so a bare `/` shows them only while
-// the session advertises fewer than the bound - past that they are an overflow
-// away, and narrowing the draft (`/re`) drops the advertised commands that do not
-// share the prefix, so a verb returns once fewer than a menu's worth still match.
+// slash surfaces them; Wake's verbs follow, so a bare `/` shows them on screen
+// only while the session advertises fewer than the window's rows - past that they
+// are a scroll away, and narrowing the draft (`/re`) drops the advertised commands
+// that do not share the prefix, so a verb returns once fewer than a menu's worth
+// still match.
 // This is what the lone-`@name` branch below has always done for the agent it
 // addresses - now the rule for every path. Duplicates are dropped in this order
 // too - `/effort`, `/model` and `/mcp` are words claude advertises and Wake
@@ -546,8 +558,8 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 	return a.addressedAgent()
 }
 
-// bounded cuts what this menu offers to what a pane can hold and records what
-// it left out.
+// bounded cuts what this menu offers to completionCeiling and records what it
+// left out; the pane's few rows are the window over it (windowed), not the cut.
 //
 // The names first and the paths under them, which is the overload stated as an
 // order rather than as a rule: a live session name wins. It runs again when a
@@ -555,7 +567,7 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 // than reset - paths arriving under the names cannot move them.
 func (c completion) bounded() completion {
 	c.paths = c.paths.reranked()
-	paths, rest := c.paths.rows()
+	paths, rest, cut := c.paths.rows()
 	// A name already typed as offered (typedAs) goes first among the names, so a
 	// longer sibling that shares its prefix (`/team` beside `/team-onboarding`)
 	// neither takes the cursor from it nor lets the bound cut it - ↵ and ⇥ then act
@@ -567,10 +579,10 @@ func (c completion) bounded() completion {
 		names = slices.Concat(names[i:i+1], names[:i], names[i+1:])
 	}
 	matched := append(slices.Clone(names), paths...)
-	c.more = rest
-	if len(matched) > completionRows {
-		c.more += len(matched) - completionRows
-		matched = matched[:completionRows]
+	c.more, c.cut = rest, cut
+	if len(matched) > completionCeiling {
+		c.more += len(matched) - completionCeiling
+		matched = matched[:completionCeiling]
 	}
 	c.offers = matched
 	c.cursor = min(c.cursor, max(len(matched)-1, 0))
@@ -584,6 +596,7 @@ func (c completion) keepingCursor(prev completion) completion {
 	if c.pane != prev.pane || c.draft != prev.draft || !prev.open() {
 		return c
 	}
+	c.top = prev.top
 	if i := slices.Index(c.offers, prev.offers[prev.cursor]); i >= 0 {
 		c.cursor = i
 		return c
@@ -668,7 +681,7 @@ func (a App) enterCompletes() (App, tea.Cmd, bool) {
 func (a App) walkCompletion(by int) App {
 	c := a.completion
 	c.cursor = clamp(c.cursor+by, 0, len(c.offers)-1)
-	a.completion = c
+	a.completion = c.windowedTo(c.rows)
 	return a
 }
 
@@ -734,22 +747,4 @@ func tagged(names []string, tags map[string]offerTag, offer string, tag offerTag
 	}
 	tags[offer] = tag
 	return append(names, offer), tags
-}
-
-// View draws it, through the same rows a card and the picker draw.
-func (c completion) View(width int) string {
-	rows := make([]string, 0, len(c.offers)+1)
-	for i, offer := range c.offers {
-		rows = append(rows, optionRow(c.rowLabel(offer, width), width, i == c.cursor, false, CompletionStyle))
-	}
-	return strings.Join(append(rows, detailRow(c.keyLine(), width)), "\n")
-}
-
-// keyLine is the menu's own advertisement, with what the bound left out folded
-// into it - two rows for that would be a row per menu spent on chrome.
-func (c completion) keyLine() string {
-	if c.more > 0 {
-		return fmt.Sprintf(moreFormat, c.more) + hintSep + completionKeys
-	}
-	return completionKeys
 }

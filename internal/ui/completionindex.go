@@ -153,7 +153,7 @@ func (p pathMenu) reranked() pathMenu {
 	if p.index != nil {
 		files, left = p.index.files, p.index.left
 	}
-	top, total := rankPaths(files, p.query, completionRows)
+	top, total := rankPaths(files, p.query, completionCeiling)
 	rows := make([]string, len(top))
 	for i, row := range top {
 		rows[i] = agentPrefix + row
@@ -197,6 +197,7 @@ func (a App) pathsIndexed(index *fileIndex) (App, tea.Cmd) {
 	if index.dir == p.root {
 		a.completion.paths.index = index
 		a.completion = a.completion.bounded()
+		a = a.windowed()
 	}
 	return a.scanningPaths() // an answer is not a keystroke, so it never asks
 }

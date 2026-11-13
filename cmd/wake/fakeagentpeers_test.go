@@ -17,6 +17,16 @@ import (
 // scriptAtMenu is fakeAgentEcho that opens with a real init.
 const scriptAtMenu = "atmenu"
 
+// scriptManyCommands is scriptAtMenu advertising manyCommands slash commands,
+// more than a menu's rows, for the menu's window.
+const scriptManyCommands = "manycommands"
+
+// manyCommands is how many commands scriptManyCommands advertises.
+const manyCommands = 60
+
+// manyCommandName is the i'th advertised command, in the order advertised.
+func manyCommandName(i int) string { return fmt.Sprintf("cmd-%03d", i) }
+
 // builtinAgents are the subagent types a sterile recording's init carries.
 var builtinAgents = []string{"claude", "Explore", "general-purpose", "Plan", "statusline-setup"}
 
@@ -43,7 +53,7 @@ func fakeBareListing() int {
 
 // sayAtMenuInit is the recorded init, re-keyed to this session, run where it
 // is, and carrying the built-in agents.
-func sayAtMenuInit(sid string) {
+func sayAtMenuInit(sid string, commands ...string) {
 	var init map[string]any
 	if err := json.Unmarshal([]byte(bareFixtureLines()[0]), &init); err != nil {
 		fmt.Fprintln(os.Stderr, "fake: decode init:", err)
@@ -51,12 +61,15 @@ func sayAtMenuInit(sid string) {
 	}
 	cwd, _ := os.Getwd()
 	init["session_id"], init["cwd"], init["agents"] = sid, cwd, builtinAgents
+	if len(commands) > 0 {
+		init["slash_commands"] = commands
+	}
 	line, _ := json.Marshal(init)
 	fmt.Println(string(line))
 }
 
-func fakeAgentAtMenu(sid string) int {
-	sayAtMenuInit(sid)
+func fakeAgentAtMenu(sid string, commands ...string) int {
+	sayAtMenuInit(sid, commands...)
 	sayText(sid, "ready")
 	sayResult(sid)
 	for line := range agentStdin() {
@@ -64,9 +77,18 @@ func fakeAgentAtMenu(sid string) int {
 		if !ok {
 			continue
 		}
-		sayAtMenuInit(sid)
+		sayAtMenuInit(sid, commands...)
 		sayText(sid, heardPrefix+text)
 		sayResult(sid)
 	}
 	return 0
+}
+
+// fakeAgentManyCommands is fakeAgentAtMenu advertising manyCommands commands.
+func fakeAgentManyCommands(sid string) int {
+	commands := make([]string, manyCommands)
+	for i := range commands {
+		commands[i] = manyCommandName(i)
+	}
+	return fakeAgentAtMenu(sid, commands...)
 }

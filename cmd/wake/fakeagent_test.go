@@ -246,6 +246,8 @@ func runFakeAgent() int {
 		return fakeAgentMCP(sid)
 	case scriptAtMenu:
 		return fakeAgentAtMenu(sid)
+	case scriptManyCommands:
+		return fakeAgentManyCommands(sid)
 	case scriptHandshakes:
 		return fakeAgentHandshakes(sid)
 	case scriptUsageLimits:

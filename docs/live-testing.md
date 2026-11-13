@@ -788,8 +788,10 @@ New with the `/`-and-`@` completion. Everything here is a judgement a test canno
       matches — type `/zzzskil` — `⇥` does nothing, and `↵` sends it as text. On any other draft
       `⇥` still moves the keys between panes. The question is whether a misspelled skill ever
       still lands you in a conversation you did not choose.
-- [ ] **`@` in the room with 15–30 agents up.** Names first, then paths. Watch whether the bound of
-      eight rows is enough to be useful at that size or whether it hides the agent you wanted.
+- [ ] **`@` in the room with 15–30 agents up, and a bare `/` over a long skill list.** Names first,
+      then paths. `↓` must walk past the rows drawn to the last offer and `↑` back, the highlight
+      always on screen and `+N above · +M below` under the rows; try it in a short window (24 rows)
+      and in a pane of a four-pane grid, where the menu draws fewer rows than in a tall one.
 - [ ] **`@` in a directory with thousands of files** (`node_modules`, a build output). It must not
       stutter while you type. The read is off the draw goroutine and bounded to `pathScanMax`
       entries, so what is left to judge is the *feel*: the names appear at once and the paths a

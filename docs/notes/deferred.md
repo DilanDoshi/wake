@@ -38,6 +38,48 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-12 — a click on a completion offer, the wheel over the menu, and bigger steps
+
+The completion menu now walks every offer with ↑↓, ⌃N/⌃P, ⇥ and ↵ (`decisions.md`, 2026-11-12). The mouse does
+nothing there, as before: a press on an offer is chrome that takes nothing (`mouse.go`), and the wheel over the
+menu scrolls the transcript under it. A possible feature, the owner's call (wake-orch, 2026-11-12):
+
+- **Click-to-accept:** a press on drawn row *i* puts the cursor on `top+i` and accepts it. The window's mapping is
+  one line (`completion.top`); the cost is a hit-test over the rows the pane draws and a per-pane origin, and the
+  rule for a press that changes focus (refocus only, as a card's does).
+- **A wheel for the menu:** notches move the window, held where the wheel left it, as the roster's do - and then the
+  cursor may sit outside it, which the roster answers with a rule about keys (`rosterPickHidden`) that the menu
+  would need its own of.
+- **`⇞⇟` / Home / End in the menu:** a step of one row reaches offer 300 in 300 presses; a bigger step is the
+  usual answer (`⇞⇟` page the board and the help view), but narrowing by typing is the one the menu advertises.
+
+*Revisit if:* the owner asks for a click on an offer, or a menu long enough to want a page key.
+
+---
+
+## KNOWN GAP, 2026-11-12 — a cut directory listing is never read again, so typing cannot reach what it left out
+
+`readDirBounded` takes the first 512 entries the filesystem returns, an arbitrary subset, and typing only narrows
+those (`listed()` prefix-filters what was read; `scanningPaths` does not read the directory again). The room always
+lists, and a conversation lists any directory git did not index (`node_modules`, build output) - the usual 512+ ones -
+so `@node_modules/react` may never appear however much is typed. The key line says `listing cut at 512` rather than
+asking for typing. *Closes with:* a re-read with the typed prefix as the filter when the listing was cut, so the
+512 bound applies to the matches. Beside it, `index.left` (names past the 50,000 git bound) is counted into `+K more -
+keep typing` on every search and never shrinks as one types; older than the window.
+
+---
+
+## KNOWN GAP, 2026-11-12 — a pane with no row for the menu still takes ↵ and ⇥ on it
+
+The window is `menuRoom - 1` rows, at least one: a pane of `menuRoom == 1` (a 6-row split pane, a working agent's at
+8) draws the cursor row and loses the key line; at `menuRoom <= 0` (7-row working pane, a tall checklist) nothing is
+drawn and `completionUp` stays true, so ↵ and ⇥ accept an offer nobody sees. Also, in answer mode a page the wheel
+moved off the box (`page.set` beats the draft in `restingAt`) slides the menu out of the window while its keys stay
+live. Older than the window. *Closes with:* `completionUp` declining when no menu row can be drawn, and ↵/⇥ going
+`pageHome` first when `boxAway`.
+
+---
+
 ## FROM `feat/team-park-quit-resume`, 2026-11-09 — what the team verbs left out
 
 `/park @team`, `/quit @team` and `/resume <team>` shipped (`decisions.md`, 2026-11-09). Left out on purpose:

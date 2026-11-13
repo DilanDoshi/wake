@@ -118,7 +118,7 @@ func TestAFilenameCannotDriveTheTerminal(t *testing.T) {
 		t.Skipf("this filesystem will not hold the name: %v", err)
 	}
 
-	entries := readDirBounded(dir)
+	entries, _ := readDirBounded(dir)
 	if len(entries) != 1 {
 		t.Fatalf("want one entry, got %d", len(entries))
 	}

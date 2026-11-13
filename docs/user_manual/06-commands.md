@@ -234,8 +234,13 @@ Start a draft with `/` or `@` and a menu appears above the conversation with wha
 | Key | Does |
 |---|---|
 | `⇥` `↵` | Take the highlighted one |
-| `⌃N` `⌃P` | Move down and up the list |
+| `↓` `↑` (or `⌃N` `⌃P`) | Walk the whole list; it stops at each end |
 | anything else | Narrows it — the menu follows what you type |
+
+The menu draws as many rows as the pane has and the list scrolls under the highlight, one row at a
+time, so every match can be reached; the line under it says how many lie `+N above` and `+M below`.
+Past 512 matches the rest are not kept: it adds `+K more - keep typing`. A directory with more than
+512 entries lists the first 512 the filesystem returns and says `listing cut at 512`.
 
 `↵` takes the highlighted one, so a half-typed skill is completed instead of sent as it stands — unless
 the word is already typed out exactly as offered (`/clear`), when `↵` sends it; the exact word is
@@ -253,8 +258,9 @@ a turn yet has told Wake nothing, so you get Wake's commands and no more until i
 
 **The `@` list is names first, then paths**, which is the same order the router reads them in: a live
 agent wins, and anything else is a file. Paths are relative to the session's own directory, one
-directory at a time — `⇥` on a directory steps into it. A big directory is read up to a limit and
-the menu says how many it left out; keep typing to narrow it. The names appear at once and the
+directory at a time — `⇥` on a directory steps into it. A big directory is read up to 512 entries
+and the menu says the listing was cut (typing narrows those 512; in a git repository the file search
+reaches the rest). The names appear at once and the
 paths a moment later, because the directory is read off the goroutine that draws: a file share that
 has stopped answering costs you the file list and never the window.
 

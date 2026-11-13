@@ -89,6 +89,7 @@ type pathMenu struct {
 	// scan of a slice and belong to the keystroke rather than to the read.
 	dir     string
 	entries []pathEntry
+	cut     bool // the read stopped at pathScanMax: the directory holds more
 
 	// out is the directory a read is on a goroutine for, empty for none.
 	out string
@@ -112,6 +113,7 @@ type pathMenu struct {
 type pathScanMsg struct {
 	dir     string
 	entries []pathEntry
+	cut     bool // the directory held more than the read took
 	index   *fileIndex
 }
 
@@ -130,19 +132,20 @@ func (a App) pathMenuFor(typed string) pathMenu {
 	return p
 }
 
-// rows is the path half of the menu as it is drawn now, and how many more it
-// has than it returns: a search's ranking, or the listing - where it steps, or
-// where git is silent (pathMenu.lists). A listing that has nothing to offer a
-// search leaves the ranking standing: a head naming no directory at the root
-// is still a search through deeper ones.
-func (p pathMenu) rows() ([]string, int) {
+// rows is the path half of the menu as it is kept now, how many more it has than
+// it returns, and whether the listing was cut at the read's bound: a search's
+// ranking, or the listing - where it steps, or where git is silent
+// (pathMenu.lists). A listing that has nothing to offer a search leaves the
+// ranking standing: a head naming no directory at the root is still a search
+// through deeper ones.
+func (p pathMenu) rows() (rows []string, rest int, cut bool) {
 	if !p.lists() {
-		return p.rank.rows, p.rank.rest // ranked by bounded; see reranked
+		return p.rank.rows, p.rank.rest, false // ranked by bounded; see reranked
 	}
 	if listed := p.listed(); len(listed) > 0 || !p.searching() {
-		return listed, 0
+		return listed, 0, p.cut
 	}
-	return p.rank.rows, p.rank.rest
+	return p.rank.rows, p.rank.rest, false
 }
 
 // listed is the listing this menu asked for, narrowed to what has been typed
@@ -185,7 +188,7 @@ func (p pathMenu) listed() []string {
 func (p pathMenu) carrying(prev pathMenu) pathMenu {
 	p.out, p.indexing = prev.out, prev.indexing
 	if p.want != "" && p.want == prev.dir {
-		p.dir, p.entries = prev.dir, prev.entries
+		p.dir, p.entries, p.cut = prev.dir, prev.entries, prev.cut
 	}
 	if prev.index != nil && prev.index.dir == p.root {
 		p.index = prev.index
@@ -221,7 +224,10 @@ func (a App) scanningPaths() (App, tea.Cmd) {
 // scanPaths reads one directory off the draw goroutine. The read is separated
 // from the tea.Cmd the way bangRun is, so a test can run it synchronously.
 func scanPaths(dir string) tea.Cmd {
-	return func() tea.Msg { return pathScanMsg{dir: dir, entries: readDirBounded(dir)} }
+	return func() tea.Msg {
+		entries, cut := readDirBounded(dir)
+		return pathScanMsg{dir: dir, entries: entries, cut: cut}
+	}
 }
 
 // pathsScanned folds a finished read into the menu that asked for it, and asks
@@ -236,12 +242,15 @@ func (a App) pathsScanned(m pathScanMsg) (App, tea.Cmd) {
 		return a, nil
 	}
 	a.completion.paths.out = ""
-	a.completion.paths.dir, a.completion.paths.entries = m.dir, m.entries
+	a.completion.paths.dir, a.completion.paths.entries, a.completion.paths.cut = m.dir, m.entries, m.cut
 	a.completion = a.completion.bounded()
+	a = a.windowed()
 	return a.scanningPaths() // an answer is not a keystroke, so it never asks
 }
 
-// readDirBounded reads at most pathScanMax entries of one directory.
+// readDirBounded reads at most pathScanMax entries of one directory, and says
+// whether there were more: it reads one past the bound to know, so a directory of
+// exactly pathScanMax is whole.
 //
 // **A failure is not reported**, and that is a ruling rather than a swallow: on
 // most keystrokes of a path being typed the directory named does not exist yet,
@@ -249,26 +258,27 @@ func (a App) pathsScanned(m pathScanMsg) (App, tea.Cmd) {
 // being wrong is an empty menu, which is what a menu with nothing to offer
 // looks like anyway - and it is recorded as a listing either way, so a path
 // that names nothing is read once rather than once per character.
-func readDirBounded(dir string) []pathEntry {
+func readDirBounded(dir string) (entries []pathEntry, cut bool) {
 	f, err := os.Open(dir)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	defer func() { _ = f.Close() }()
 
-	entries, err := f.ReadDir(pathScanMax)
+	read, err := f.ReadDir(pathScanMax + 1)
 	// io.EOF is an empty directory rather than a failure - ReadDir(n) reports
 	// it when there was nothing at all to read.
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil
+		return nil, false
 	}
-	out := make([]pathEntry, 0, len(entries))
-	for _, e := range entries {
+	read, cut = read[:min(len(read), pathScanMax)], len(read) > pathScanMax
+	out := make([]pathEntry, 0, len(read))
+	for _, e := range read {
 		// A filename is external bytes too, and this is the third producer of
 		// them that reaches the frame through neither the airlock nor bangRun.
 		// An agent writes files, so a name carrying an escape sequence is a
 		// delivery route rather than a curiosity. docs/notes/bugs.md BUG-9.
 		out = append(out, pathEntry{name: core.Contained(e.Name()), isDir: e.IsDir()})
 	}
-	return out
+	return out, cut
 }
