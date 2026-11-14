@@ -112,8 +112,8 @@ func awarenessStrip(agents []Agent, subs subsOf, workspace string, width int) st
 			// Styled in two spans rather than one wrapping the other: an inner
 			// style's reset closes the outer colour, so everything after the
 			// accent rendered in the terminal's default foreground - the strip
-			// was a different colour in a conversation than in the room. Same
-			// failure MentionStyle already records.
+			// was a different colour in a conversation than in the room. The
+			// shaded turn's tint (colourLead) avoids the same failure.
 			row = stripIndent + AccentStyle.Render(ansi.Truncate(name, fits, "…")) + HintStyle.Render(stripSep+body)
 		}
 	}
