@@ -5549,7 +5549,7 @@ still runs in the UI, where the operator is, and only its result now travels.
   each way, open=1 22.2→21.5ms, open=30 24.9→24.1ms, glamour 72.7→73.2ms - noise.
 - **Left out** (`deferred.md`): a bang behind a busy turn is not in the window's queue, so `↑` cannot take it
   back, a `⌃]` behind one ends the turn instead of backgrounding its work, and an `esc` leaves it for claude to
-  run after; the room's own bang line is still not restored after a room restore.
+  run after; the room's own bang line is still not restored after a room restore (closed by 2026-11-18, below).
 - **Held by** core's `shellrun_test.go` (the recorded records, Wake's stamped line against
   `testdata/input/shell-run.stdin.jsonl`, the round trip with the tags quoted in either half, pasted tags, and
   `shell-run.jsonl` started, answered with a turn and not replayed), the daemon's `shellrun_test.go` (the line
@@ -6336,6 +6336,11 @@ together, whatever the length (up to `bangMaxBytes`), and a reopened room drew n
   drew the bang live never asks for that session's history (`askRoomHistory`). **Restore cannot show**: a
   bare room `!cmd` (it reaches no agent, so no transcript holds it), a bang whose agent had ended or was
   parked (nothing was written), and a bang typed in a conversation, which stays that conversation's.
+- **A copy rejoins what the pane wrapped**, as the old one-line block did (`typedLeadRows`: `typedRows`' match,
+  kept as far as the text goes, so a fold's pointer ends it and the message above it still pastes back as the
+  one line it was). The output keeps its first row's indent (`bangBody`), which `crossSessionBody`'s trim lost.
+  At most `bangNoteMax` rows (what `bangRun` can leave: the cut, how it ended, the group reclaim) count as
+  notes, so output that opens its rows with `… ` still folds.
 - **No live echo to other windows**, as for any room send: a second window of the fleet sees the bang when
   it reopens, as it sees a typed message. The conversation draws the block whole, as before.
 - **`@team` and `@all` stay refused** (a bang has one directory), the draft kept, before anything runs.

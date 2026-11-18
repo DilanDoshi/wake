@@ -103,6 +103,10 @@ const (
 	// room's fold can keep them in sight (roombang.go).
 	bangNoteLead = "… "
 
+	// bangNoteMax is the most such rows one command leaves: the cut, how it ended, and
+	// the group reclaim. Held by TestABangLeavesNoMoreNoteRowsThanTheRoomKeeps.
+	bangNoteMax = 3
+
 	// The three things that can be true of a finished command besides its
 	// output. Each is a line appended under that output, because a bound that
 	// silently cut something is a wrong transcript rather than a short one.

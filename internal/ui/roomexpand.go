@@ -3,7 +3,7 @@ package ui
 // Expanding a room response: ⌃E on the whole room, a click on one line.
 //
 // The Room-side half of the ⌃E feature whose App-level key handling lives in
-// expand.go. A long agent reply or peer message draws as a pointer in the room
+// expand.go. A long agent reply, peer message or bang's output draws as a pointer in the room
 // (agentSaid's and peerBody's boundaries); these methods flip it open - globally with ⌃E (toggleExpandAll),
 // one line with a click (toggleLine, hit-tested by blockAt) - and keep the
 // expand set bounded as lines leave the room (forgotten, keptOn).

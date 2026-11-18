@@ -6,12 +6,16 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -47,12 +51,28 @@ func TestARoomBangFoldsItsOutputUnderTheMessage(t *testing.T) {
 	}
 }
 
-func TestARoomBangHeadsItsOutputOnRowsOfTheirOwn(t *testing.T) {
-	room := bangRoomText(roomBanged(t, printRows(6)))
-	for _, row := range strings.Split(room, "\n") {
-		if strings.Contains(row, "@alex !printf") && strings.Contains(row, "out-00") {
-			t.Errorf("the message and its output run together on one row: %q", row)
+// The message is the operator's own shaded row and what the command printed is the
+// fold's Muted body: the two read apart, as a peer's message does from a reply.
+func TestARoomBangDrawsItsOutputMutedAndItsMessageNot(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor, or there is no styling to tell apart
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	muted := strings.SplitN(HintStyle.Render("x"), "x", 2)[0]
+
+	var head, out string
+	for _, row := range strings.Split(roomBanged(t, printRows(6)).room.View(120, 40), "\n") {
+		switch plain := ansi.Strip(row); {
+		case strings.Contains(plain, "@alex !printf"):
+			head = row
+		case strings.Contains(plain, "out-00"):
+			out = row
 		}
+	}
+	if head == "" || out == "" {
+		t.Fatalf("the room drew no message row (%q) or output row (%q)", head, out)
+	}
+	if strings.Contains(head, muted) || !strings.Contains(out, muted) {
+		t.Errorf("the message is muted or the output is not:\nmessage %q\noutput  %q", head, out)
 	}
 }
 
@@ -117,15 +137,31 @@ func TestAShortRoomBangIsNoClickTarget(t *testing.T) {
 	}
 }
 
-// What a failed, cut or timed-out command says about itself is never folded away.
+// What a failed, cut or timed-out command says about itself is never folded away,
+// and it is drawn under the pointer, after what was kept of the output.
 func TestAFoldedRoomBangStillSaysHowItEnded(t *testing.T) {
 	room := bangRoomText(roomBanged(t, printRows(6)+"; exit 3"))
-	if !strings.Contains(room, fmt.Sprintf(bangExited, 3)) {
-		t.Errorf("the folded bang hides its exit status:\n%s", room)
+	pointer, status := bangRowOf(room, "to expand"), bangRowOf(room, fmt.Sprintf(bangExited, 3))
+	if status < 0 || pointer < 0 || status < pointer {
+		t.Errorf("the exit status (row %d) is not drawn under the pointer (row %d):\n%s", status, pointer, room)
 	}
 	if strings.Contains(room, "out-05") || !strings.Contains(room, "+3 lines") {
 		t.Errorf("a failing bang is not folded like any other:\n%s", room)
 	}
+	whole := bangRoomText(roomBanged(t, printRows(2)+"; exit 3"))
+	if out, status := bangRowOf(whole, "out-01"), bangRowOf(whole, fmt.Sprintf(bangExited, 3)); out < 0 || status != out+1 {
+		t.Errorf("an unfolded bang does not end on its status (output row %d, status row %d):\n%s", out, status, whole)
+	}
+}
+
+// bangRowOf is the first row of a drawn room holding needle, or -1.
+func bangRowOf(room, needle string) int {
+	for i, row := range strings.Split(room, "\n") {
+		if strings.Contains(row, needle) {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestAFailingRoomBangWithNoOutputShowsItsStatus(t *testing.T) {
@@ -184,6 +220,96 @@ func TestARoomBangExpandsATabToItsColumn(t *testing.T) {
 	if !strings.Contains(room, "abc d") {
 		t.Errorf("the tab did not expand to its stop:\n%s", room)
 	}
+}
+
+// Column output keeps the indent its first row opens with.
+func TestARoomBangKeepsTheIndentOfItsFirstRow(t *testing.T) {
+	want := strings.Repeat(" ", bodyIndent) + " M a.go"
+	room := bangRoomText(roomBanged(t, `printf ' M a.go\n M b.go\n?? c.go\n'`))
+	if bangRowOf(room, want) < 0 || !strings.Contains(room, strings.Repeat(" ", bodyIndent)+" M b.go") {
+		t.Errorf("the first row lost its indent (want a row of %q):\n%s", want, room)
+	}
+	r := restored([]core.Event{recordOf("s1", "git status -s", " M a.go\n M b.go\n?? c.go", base, true)})
+	if got := roomShown(r, 100, 24); bangRowOf(got, want) < 0 {
+		t.Errorf("the reopened bang lost the first row's indent:\n%s", got)
+	}
+}
+
+// Output rows that open the way Wake's notes do are output, past the few notes a
+// command can leave, so they fold like any other.
+func TestARoomBangWhoseRowsLookLikeNotesStillFolds(t *testing.T) {
+	room := bangRoomText(roomBanged(t, "printf '… %02d\\n' 0 1 2 3 4 5 6 7 8 9"))
+	if !strings.Contains(room, "to expand") || strings.Contains(room, "… 05") {
+		t.Errorf("a bang printing rows of %q is not folded:\n%s", bangNoteLead, room)
+	}
+}
+
+// bangNoteMax is the most note rows bangRun can leave under an output, whichever
+// way the command ended.
+func TestABangLeavesNoMoreNoteRowsThanTheRoomKeeps(t *testing.T) {
+	exited := exec.Command("sh", "-c", "exit 3").Run()
+	most := 0
+	for _, ending := range []struct {
+		err      error
+		timedOut bool
+	}{{nil, false}, {exited, false}, {errors.New("signal"), false}, {exec.ErrWaitDelay, false}, {exited, true}} {
+		for _, group := range []string{"", bangReclaimed, fmt.Sprintf(bangCleanupFailed, "gone")} {
+			for _, cut := range []bool{false, true} {
+				text := bangText("out", cut, ending.err, ending.timedOut, time.Second, time.Second)
+				if group != "" {
+					text = bangNote(text, group)
+				}
+				most = max(most, strings.Count(text, "\n"+bangNoteLead))
+			}
+		}
+	}
+	if most != bangNoteMax {
+		t.Errorf("a command leaves at most %d note rows, bangNoteMax says %d", most, bangNoteMax)
+	}
+}
+
+// A copy of a room bang rejoins what the pane wrapped, so a long command pastes
+// back as the one line it was - not as rows with the pane's indent on them.
+func TestCopyingARoomBangRejoinsItsWraps(t *testing.T) {
+	fresh(t)
+	cmd := "echo " + strings.TrimSpace(strings.Repeat("longword ", 9)) // isBang trims a command
+	out := strings.Repeat("output ", 12)
+	room := bangRoomApp(t, bangResultMsg{Cmd: cmd, Text: out})
+	tr := room.transcriptIn("")
+	if rows := strings.Count(strings.Join(tr.lines.slice(tr.lines.first(), tr.lines.len()), "\n"), "longword"); rows < 2 {
+		t.Fatalf("the command did not wrap, so this proves nothing")
+	}
+	got := copyOf(t, room, "", lineHolding(t, tr, "!echo"), 0, tr.lines.len()-1, tr.width-1)
+	if want := "!" + cmd + "\n" + strings.TrimSpace(out); got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
+// Folded, the pointer ends what a copy can rejoin, but the message above it still
+// pastes back whole.
+func TestCopyingAFoldedRoomBangStillRejoinsItsMessage(t *testing.T) {
+	fresh(t)
+	cmd := "echo " + strings.TrimSpace(strings.Repeat("longword ", 9)) // isBang trims a command
+	room := bangRoomApp(t, bangResultMsg{Cmd: cmd, Text: strings.Join(repeatLines("row", 6), "\n")})
+	tr := room.transcriptIn("")
+	if !strings.Contains(strings.Join(tr.lines.slice(tr.lines.first(), tr.lines.len()), "\n"), "to expand") {
+		t.Fatal("the output is not folded, so this proves nothing")
+	}
+	head := lineHolding(t, tr, "!echo")
+	got := copyOf(t, room, "", head, 0, lineHolding(t, tr, "row-00")-1, tr.width-1)
+	if want := "!" + cmd; got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
+// bangRoomApp is a 50-column room that drew one finished bang.
+func bangRoomApp(t *testing.T, m bangResultMsg) App {
+	t.Helper()
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 50, 40)
+	room, _ = room.bangResult(m)
+	return room
 }
 
 // --- a reopened room --------------------------------------------------------
@@ -282,5 +408,17 @@ func TestAReopenedBangsOutputReachesNoTerminalControl(t *testing.T) {
 	}
 	if strings.Contains(room, "\x1b[31m") || strings.ContainsRune(room, '\t') {
 		t.Errorf("a command's own colour or a tab reached the frame:\n%q", room)
+	}
+}
+
+// A reopened bang is in its agent's thread, as the live one was: a room narrowed
+// to another agent does not draw it.
+func TestAReopenedBangIsInItsAgentsThreadOnly(t *testing.T) {
+	r := restored([]core.Event{recordOf("s1", "ls -a", "out-00", base, true)})
+	if got := roomShown(r.WithFocus("s1", "agent-s1"), 100, 24); !strings.Contains(got, "!ls -a") {
+		t.Errorf("a room narrowed to the agent does not draw its bang:\n%s", got)
+	}
+	if got := roomShown(r.WithFocus("s2", "agent-s2"), 100, 24); strings.Contains(got, "!ls -a") {
+		t.Errorf("a room narrowed to another agent draws the bang:\n%s", got)
 	}
 }

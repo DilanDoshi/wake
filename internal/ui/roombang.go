@@ -31,21 +31,34 @@ func bangParts(text string) (head, out, notes string) {
 	head, rest, _ := strings.Cut(text, "\n")
 	lines := strings.Split(rest, "\n")
 	n := len(lines)
-	for n > 0 && strings.HasPrefix(lines[n-1], bangNoteLead) {
+	for n > 0 && len(lines)-n < bangNoteMax && strings.HasPrefix(lines[n-1], bangNoteLead) {
 		n--
 	}
 	return head, strings.Join(lines[:n], "\n"), strings.Join(lines[n:], "\n")
 }
 
-// bangBody is what a command printed as the room draws it, tabs at their columns.
+// bangBody is what a command printed as the room draws it: tabs at their columns, the
+// first row's indent kept (only blank rows are trimmed from the edges).
 func bangBody(out string, width int) string {
-	return crossSessionBody(render.ExpandTabs(out), width)
+	return mutedBody(strings.TrimRight(strings.TrimLeft(render.ExpandTabs(out), "\n"), " \t\n"), width)
 }
 
-// bangSaid draws a room bang: the message, what it printed folded, then the notes.
-func bangSaid(text string, width int, expanded bool) string {
+// bangSaid draws a room bang: the message, what it printed folded, then the notes. A
+// copy rejoins what the pane wrapped as far as the text goes, a fold's pointer ending it.
+func bangSaid(text string, width int, expanded bool) block {
 	head, out, notes := bangParts(text)
-	return joinBlock(youSaid(head, width), foldRows(bangBody(out, width), width, expanded), crossSessionBody(notes, width))
+	return block{
+		text:   joinBlock(youSaid(head, width), foldRows(bangBody(out, width), width, expanded), crossSessionBody(notes, width)),
+		copied: typedLeadRows,
+		src:    text,
+	}
+}
+
+// restoredBang is a room-aimed bang's record as the line the room drew it as: in its
+// agent's thread, headed by the agent's live name.
+func restoredBang(l roomLine) roomLine {
+	l.ev, l.to, l.by = bangLine(l.ev, l.by.Name), l.ev.SessionID, Agent{}
+	return l
 }
 
 // bangFolds reports whether a room bang's output draws as a pointer at this width.

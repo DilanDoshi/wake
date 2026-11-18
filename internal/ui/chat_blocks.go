@@ -140,7 +140,7 @@ var renderRoomBlock = roomBlock
 // room representation. to is a peer message's receiving session, zero for every
 // other kind. expanded draws an over-cap response in full rather than
 // as a pointer - ⌃E and a click reach it through the Room's expand state; every
-// other kind ignores it, since only an agent's reply and a peer's message collapse.
+// other kind ignores it, since only an agent's reply, a peer's message and what a bang printed collapse.
 //
 // It never returns a line wider than width. The room is one column of a
 // three-region layout and lipgloss joins columns on their widest line, so an
@@ -161,7 +161,7 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 		return block{text: crossSaid(ev.Text, a, to, w, expanded)}
 	case core.KindUserText:
 		if ev.Shell {
-			return block{text: bangSaid(ev.Text, w, expanded)}
+			return bangSaid(ev.Text, w, expanded)
 		}
 		return block{text: youSaid(ev.Text, w), copied: typedRows, src: ev.Text}
 	case core.KindTurnEnd:
@@ -235,8 +235,8 @@ func crossSaid(text string, a, to Agent, width int, expanded bool) string {
 // roomCollapsible reports whether an event draws as a pointer at this width -
 // i.e. whether there is anything for ⌃E or a click to expand. Only an agent's
 // reply, a peer's message and what a bang printed collapse; your own turn wraps
-// whole and every marker is one line. It mirrors agentSaid's and peerBody's own boundaries so
-// they cannot disagree about which lines are expandable, and it renders once,
+// whole and every marker is one line. It mirrors agentSaid's, peerBody's and
+// bangSaid's own boundaries so they cannot disagree about which lines are expandable, and it renders once,
 // which is affordable on a user gesture and never on a frame.
 func roomCollapsible(ev core.Event, width int) bool {
 	w := max(width, minBlockWidth)

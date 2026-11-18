@@ -7,7 +7,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -27,8 +26,8 @@ func TestARoomBangFoldsItsOutputAndCtrlEOpensIt(t *testing.T) {
 
 	s.send("@" + name + " !" + roomBangRows + "\r")
 	s.await("+3 lines")
-	if row := s.lines()[s.rowOf("row-0")]; strings.Contains(row, "!printf") {
-		t.Fatalf("the message and its output share a row: %q\n%s", row, s.dump())
+	if at := s.rowOf("row-0"); at < 0 || strings.Contains(s.lines()[at], "!printf") {
+		t.Fatalf("the output is missing or shares a row with the message (row %d):\n%s", at, s.dump())
 	}
 	if strings.Contains(s.text(), "row-3") {
 		t.Fatalf("the output is not folded to three rows:\n%s", s.dump())
@@ -57,7 +56,7 @@ func TestAFoldedRoomBangStillShowsItsExitStatus(t *testing.T) {
 	s.await("group chat")
 
 	s.send("@" + name + " !" + roomBangRows + "; exit 3\r")
-	s.await(fmt.Sprintf("… exited %d", 3))
+	s.await("… exited 3")
 	if strings.Contains(s.text(), "row-5") || !strings.Contains(s.text(), "+3 lines") {
 		t.Fatalf("a failing bang is not folded:\n%s", s.dump())
 	}

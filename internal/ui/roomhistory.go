@@ -291,7 +291,7 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 	for _, ev := range kept {
 		if ev.Shell {
 			// A bang's record, which fold drops as echoed: kept as the turn claude
-			// answers it with (collapseBroadcasts), and never drawn.
+			// answers it with, and drawn when the room aimed it (collapseBroadcasts).
 			lines = append(lines, roomLine{ev: ev, by: agentOf(ev.SessionID)})
 			continue
 		}
@@ -414,9 +414,7 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			_, _, aimed := roomSendOf(l.ev.MessageID)
 			open[l.ev.SessionID] = aimed
 			if _, fork := copied[i]; aimed && !fork {
-				// Drawn as the room's own line, in its agent's thread (roombang.go).
-				l.ev, l.to, l.by = bangLine(l.ev, l.by.Name), l.ev.SessionID, Agent{}
-				out = append(out, l)
+				out = append(out, restoredBang(l))
 			}
 			continue
 		}
