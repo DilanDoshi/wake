@@ -38,6 +38,53 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-18 — the room draws one "↻ resumed" line per resume, and an agent can have many
+
+Found with `fix/narrowed-room-hides-others-wakeups`, which stops a room narrowed to one agent or a team from
+drawing the other agents' resume lines. The unfocused room still draws every one, and a fleet that hits a limit
+draws a lot of them: the owner's screenshot of a Singularity room was a screenful, the same dozen agents again
+and again. **They are real, separate `continue`s, not a drawing fault.** Read off the fleets' own `daemon.log`
+files on 2026-11-18, counts only:
+
+- `sing-dev`: 339 resume lines, 302 "on a login to another account", 19 on a network change, 18 on a reset.
+  `sing-dev-2`: 196 lines, 168 on a login. `wake-dev`, the one daemon newer than #218: 31 on a login and 4 of the
+  retry ladder's "retrying a login's resume (N of 3)" - so the ladder is a small part of it.
+- The same 6-9 agents resume together at one instant and again minutes later (on 2026-11-17: 00:40, 00:46, 00:47,
+  00:49, 00:52, 02:21), and a pair two minutes apart recurs for a single agent. **The cause read from that is
+  account flips**: `resumeOnLogin` resumes every stopped agent whose recorded account is not the one signed in, and
+  each flip while the limit keeps stopping them is another round. The logs cannot say whether every flip was the
+  operator's own login.
+
+**Not built: folding them in the room.** A resume line whose agent has said nothing since its previous resume
+(the "continue" was answered by the limit again) replaces that earlier row with
+`↻ <name> resumed after the usage limit ×N`, keyed on (agent, usage limit or connection), so a resume that was
+answered always starts a line. The daemon is untouched. The cost is the part to weigh: it rewrites a row in the
+middle of the scrollback, so it touches `roomSpans`, the line moves a reader's anchor follows, the copy rejoin and
+the restore (`roomhistory.go` draws the restored ones from the transcripts, where the count is gone), and a
+selection over the row. The conversation draws each one too and would want the same.
+
+*Revisit if:* the owner asks for it, or the repeats stay a screenful after the narrowing fix.
+
+---
+
+## KNOWN GAP, 2026-11-18 — a room left open names the first newer release it heard of, for as long as it runs
+
+The strip's `↑ wake X` (`internal/ui/updatecue.go`) is the newest release the check knew when it first found one
+newer than this build. `dueUpdateCheck` never asks again once `newer` is set - "no later answer changes what to do"
+- so a room opened before v0.1.16 went out kept saying `↑ wake 0.1.15` for days after, while the on-disk cache
+(`~/.wake/update-check.json`, `cmd/wake/updatecheck.go`) already read v0.1.16 and `wake` on the machine's `PATH` was
+0.1.16. Found 2026-11-18 from a screenshot of such a room; the marker is not a stale cache, and the window's own
+build was older than 0.1.15 (the cue only draws for a release newer than the build). **Restarting that window runs
+0.1.16 and draws no cue.**
+
+**Not built:** keep asking on the hourly keystroke after a newer release is known, and let a newer answer replace
+the marker - a failed or older answer never clearing it. One condition in `dueUpdateCheck` and its test; the
+network stays at one request a day because the ask is a cache read.
+
+*Revisit if:* the owner asks for it; a second report of a stale name on the strip would make it one.
+
+---
+
 ## FOLLOW-UP, 2026-11-12 — a click on a completion offer, the wheel over the menu, and bigger steps
 
 The completion menu now walks every offer with ↑↓, ⌃N/⌃P, ⇥ and ↵ (`decisions.md`, 2026-11-12). The mouse does
