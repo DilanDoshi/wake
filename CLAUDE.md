@@ -502,7 +502,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
   threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
-  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`). **The
+  daemon's resume line (`core.NoticeAutoResumed`) has no addressee and is no broadcast**: it is its own agent's
+  thread's, so a narrowed room or a channel draws only its members' (`focusAdmits`).
 - **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
   room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
   team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
