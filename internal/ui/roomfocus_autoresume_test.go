@@ -1,12 +1,8 @@
 package ui
 
-// The daemon's own "continue" to an agent a limit stopped reaches the room as a
-// user line with no addressee (internal/daemon/usagelimit.go announces it, the
-// fleet stamps the agent's id on it). focusAdmits reads an unaddressed user line
-// as the operator's broadcast, so a room narrowed to one agent drew every other
-// agent's "↻ <name> resumed after …" line. These hold that Wake's resume belongs
-// to its own agent's thread - live, restored and in a team's channel - and that
-// the operator's own broadcast, which has no addressee either, still draws.
+// The daemon's resume line has no addressee but is no broadcast: a room narrowed
+// to an agent, or to a team's channel, draws only its own agents' resumes, and the
+// operator's own broadcast, which has no addressee either, still draws.
 
 import (
 	"strings"
@@ -19,8 +15,17 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// daemonResume is the room's line for the daemon resuming session id, stamped as
-// the daemon stamps it. reconnected is the resume an unreachable API called for.
+// resumeTail is the words a resume line ends in; reconnected is the resume an
+// unreachable API called for.
+func resumeTail(reconnected bool) string {
+	if reconnected {
+		return autoReconnectedTail
+	}
+	return autoResumedTail
+}
+
+// daemonResume is the room's line for the daemon resuming session id, as the
+// fleet stamps it (the announcement itself names the session only on its frame).
 func daemonResume(id, name string, reconnected bool) roomLine {
 	flags := rpc.MessageResumed
 	if reconnected {
@@ -83,10 +88,7 @@ func TestFocusStillAdmitsABroadcastBesideAResume(t *testing.T) {
 func TestANarrowedRoomDrawsOnlyItsOwnAgentsResume(t *testing.T) {
 	const alpha, bravo = "a-id", "b-id"
 	for _, reconnected := range []bool{false, true} {
-		tail := autoResumedTail
-		if reconnected {
-			tail = autoReconnectedTail
-		}
+		tail := resumeTail(reconnected)
 		lines := []roomLine{daemonResume(alpha, "alpha", reconnected), daemonResume(bravo, "bravo", reconnected)}
 		for name, r := range map[string]Room{
 			"narrowed after":  appendAll(NewRoom().SetSize(80, 24), lines).WithFocus(bravo, "bravo"),
@@ -135,22 +137,23 @@ func TestAChannelDrawsOnlyItsMembersResumes(t *testing.T) {
 	}
 }
 
-// Through the App, the way the daemon's frames arrive, with the narrowing a
-// typed @name makes and its clearing.
+// Through the App, as the daemon's frames arrive - the announcement names its
+// session only on the frame, so the fleet's stamp is what the narrowing reads -
+// with the narrowing a typed @name makes and its clearing.
 func TestTypingAtNameHidesOtherAgentsResumeLines(t *testing.T) {
-	reconnect := func(id string) rpc.Frame {
+	wire := func(id string, flags byte) rpc.Frame {
 		f := resumeFrame(id)
-		f.Event.MessageID = rpc.NewMessageSend(rpc.MessageResumed | rpc.MessageReconnected).ID()
+		f.Event.SessionID = ""
+		f.Event.MessageID = rpc.NewMessageSend(flags).ID()
 		return f
 	}
-	for name, frames := range map[string][]rpc.Frame{
-		"usage limit": {resumeFrame("s1"), resumeFrame("s2")},
-		"connection":  {reconnect("s1"), reconnect("s2")},
-	} {
-		tail := autoResumedTail
-		if name == "connection" {
-			tail = autoReconnectedTail
+	for _, reconnected := range []bool{false, true} {
+		flags, name := rpc.MessageResumed, "usage limit"
+		if reconnected {
+			flags, name = flags|rpc.MessageReconnected, "connection"
 		}
+		tail := resumeTail(reconnected)
+		frames := []rpc.Frame{wire("s1", flags), wire("s2", flags)}
 		base := newRoomApp(t).withSize(200, 40).withAgents("john", "iris")
 
 		after := base
