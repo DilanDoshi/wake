@@ -410,9 +410,14 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 		if l.ev.Shell {
 			// A bang opens the turn claude answers: the room's only when its stamp
 			// says the room aimed it, never by text - two runs of one command in
-			// two conversations are not a broadcast.
+			// two conversations are not a broadcast. One the room aimed is drawn.
 			_, _, aimed := roomSendOf(l.ev.MessageID)
 			open[l.ev.SessionID] = aimed
+			if _, fork := copied[i]; aimed && !fork {
+				// Drawn as the room's own line, in its agent's thread (roombang.go).
+				l.ev, l.to, l.by = bangLine(l.ev, l.by.Name), l.ev.SessionID, Agent{}
+				out = append(out, l)
+			}
 			continue
 		}
 		if keeper, ok := copied[i]; ok {
