@@ -174,9 +174,9 @@ func TestAClickThatFocusesTheWindowLightsItAtOnce(t *testing.T) {
 	s.send("\x1b[O")
 	s.awaitBorder("hello", accent, false)
 
-	row := s.rowOf("hello") + 1 // the report's rows are 1-based
+	row := s.rowOf("hello") + 1                                    // the report's rows are 1-based
 	click := fmt.Sprintf("\x1b[<0;40;%dM\x1b[<0;40;%dm", row, row) // past the draft: the caret stays at its end
-	s.send("\x1b[I" + click) // one write: one read, as a terminal's click arrives
+	s.send("\x1b[I" + click)                                       // one write: one read, as a terminal's click arrives
 	s.awaitBorder("hello", accent, true)
 	if !s.caretSeenWithin("hello", caretWindow) {
 		t.Errorf("the window the click focused draws no caret.\n%s", s.dump())
