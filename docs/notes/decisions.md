@@ -8,6 +8,27 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-18 — the update cue follows newer releases; only the strip's marker moves forward, the cache mirrors GitHub
+
+A room left open named the first newer release it heard of for as long as it ran (`deferred.md`'s gap, now
+built): the hourly keystroke ask continues after a release is known, and a strictly newer answer replaces the
+strip's marker. A failed, equal or older answer leaves it (`ui.dueUpdateCheck`). The marker never clears
+in-process: the build's version is compiled in, and `wake upgrade` replaces the binary on disk, not the window.
+
+- **The cache does not move forward only** (wake-orch, 2026-11-18, after two reviews). A guard that never wrote an
+  older release over a newer one was built and dropped: a release pulled or rolled back (cache v0.1.17, GitHub's
+  latest back to v0.1.16) stayed named by every window and its daily notice, while `wake upgrade`, which asks
+  GitHub live, said v0.1.16 was the latest; only deleting `~/.wake/update-check.json` ended it, and a mistagged
+  v1.0.0 would hide every real release under it. Probed over 30 days: 30 notices with the guard, 0 without, where
+  the cache reset at the first daily ask. The guard's gain was a stale edge's older answer hiding the marker from a
+  new window for at most a day, and an open room already keeps its marker. `TestThePulledReleaseIsForgottenAtTheNextDailyAsk`
+  pins it.
+- **Accepted:** a window left open and typed in repeats the once-a-day notice (the shared `Notified`), where it was
+  once per process; and a failing release host (offline, a 5xx) is retried on the hourly key by a room that knows a
+  release too, as one that knew none always did (10 s timeout, off the draw goroutine).
+
+---
+
 ## 2026-11-12 — the completion menu walks every offer: a window over the matches, sized to its pane, moved the least distance
 
 The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant
