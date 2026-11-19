@@ -8,6 +8,47 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
+
+The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again
+and again. They are real, separate `continue`s (`resumeOnLogin` resumes every stopped agent on each account flip,
+and the limit stops them again), so the daemon is untouched and only the room's drawing folds
+(`internal/ui/roomresumefold.go`).
+
+- **The rule, one pure step** (`resumeRuns.step`), run per change by `Room.appendLine` and over a restored batch by
+  `foldHist`, never per frame. An agent has one open run, opened by a resume. The next resume of the same kind
+  (limit vs connection) is **not a line of the room**: the head is redrawn in place as `↻ name resumed after the usage limit ×N`.
+  Any other line in that agent's thread (`focusAdmits`: its prose, an ask, a message to it, a broadcast) ends the
+  run, so a resume the agent answered is followed by a new line. Another agent's lines between never end it.
+- **A failed turn's `⤷ turn ended, nothing said` is part of the run** (live). The brief assumed the limited turn
+  leaves no other room line; it leaves that marker (the failed turn's `result` is a `KindTurnEnd`, `api-error-auth.jsonl`).
+  Only a marker the API failed is transparent: `appendLine` stamps it `noticeFailedTurn` from the fleet's per-agent
+  failed bit (#220), true exactly at a failed turn's end. The first marker after the head stays drawn, later ones fold
+  away; a **successful silent turn's** marker is unstamped, ends the run and stays, so a resume that worked never reads as
+  one that re-stopped.
+- **Restore has no failure evidence.** The brief said the failed turn's `KindAPIError` is on disk; `decodeTranscript`
+  drops every `isApiErrorMessage` record, so a restored room holds bare back-to-back resumes and folds those. The one wrong
+  case: a restored resume whose turn did only tool calls and said nothing (invisible in the restored room) folds with the
+  next resume. Not recovered - it would mean changing the airlock decoder every history path shares. A restored run and the
+  live run after it are two lines (each part is folded from nothing).
+- **The resume the agent answers is the last one its run counts.** The fold is decided when the resume is announced,
+  before its turn's outcome exists, so `R ×4` can end in a resume that worked; the answer then ends the run.
+- **No per-line state.** `roomLine` is copied through every history merge and `room_retention_test.go` budgets
+  `Before`'s bytes per event at 6,144 against a measured 6,138 - a new field on `roomLine` (even a bool) fails it. So the
+  count is `Room.counts`, by the head's line id (a head that counts, nothing else), and a folded line is dropped, not kept
+  hidden: it costs no row, no retention slot, no `/clear` reminder tick. The failed bit rides the marker's own event
+  as a UI-defined notice (as `noticeTakenBack` does).
+- **Nothing a reader holds moves.** A resume is one muted line however wide the pane, so the head's row is rewritten at
+  its own height (`transcript.rewritten`): no `lineMoves`, no scroll or selection to translate. The room has no last-read
+  markers (the DM's `lastread.go`); its anchors are the scroll offset and the selection, both row indices. The count is
+  drawn last and the words are cut first, so a narrow pane keeps the figure. A head a focus hides takes the count and shows
+  it when drawn; a head retention reclaimed leaves nothing to fold into, so the next resume heads a new line.
+- **The conversation still draws every resume.** Each `continue` is a message the model read and the DM is the
+  record at Claude Code's fidelity; its event marks, retention and rewind targets anchor to events, and the screenful
+  was the fleet's, not one thread's. `deferred.md` keeps it.
+
+---
+
 ## 2026-11-12 — the completion menu walks every offer: a window over the matches, sized to its pane, moved the least distance
 
 The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant

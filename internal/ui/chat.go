@@ -97,6 +97,12 @@ type Room struct {
 	// roomLine.id, for those typed in one; see appendUser (roomchannel.go).
 	typedIn map[uint64]string
 
+	// runs is each agent's open run of resume lines, the one a repeated resume
+	// folds into, and counts is how many resumes each head line stands for, by
+	// roomLine.id. See roomresumefold.go.
+	runs   resumeRuns
+	counts map[uint64]int
+
 	composer Composer
 	width    int
 	height   int
@@ -341,13 +347,18 @@ func (r Room) appendLine(line roomLine) Room {
 	// is skipped, not done and dropped. A shown line renders as before; the
 	// empty-block guard stays on that path (fold pre-drops blanks, so it is
 	// defensive) and runs before an id is spent.
+	line = stamped(line)
+	runs, step := r.runs.step(line, r.said.len(), r.said.first())
+	if step.hides() {
+		return r.folded(runs, step)
+	}
 	hidden := !r.admits(line)
 	var b block
 	if !hidden {
 		// A new event carries no per-line open of its own, but expandAll is a
 		// standing choice: while it is set, a long reply arriving lands expanded
 		// too, so ⌃E's "show everything" keeps meaning everything.
-		b = renderRoomBlock(line.ev, line.by, line.recipient, r.blockWidth(), r.expandAll)
+		b = r.drawn(line, r.expandAll)
 		if b.text == "" {
 			return r
 		}
@@ -365,6 +376,7 @@ func (r Room) appendLine(line roomLine) Room {
 		line.rows = rows
 		r.said = r.said.append(line)
 	}
+	r.runs = runs
 	if drop := r.said.count() - roomRetentionEvents; drop > 0 {
 		r = r.reclaimOldest(drop)
 	}
@@ -412,6 +424,7 @@ func (r Room) Before(earlier []roomLine) Room {
 	r.raw = trimRoomRaw(r.raw)
 	// Re-derived from every transcript rather than from this batch. See raw.
 	hist := collapseBroadcasts(r.raw, &r.nextLineID)
+	hist, histCounts := foldHist(hist)
 
 	live := held[min(r.hist, len(held)):]
 	liveStart := r.liveLineStart(held)
@@ -420,6 +433,8 @@ func (r Room) Before(earlier []roomLine) Room {
 	liveDrop := max(drop-len(hist), 0)
 	combined = append([]roomLine(nil), combined[drop:]...)
 	r.hist = max(len(hist)-drop, 0)
+	r.runs = openRuns(combined[r.hist:], r.hist)
+	r.counts = keptOn(unionCounts(keptOn(r.counts, live), histCounts), combined)
 	r.reclaimed = r.reclaimed || drop > 0
 	// A merge both drops the oldest lines and re-derives history ids, so an open
 	// kept on a line that left - or whose id changed - would linger. Keep only
@@ -463,7 +478,7 @@ func (r Room) reclaimOldest(drop int) Room {
 	}
 	oldFirst := r.tr.first()
 	evicted := r.said.slice(r.said.first(), r.said.first()+drop)
-	r.expanded, r.typedIn = forgotten(r.expanded, evicted), forgotten(r.typedIn, evicted)
+	r.expanded, r.typedIn, r.counts = forgotten(r.expanded, evicted), forgotten(r.typedIn, evicted), forgotten(r.counts, evicted)
 	cut := r.tr.lines.first() + roomRenderedLines(evicted)
 	if !r.reclaimed {
 		cut += len(blockLines(roomBanner(r.blockWidth()), true))
@@ -504,60 +519,6 @@ func roomRenderedLines(lines []roomLine) int {
 		n += line.rows
 	}
 	return n
-}
-
-type roomSpan struct{ first, rows int }
-
-type roomLineMove struct{ from, to, rows int }
-
-type roomLineMoves []roomLineMove
-
-func (moves roomLineMoves) translate(line int) (int, bool) {
-	for _, move := range moves {
-		if line >= move.from && line < move.from+move.rows {
-			return move.to + line - move.from, true
-		}
-	}
-	return 0, false
-}
-
-// roomSpans records each event block's absolute rendered range. IDs survive a
-// history merge; positions deliberately do not.
-func (r Room) roomSpans(lines []roomLine) map[uint64]roomSpan {
-	spans := make(map[uint64]roomSpan, len(lines))
-	at := r.tr.lines.first()
-	if !r.reclaimed {
-		at += len(blockLines(roomBanner(r.blockWidth()), true))
-	}
-	for _, line := range lines {
-		if line.id != 0 && line.rows > 0 {
-			spans[line.id] = roomSpan{first: at, rows: line.rows}
-		}
-		at += line.rows
-	}
-	return spans
-}
-
-// roomLineMoves translates every retained rendered row from one Before layout
-// to the next. Boundary rows have identities too: the banner while it exists,
-// and the reclamation marker after it replaces the banner.
-func lineMovesBetween(old Room, oldSpans map[uint64]roomSpan, next Room, nextSpans map[uint64]roomSpan) roomLineMoves {
-	moves := make(roomLineMoves, 0, len(oldSpans)+1)
-	for id, before := range oldSpans {
-		after, ok := nextSpans[id]
-		if !ok {
-			continue
-		}
-		moves = append(moves, roomLineMove{from: before.first, to: after.first, rows: min(before.rows, after.rows)})
-	}
-	switch {
-	case old.reclaimed && next.reclaimed:
-		moves = append(moves, roomLineMove{from: old.tr.first(), to: next.tr.first(), rows: 1})
-	case !old.reclaimed && !next.reclaimed:
-		rows := min(len(blockLines(roomBanner(old.blockWidth()), true)), len(blockLines(roomBanner(next.blockWidth()), true)))
-		moves = append(moves, roomLineMove{from: old.tr.lines.first(), to: next.tr.lines.first(), rows: rows})
-	}
-	return moves
 }
 
 // mergeByTime interleaves two time-ordered runs of restored lines. Stable on a
@@ -772,7 +733,7 @@ func (r Room) renderAll(lines []roomLine) []block {
 		if !r.admits(lines[i]) {
 			continue
 		}
-		b := renderRoomBlock(lines[i].ev, lines[i].by, lines[i].recipient, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])
+		b := r.drawn(lines[i], r.expandAll || r.expanded[lines[i].id])
 		if b.text != "" {
 			b.laidOut = blockLines(b, false)
 			lines[i].rows = len(b.laidOut)
