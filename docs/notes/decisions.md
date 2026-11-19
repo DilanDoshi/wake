@@ -19,18 +19,25 @@ and the limit stops them again), so the daemon is untouched and only the room's 
   `foldHist`, never per frame. An agent has one open run, opened by a resume. The next resume of the same kind
   (limit vs connection) is **not a line of the room**: the head is redrawn in place as `↻ name resumed after the usage limit ×N`.
   Any other line in that agent's thread (`focusAdmits`: its prose, an ask, a message to it, a broadcast) ends the
-  run, so a resume the agent answered is followed by a new line. Another agent's lines between never end it.
+  run, so a resume the agent answered is followed by a new line. Another agent's lines between never end it. Wake's own
+  room lines with no addressee (the `/login` panel, `/adopt`'s listing, a picker's echo, a bare `!cmd`) are drawn in every
+  thread, so they end every run: a resume after one is a new line below it. An answer the room never drew (a conversation
+  that is open holds its turn private) does not end it, and a restore agrees.
 - **A failed turn's `⤷ turn ended, nothing said` is part of the run** (live). The brief assumed the limited turn
   leaves no other room line; it leaves that marker (the failed turn's `result` is a `KindTurnEnd`, `api-error-auth.jsonl`).
   Only a marker the API failed is transparent: `appendLine` stamps it `noticeFailedTurn` from the fleet's per-agent
   failed bit (#220), true exactly at a failed turn's end. The first marker after the head stays drawn, later ones fold
-  away; a **successful silent turn's** marker is unstamped, ends the run and stays, so a resume that worked never reads as
-  one that re-stopped.
+  away. **The run follows how a turn ended, not whether it did work**: a turn that used a tool and then hit the limit
+  again is a resume that re-stopped and folds (the owner's spec: "a turn that ended on the limit or an unreachable
+  API"); a turn that **ended successfully** with nothing said has an unstamped marker, which ends the run and stays.
 - **Restore has no failure evidence.** The brief said the failed turn's `KindAPIError` is on disk; `decodeTranscript`
   drops every `isApiErrorMessage` record, so a restored room holds bare back-to-back resumes and folds those. The one wrong
   case: a restored resume whose turn did only tool calls and said nothing (invisible in the restored room) folds with the
   next resume. Not recovered - it would mean changing the airlock decoder every history path shares. A restored run and the
   live run after it are two lines (each part is folded from nothing).
+- **Cost.** A fold walks back from the transcript's end to its head (the distance from the tail, one `roomLine` copy per
+  step). The runs map is cloned per run change; in a capped room where every line opens or ends a run `Before` allocates
+  about 330 bytes an event more than the 6,138 it takes without resumes (the budget test's fixture holds none).
 - **The resume the agent answers is the last one its run counts.** The fold is decided when the resume is announced,
   before its turn's outcome exists, so `R ×4` can end in a resume that worked; the answer then ends the run.
 - **No per-line state.** `roomLine` is copied through every history merge and `room_retention_test.go` budgets

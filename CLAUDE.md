@@ -515,7 +515,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The room folds an agent's repeated resumes** (owner's 2026-11-18 ask): a `↻ … resumed after …` line for an
   agent whose run is open - nothing else in its thread since, bar a turn-end marker the API failed - is not drawn;
   the run's first line is redrawn in place as `×N` (`Room.counts`, by line id: `roomLine` takes no field, its copies
-  are budgeted). A successful silent turn ends the run; a restore folds bare repeats, having no failure evidence; a
+  are budgeted). A turn that ends successfully ends the run; a restore folds bare repeats, having no failure evidence; a
   conversation still draws every resume. `internal/ui/roomresumefold.go`, `decisions.md` (2026-11-18).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*

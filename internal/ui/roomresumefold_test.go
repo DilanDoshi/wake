@@ -216,6 +216,7 @@ func TestAFoldMovesNoRowAndNoReader(t *testing.T) {
 		}
 	}
 	r = r.ScrollUp(30)
+	r.lineMoves = roomLineMoves{{from: 0, to: 1, rows: 1}} // what an earlier rebuild left behind
 	before, scroll := r.tr.lines.len(), r.tr.scroll
 	r = r.Append(foldResume(foldSydney, false), foldSydney)
 	if r.tr.lines.len() != before || r.tr.scroll != scroll {
@@ -358,6 +359,72 @@ func TestALateHistoryMergeLeavesALiveRunOpen(t *testing.T) {
 	}
 }
 
+// A restored run is not carried into the live one after it: two lines.
+func TestARestoredRunIsNotCarriedIntoTheLiveOneAfterIt(t *testing.T) {
+	r := foldRoom().Append(foldResume(foldSydney, false), foldSydney)
+	r = r.Before([]roomLine{{ev: resumeEvent("s1", clock().Add(-time.Hour)), by: foldSydney}})
+	r = r.Append(foldResume(foldSydney, false), foldSydney)
+	got := rowsWith(r, "sydney resumed after")
+	if len(got) != 2 || got[0] != "↻ sydney resumed after the usage limit" || got[1] != resumedFold(2) {
+		t.Errorf("a restored resume and the live run after it should be two lines, the live one counting itself, drew %q", got)
+	}
+}
+
+// A late batch that proves a broadcast between two restored resumes ends the run
+// the first batch had folded; the count it had does not linger.
+func TestALateBatchThatEndsARestoredRunDropsItsCount(t *testing.T) {
+	a := roomWithHistoryAsked(t)
+	long := clock().Add(-time.Hour)
+	typed := func(id string, at time.Time) core.Event {
+		return core.Event{Kind: core.KindUserText, SessionID: id, Text: "everyone go", At: at}
+	}
+	m := a.apply(oneReply("s1", resumeEvent("s1", long), typed("s1", long.Add(time.Minute)), resumeEvent("s1", long.Add(2*time.Minute))))
+	if got := rowsWith(m.room, "sydney resumed after"); len(got) != 1 || !strings.Contains(got[0], "×2") {
+		t.Fatalf("the unproven typed line leaves two resumes back to back, which fold: drew %q", got)
+	}
+	m = m.apply(oneReply("s2", typed("s2", long.Add(time.Minute+50*time.Millisecond))))
+	got := rowsWith(m.room, "sydney resumed after")
+	if len(got) != 2 || strings.Contains(got[0]+got[1], "×") {
+		t.Errorf("the proven broadcast between them should leave two plain lines, drew %q:\n%s", got, shown(m))
+	}
+}
+
+// A failed turn's marker whose run's head is gone has nothing to sit under: drawn.
+func TestAFailedMarkerWhoseHeadWasReclaimedIsDrawn(t *testing.T) {
+	r := foldRoom().Append(foldResume(foldSydney, false), foldSydney)
+	ev, by := foldMarker(foldSydney, true)
+	r = r.Append(ev, by)
+	r = r.reclaimOldest(2)
+	r = r.Append(ev, by)
+	if n := len(rowsWith(r, "turn ended, nothing said")); n != 1 {
+		t.Errorf("a failed marker with no head left should be drawn once, drew %d:\n%s", n, strings.Join(foldedRows(r), "\n"))
+	}
+}
+
+// Rewriting a head redraws the row it is on whatever was reclaimed before it, and
+// in a room that was never sized.
+func TestAFoldRedrawsTheRightRowAfterReclaimAndBeforeASize(t *testing.T) {
+	r := foldRoom()
+	for i := range 5 {
+		r = r.Append(foldProse(foldJohn, fmt.Sprintf("line %d", i)), foldJohn)
+	}
+	r = r.reclaimOldest(2)
+	unsized := NewRoom().Append(foldProse(foldJohn, "carrying on"), foldJohn)
+	for _, room := range []Room{r, unsized} {
+		room = room.Append(foldResume(foldSydney, false), foldSydney)
+		room = room.Append(foldProse(foldJohn, "after"), foldJohn)
+		room = room.Append(foldResume(foldSydney, false), foldSydney)
+		rows := foldedRows(room)
+		counted := slices.ContainsFunc(rows, func(row string) bool { return strings.HasPrefix(row, "↻ sydney") && strings.HasSuffix(row, "×2") })
+		if !counted || !slices.Contains(rows, "john") {
+			t.Errorf("the counted line should be drawn and john's header kept:\n%s", strings.Join(rows, "\n"))
+		}
+		if resized := foldedRows(room.SetSize(room.width+1, room.height).SetSize(room.width, room.height)); room.width > 0 && !slices.Equal(rows, resized) {
+			t.Errorf("the redrawn row differs from a full render:\n%s\nvs\n%s", strings.Join(rows, "\n"), strings.Join(resized, "\n"))
+		}
+	}
+}
+
 // ...and keeps the count it had.
 func TestALateHistoryMergeKeepsALiveRunsCount(t *testing.T) {
 	r := foldRoom()
@@ -401,6 +468,18 @@ func TestRebuildsKeepWhatTheFoldDrew(t *testing.T) {
 				t.Fatalf("a rebuild changed sydney's rows:\n%s\nto\n%s", strings.Join(before, "\n"), strings.Join(after, "\n"))
 			}
 		}
+	}
+}
+
+// The run follows how a turn ENDED, not whether it did work: a turn that used a
+// tool and then hit the limit again is a resume that re-stopped.
+func TestAFoldFollowsHowATurnEndedNotWhetherItDidWork(t *testing.T) {
+	m := roomWithHistoryAsked(t)
+	m = m.apply(resumeFrame("s1")).apply(usageLimitFrame("s1")).apply(turnEndFrame("s1"))
+	m = m.apply(resumeFrame("s1")).apply(toolUseFrame("s1")).apply(usageLimitFrame("s1")).apply(turnEndFrame("s1"))
+	m = m.apply(resumeFrame("s1"))
+	if got := rowsWith(m.room, "resumed after"); len(got) != 1 || got[0] != resumedFold(3) {
+		t.Errorf("three resumes that each ended on the limit should be one %q, drew %q:\n%s", resumedFold(3), got, shown(m))
 	}
 }
 
