@@ -174,8 +174,12 @@ func (k killTrigger) saw(b []byte, now time.Time) (killTrigger, bool) {
 	if k.spent {
 		return k, false
 	}
-	for _, c := range b {
-		switch {
+	for i := 0; i < len(b); i++ {
+		if isFocusReport(b[i:]) {
+			i += focusReportLen - 1 // the terminal's, not the operator's: neither arms nor disarms
+			continue
+		}
+		switch c := b[i]; {
 		case c != keyCtrlC:
 			// Anything else disarms - ⌃Q included, which is what keeps it from
 			// pre-empting the park. See the header: this is what keeps ⌃C
@@ -304,7 +308,69 @@ func (r *alignedPipe) Read(p []byte) (int, error) {
 	room := len(p) - 1 - len(r.chunks.carry)
 	n, err := r.File.Read(p[:room])
 	full := n == room && p[n-1] == keyEsc && queued(r.File)
-	return copy(p, r.chunks.step(p[:n], full)), err
+	return copy(p, focusLast(r.chunks.step(p[:n], full))), err
+}
+
+// focusReportLen is a focus report's length: ESC [ I (the window gained focus) or
+// ESC [ O (it lost it), which DECSET 1004 sends once cmd/wake has asked for them.
+const focusReportLen = 3
+
+// isFocusReport says whether b opens with a focus report. ESC [ O A is Shift+Up to
+// Bubble Tea and opens with one, but the A behind it is neither a mouse report nor
+// a report, which is what keeps focusLast's hands off it.
+func isFocusReport(b []byte) bool {
+	return len(b) >= focusReportLen && b[0] == keyEsc && b[1] == '[' && (b[2] == 'I' || b[2] == 'O')
+}
+
+// mouseReportLen is the length of the SGR mouse report (ESC [ < b ; x ; y M or m) b
+// opens with, or 0.
+func mouseReportLen(b []byte) int {
+	if len(b) < 4 || b[0] != keyEsc || b[1] != '[' || b[2] != '<' {
+		return 0
+	}
+	for i := 3; i < len(b); i++ {
+		switch c := b[i]; {
+		case c == 'M' || c == 'm':
+			return i + 1
+		case c != ';' && (c < '0' || c > '9'):
+			return 0
+		}
+	}
+	return 0
+}
+
+// focusLast is chunk with its focus report moved to the end, when the rest of it
+// is mouse reports.
+//
+// Bubble Tea v1.3.10 decodes a report only as all that is left of a read, so one
+// sharing a read with what follows is dropped, and a click that focuses a window
+// sends its report and its press together. Only that case is touched: anything
+// else in the read (a paste, an Escape keypress, ESC [ O A, which is Shift+Up) is
+// not ours to reorder. A report sets a state, so the last of several is kept.
+func focusLast(chunk []byte) []byte {
+	last := -1
+	for i := 0; i < len(chunk); {
+		if n := mouseReportLen(chunk[i:]); n > 0 {
+			i += n
+		} else if isFocusReport(chunk[i:]) {
+			last, i = i, i+focusReportLen
+		} else {
+			return chunk
+		}
+	}
+	if last < 0 {
+		return chunk
+	}
+	out := make([]byte, 0, len(chunk))
+	for i := 0; i < len(chunk); {
+		if isFocusReport(chunk[i:]) {
+			i += focusReportLen
+		} else {
+			out = append(out, chunk[i])
+			i++
+		}
+	}
+	return append(out, chunk[last:last+focusReportLen]...)
 }
 
 // alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]
@@ -538,10 +604,10 @@ func (k *killSwitch) restoreTerminal() {
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
-		// Mouse reporting off, bracketed paste off, cursor back, alt screen
+		// Mouse reporting off, focus reporting off, bracketed paste off, cursor back, alt screen
 		// left - bubbletea's own restoreTerminalState, in the order it does it -
 		// then the shell's title, which converseModel's exit is not here to pop.
-		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
+		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
 		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine(k.fleetName()))
 	}()
 	select {
