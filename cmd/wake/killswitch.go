@@ -298,7 +298,8 @@ func (k *killSwitch) Input() io.Reader {
 // *os.File so cancelreader still finds a File (see Input).
 type alignedPipe struct {
 	*os.File
-	chunks chunker
+	chunks  chunker
+	pasting bool // a bracketed paste is open: its end has not come through yet
 }
 
 // Read leaves room for the carry and a byte spare, so Bubble Tea always gets a
@@ -308,7 +309,32 @@ func (r *alignedPipe) Read(p []byte) (int, error) {
 	room := len(p) - 1 - len(r.chunks.carry)
 	n, err := r.File.Read(p[:room])
 	full := n == room && p[n-1] == keyEsc && queued(r.File)
-	return copy(p, focusLast(r.chunks.step(p[:n], full))), err
+	chunk := r.chunks.step(p[:n], full)
+	if !r.pasting {
+		chunk = focusLast(chunk) // in a paste every byte is the paste's, however it looks
+	}
+	r.pasting = pasteOpen(chunk, r.pasting)
+	return copy(p, chunk), err
+}
+
+// The markers of a bracketed paste. Bubble Tea keeps what a read leaves of a paste
+// whose end has not arrived, so every read until then is body.
+var (
+	pasteStart = []byte{keyEsc, '[', '2', '0', '0', '~'}
+	pasteEnd   = []byte{keyEsc, '[', '2', '0', '1', '~'}
+)
+
+// pasteOpen is whether a paste is open after chunk, given whether one was before
+// it. alignedCut never splits a CSI, so a marker is always whole inside a chunk.
+func pasteOpen(chunk []byte, was bool) bool {
+	start, end := bytes.LastIndex(chunk, pasteStart), bytes.LastIndex(chunk, pasteEnd)
+	switch {
+	case start > end:
+		return true
+	case end > start:
+		return false
+	}
+	return was
 }
 
 // focusReportLen is a focus report's length: ESC [ I (the window gained focus) or

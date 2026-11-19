@@ -6341,7 +6341,12 @@ colour around the query bar go away?" The terminal says so (DECSET 1004), Bubble
   whatever shared the read, and the adversarial review found what that breaks: a paste whose end marker lands
   in a later read took the report into its text, and Bubble Tea's own `ESC [ O A` (Shift+Up in the DECCKM
   form) became the rune A and a blur. Anything else is left as it was, and the report is dropped as before.
-  How often a real terminal glues the two was not measured: none was available.
+  How often a real terminal glues the two was not measured: none was available. **A paste spanning reads is
+  tracked** (`alignedPipe.pasting`, `pasteOpen`): the second review found that a paste whose body is nothing but
+  report-shaped bytes had its middle read reordered, since `focusLast` sees one chunk and cannot know a paste is
+  open. While one is open every byte is the paste's and `focusLast` does not run. That state is lost if the
+  chunk holding an end marker is dropped (the pump drops a whole read when the forward queue is full): reordering
+  then stays off until the next paste's markers, which is today's behaviour, the report dropped.
 - **Known, and Bubble Tea's.** An Escape keypress and a report in one read decode as alt+esc and `[O` with or
   without `focusLast`; a report split right after its ESC across two reads (SSH, tmux) arrives as an Escape
   and `[O`, and disarms ⌃C⌃C - the lone-ESC residual `chunker.step` documents for mouse reports.

@@ -335,7 +335,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`Refocus`). **A typed key heals a missed report; a wheel or a paste does not** (a terminal delivers
   either over a window without focus). Bubble Tea decodes a report only as all that is left of a read,
   so the kill switch moves one that shares a read with a click's mouse reports to its end (`focusLast`:
-  those and nothing else), and **ignores reports for ⌃C⌃C** — they are the terminal's, not the
+  those and nothing else, and never inside an open bracketed paste), and **ignores reports for ⌃C⌃C** — they are the terminal's, not the
   operator's; the emergency restore writes `?1004l`; a hand-over has Bubble Tea's release and restore
   around it and starts from a key, which has already healed the window. `internal/ui/windowfocus.go`,
   `decisions.md` (2026-11-18).
@@ -668,7 +668,7 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · `fleets.go` (`--fleet`, `wake fleets`) · `fleetend.go` (what a stop's removal came to) · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads, and `focusLast`; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Window focus (blur hides the caret and accent) | `internal/ui/windowfocus.go` · `Composer.windowBlurred` (`composer.go`) · `composersFocused` (`panes.go`) · `ResumePicker.windowBlurred` · tests `internal/ui/windowfocus_test.go`, `cmd/wake/focusreport_unix_test.go`, pty `cmd/wake/focusscreen_unix_test.go` |
+| Window focus (blur hides the caret and accent) | `internal/ui/windowfocus.go` · `Composer.windowBlurred` (`composer.go`) · `composersFocused` (`panes.go`) · `ResumePicker.windowBlurred` · tests `internal/ui/windowfocus_test.go`, `cmd/wake/focusreport_unix_test.go`, `focuslastprop_unix_test.go` (50,000 random reads), `focuspaste_unix_test.go`, pty `cmd/wake/focusscreen_unix_test.go` |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
