@@ -93,17 +93,6 @@ func (t transcript) addMeasured(b block) (transcript, int) {
 	return t, len(added)
 }
 
-// rewritten is the transcript with rows put over the lines from at, the same
-// number of them: a row redrawn where it stands, which moves nothing under it.
-func (t transcript) rewritten(at int, rows []string) transcript {
-	for i, row := range rows {
-		if t.lines.at(at+i) != row {
-			t.lines = t.lines.replace(at+i, row)
-		}
-	}
-	return t
-}
-
 // replace swaps in a whole transcript, re-wrapped for a new width. The lines
 // are gathered before they are stored so a re-wrap costs one bulk append
 // rather than one per block.
@@ -238,6 +227,12 @@ func (t transcript) restyle(line, width int, s string) transcript {
 	if !isTool && !isRun {
 		return t
 	}
+	return t.rewritten(line, width, s)
+}
+
+// rewritten replaces one rendered line, cut to width: restyle's write, without
+// its tool or run gate.
+func (t transcript) rewritten(line, width int, s string) transcript {
 	t.lines = t.lines.replace(line, ansi.Truncate(s, width, ""))
 	return t
 }

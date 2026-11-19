@@ -358,6 +358,52 @@ func TestALateHistoryMergeLeavesALiveRunOpen(t *testing.T) {
 	}
 }
 
+// ...and keeps the count it had.
+func TestALateHistoryMergeKeepsALiveRunsCount(t *testing.T) {
+	r := foldRoom()
+	for range 3 {
+		r = r.Append(foldResume(foldSydney, false), foldSydney)
+	}
+	r = r.Before([]roomLine{{ev: resumeEvent("s2", clock().Add(-time.Hour)), by: foldJohn}})
+	if got := rowsWith(r, "sydney resumed after"); len(got) != 1 || got[0] != resumedFold(3) {
+		t.Errorf("a merge should leave the live line at %q, drew %q", resumedFold(3), got)
+	}
+}
+
+// Whatever rebuilds the room - a re-wrap, a focus on one thread and back, a late
+// merge of another session's history - sydney's lines read as they did.
+func TestRebuildsKeepWhatTheFoldDrew(t *testing.T) {
+	alphabet := foldAlphabet()
+	rng := rand.New(rand.NewPCG(3, 5))
+	sydney := func(r Room) []string {
+		var out []string
+		for _, row := range foldedRows(r) {
+			if strings.Contains(row, "sydney") {
+				out = append(out, row)
+			}
+		}
+		return out
+	}
+	for range 300 {
+		r := foldRoom()
+		for step := range 2 + rng.IntN(14) {
+			r = r.appendLine(alphabet[rng.IntN(len(alphabet))])
+			before := sydney(r)
+			switch rng.IntN(3) {
+			case 0:
+				r = r.SetSize(r.width+7, r.height).SetSize(r.width-7, r.height)
+			case 1:
+				r = r.WithFocus("s1", "sydney").WithFocus("", "")
+			default:
+				r = r.Before([]roomLine{{ev: resumeEvent("s2", clock().Add(-time.Duration(step+1)*time.Hour)), by: foldJohn}})
+			}
+			if after := sydney(r); !slices.Equal(before, after) {
+				t.Fatalf("a rebuild changed sydney's rows:\n%s\nto\n%s", strings.Join(before, "\n"), strings.Join(after, "\n"))
+			}
+		}
+	}
+}
+
 // The live path end to end: the failed bit the fleet keeps stamps the marker.
 func TestTheLiveRoomFoldsAFailedTurnsMarker(t *testing.T) {
 	m := roomWithHistoryAsked(t)
@@ -443,7 +489,7 @@ func TestIncrementalAndBatchFoldsAgree(t *testing.T) {
 			l := alphabet[rng.IntN(len(alphabet))]
 			r = r.appendLine(l)
 			l.id = uint64(i + 1) // the batch's lines carry the ids a restore gives them
-			lines = append(lines, stamped(l))
+			lines = append(lines, withFailedStamp(l))
 		}
 		kept, counts := foldHist(slices.Clone(lines))
 		held := r.said.slice(r.said.first(), r.said.len())

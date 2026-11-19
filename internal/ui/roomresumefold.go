@@ -71,8 +71,8 @@ func failedMarker(ev core.Event) bool {
 	return ev.Kind == core.KindTurnEnd && ev.Notice == noticeFailedTurn
 }
 
-// stamped is l with its marker stamped if its turn failed.
-func stamped(l roomLine) roomLine {
+// withFailedStamp is l with its marker stamped if its turn failed.
+func withFailedStamp(l roomLine) roomLine {
 	if l.ev.Kind == core.KindTurnEnd && l.by.failed {
 		l.ev.Notice = noticeFailedTurn
 	}
@@ -228,19 +228,16 @@ func (r Room) countedHead(idx int) Room {
 	if head.rows == 0 { // a focus hides it; the count waits for it to be shown
 		return r
 	}
-	rows := blockLines(r.drawn(head, false), false)
-	r.tr = r.tr.rewritten(r.rowOf(idx), rows[max(len(rows)-head.rows, 0):])
+	r.tr = r.tr.rewritten(r.lastRowOf(idx), r.blockWidth(), r.drawn(head, false).text)
 	return r
 }
 
-// rowOf is the absolute transcript row where the line at said index idx begins.
-func (r Room) rowOf(idx int) int {
-	at := r.tr.lines.first()
-	if !r.reclaimed {
-		at += len(blockLines(roomBanner(r.blockWidth()), true))
-	}
-	for i := r.said.first(); i < idx; i++ {
-		at += r.said.at(i).rows
+// lastRowOf is the absolute transcript row of the last row of the line at said
+// index idx, counted back from the end: a head is almost always near it.
+func (r Room) lastRowOf(idx int) int {
+	at := r.tr.lines.len() - 1
+	for i := idx + 1; i < r.said.len(); i++ {
+		at -= r.said.at(i).rows
 	}
 	return at
 }

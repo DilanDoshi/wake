@@ -347,7 +347,7 @@ func (r Room) appendLine(line roomLine) Room {
 	// is skipped, not done and dropped. A shown line renders as before; the
 	// empty-block guard stays on that path (fold pre-drops blanks, so it is
 	// defensive) and runs before an id is spent.
-	line = stamped(line)
+	line = withFailedStamp(line)
 	runs, step := r.runs.step(line, r.said.len(), r.said.first())
 	if step.hides() {
 		return r.folded(runs, step)
