@@ -121,6 +121,18 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 	}
 }
 
+// flatRows is what each item of a fleet with no team draws, counted without
+// rowsForRow so a test of the window does not borrow its oracle from the code it
+// tests: the agent's own rows, and the box's closing row under the last.
+func flatRows(agents []Agent, subs subsOf) heights {
+	out := make(heights, len(agents))
+	for i, a := range agents {
+		out[i] = rowsFor(a, subsFor(subs, a.ID))
+	}
+	out[len(out)-1]++
+	return out
+}
+
 // The window is maximal: nothing more would fit on either side of it.
 //
 // **Nothing asserted this, and the review found it.** Deleting the backward
@@ -135,11 +147,11 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 			for _, height := range []int{3, 5, 8, 12} {
 				for _, cursor := range []string{agents[0].ID, agents[len(agents)/2].ID, agents[len(agents)-1].ID} {
 					r := Roster{Selected: cursor}
-					h := itemHeights(sectionRows(agents), subs)
-					w := r.window(sectionRows(agents), h, height)
+					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
 					if w.from == 0 && w.to == len(agents) {
 						continue // everything fits
 					}
+					h := flatRows(agents, subs)
 					used := 0
 					for _, n := range h[w.from:w.to] {
 						used += n
@@ -182,8 +194,8 @@ func TestTheCursorIsAlwaysInsideTheWindow(t *testing.T) {
 			for height := 1; height <= 12; height++ {
 				for i, a := range agents {
 					r := Roster{Selected: a.ID}
-					h := itemHeights(sectionRows(agents), subs)
-					w := r.window(sectionRows(agents), h, height)
+					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
+					h := flatRows(agents, subs)
 					if w.to == w.from {
 						// An empty window is only honest when no whole agent fits.
 						// Skipping it unconditionally is what made the first draft

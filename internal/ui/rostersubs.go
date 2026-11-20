@@ -60,9 +60,11 @@ const workflowGlyph = "◈"
 const shellWord = "shell"
 
 // subStep is one level of nesting, the width of "⎿ ", so a subagent's own
-// dispatch has its ⎿ under its parent's name. maxSubDepth is the deepest level
-// that still draws general-purpose whole in the sidebar; a row deeper is drawn
-// there (TestTheIndentStopsWhereGeneralPurposeStillFitsWhole).
+// dispatch has its ⎿ under its parent's name. maxSubDepth bounds the indent: a
+// row deeper is drawn there, under its parent still. It was the deepest level
+// that drew general-purpose whole in the 23 columns a row had before the sidebar's
+// sections became boxes; in the 19 that is left only the top level does, and a deeper
+// type is cut at the wall (TestTheIndentStopsAtMaxSubDepth).
 const (
 	subStep     = 2
 	maxSubDepth = 2

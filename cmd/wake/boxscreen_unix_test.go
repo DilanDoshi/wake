@@ -122,18 +122,22 @@ func TestTheBoxWearsItsChannelsColour(t *testing.T) {
 	s.click(boxDivider+8, edge)
 	s.settle()
 
-	wall := func(name string) vt10x.Color {
-		y := boxRowOf(s, hasMember(name))
+	wallAt := func(y int) vt10x.Color {
 		s.term.Lock()
 		defer s.term.Unlock()
 		return s.term.Cell(boxDivider+1, y).FG
 	}
+	wall := func(name string) vt10x.Color { return wallAt(boxRowOf(s, hasMember(name))) }
 	accent, muted := colourOf(t, ui.Accent.Dark), colourOf(t, ui.Muted.Dark)
 	if got := wall("w1"); got != accent {
 		t.Errorf("backend is the picked channel and its wall is %#x, want the accent %#x.\n%s", got, accent, s.dump())
 	}
 	if got := wall("w3"); got != muted {
 		t.Errorf("frontend is not picked and its wall is %#x, want the muted %#x.\n%s", got, muted, s.dump())
+	}
+	// The loose agents' box under all is muted too, once another channel is picked.
+	if got := wallAt(boxRowOf(s, hasEdge("all")) + 1); got != muted {
+		t.Errorf("all is not picked and its box's wall is %#x, want the muted %#x.\n%s", got, muted, s.dump())
 	}
 }
 

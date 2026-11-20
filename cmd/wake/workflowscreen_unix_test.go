@@ -21,11 +21,10 @@ import (
 )
 
 const (
-	// workflowSidebarRow is the running run's row: its glyph and its name. The
-	// last snapshot's agents done of started follows when the pair fits, and a row
-	// has 19 columns inside its box, so this name leaves it no room (internal/ui
-	// holds the pair at a width that does).
-	workflowSidebarRow = "◈ " + workflowName
+	// workflowSidebarRow is the running run's row: its glyph, its name, and
+	// the last snapshot's agents done of started. The name is short so the pair
+	// fits the 19 columns a row has inside its box.
+	workflowSidebarRow = "◈ " + workflowName + " 2/3"
 	// workflowTitle is the view's pane title, over whichever pane it covers.
 	workflowTitle = "› workflows"
 	// workflowHalted is the stopped run's ending line, in the conversation and

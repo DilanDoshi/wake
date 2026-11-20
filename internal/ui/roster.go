@@ -447,7 +447,7 @@ func headLine(a Agent, glyph string, width int) string {
 // The arrow and the abbreviation are the working line's own - shared rather than
 // re-spelled, so the figure beside a name and the figure beside a conversation
 // cannot read differently for the same agent. The word `tokens` is not: it is
-// seven of the twenty-three columns this sidebar has, and the arrow already
+// seven of the nineteen columns a row has inside its box, and the arrow already
 // says what the number is.
 //
 // # Working only, and the turn's own figure

@@ -27,7 +27,6 @@ package ui
 // drops header, gap and member together, and one count (rowsForRow) serves them.
 // The closing row rides on the section's last item the same way, so a window cuts
 // between items and draws a cut box as walls with no edge: it runs on past the cut.
-// The agents above the first team are a box too, under the pinned `all`.
 
 import (
 	"strings"
@@ -83,15 +82,6 @@ func (item rosterItem) trail() int {
 	return 0
 }
 
-// channel is the channel whose box the item's agent stands in: its team, or all
-// for the agents above the first team.
-func (item rosterItem) channel() string {
-	if item.agent.Team == "" {
-		return core.BroadcastName
-	}
-	return item.agent.Team
-}
-
 // sectionRows attaches a header to the first agent of each team, the boundary
 // being a team change in the ordered slice - which Fleet.sectioned guarantees is
 // grouped and top-block-blanked - and a closing row to the last. One item per
@@ -127,18 +117,33 @@ func (r Roster) rowLines(item rosterItem, subs subsOf, width int) []string {
 	if item.hasHeader() {
 		lines = append(lines, r.headerLine(item.header, width))
 	}
-	rule, _ := r.channelStyles(item.channel())
+	channel := core.BroadcastName // the box the agent stands in: its team's, or all's
+	if item.agent.Team != "" {
+		channel = item.agent.Team
+	}
+	rule, _ := r.channelStyles(channel)
 	left, right := rule.Render(boxBorder.Left+" "), rule.Render(" "+boxBorder.Right)
 	inner := max(width-2*boxInset, 0)
 	for _, line := range r.rows(item.agent, subsFor(subs, item.agent.ID), inner) {
 		pad := strings.Repeat(" ", max(inner-ansi.StringWidth(line), 0))
-		lines = append(lines, clip(left+line+pad+right, width))
+		lines = append(lines, boxFit(left+line+pad+right, width))
 	}
 	if item.footer {
-		edge := boxBorder.BottomLeft + strings.Repeat(boxBorder.Bottom, max(width-2, 0)) + boxBorder.BottomRight
-		lines = append(lines, clip(rule.Render(edge), width))
+		corners := ansi.StringWidth(boxBorder.BottomLeft + boxBorder.BottomRight)
+		edge := boxBorder.BottomLeft + strings.Repeat(boxBorder.Bottom, max(width-corners, 0)) + boxBorder.BottomRight
+		lines = append(lines, boxFit(rule.Render(edge), width))
 	}
 	return lines
+}
+
+// boxFit cuts a line to a column too narrow for its walls. A column that holds them
+// needs no cut: rows are cut and padded to the room inside, so the line is exactly
+// the column, and a lipgloss pass over every line is per-draw cost for nothing.
+func boxFit(line string, width int) string {
+	if width < 2*boxInset {
+		return clip(line, width)
+	}
+	return line
 }
 
 // channelStops is the sidebar's walk: walkable with the channel headers it draws,

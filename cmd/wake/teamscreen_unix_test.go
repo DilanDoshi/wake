@@ -124,13 +124,12 @@ func TestTeamSectionsAreSetOffByABlankRowInTheRoster(t *testing.T) {
 	// same place on every row: the margin, then the 24 columns the sidebar owns. A
 	// row with no divider there is not a blank sidebar row, so ok is false and a
 	// test asking for one fails.
-	const divider = 100 - 1 - 24
 	sidebar := func(line string) (text string, ok bool) {
 		r := []rune(line)
-		if len(r) <= divider || r[divider] != '│' {
+		if len(r) <= boxDivider || r[boxDivider] != '│' {
 			return "", false
 		}
-		return strings.TrimSpace(string(r[divider+1:])), true
+		return strings.TrimSpace(string(r[boxDivider+1:])), true
 	}
 	lines := s.lines()
 	for _, team := range []string{"backend", "frontend"} {

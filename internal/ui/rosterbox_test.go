@@ -269,33 +269,64 @@ func TestThePinnedAllIsTheLooseBoxTopEdge(t *testing.T) {
 }
 
 // The box wears its channel's colour - the accent while it is picked, muted
-// otherwise - in its walls and closing row as in its edge.
+// otherwise - in its walls and closing row as in its edge. Every box is held to
+// its own state, with each channel picked in turn, so a box that ignored the pick
+// (or took another's) shows against the one beside it.
 func TestTheBoxWearsItsChannelsState(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor, so the hues render apart
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	agents := boxFleet(t)
 	rule := "╰" + strings.Repeat("─", boxedWidth-2) + "╯"
+	boxes := []string{"", "backend", "frontend", "qa"}  // top to bottom: all's box, then each team's
+	members := []string{"alex", "john", "omar", "ruth"} // one in each
 
+	for _, picked := range boxes {
+		out := (Roster{}).Column(agents, noSubsOf, boxedWidth, 40, picked)
+		lines, plain := strings.Split(out, "\n"), strings.Split(stripANSI(out), "\n")
+		var closing []string
+		for i, l := range plain {
+			if isFooter(strings.TrimRight(l, " ")) {
+				closing = append(closing, lines[i])
+			}
+		}
+		if len(closing) != len(boxes) {
+			t.Fatalf("channel %q: %d closing rows, want %d:\n%s", picked, len(closing), len(boxes), strings.Join(plain, "\n"))
+		}
+		for i, box := range boxes {
+			want := HintStyle
+			if box == picked {
+				want = AccentStyle
+			}
+			if !strings.Contains(closing[i], want.Render(rule)) {
+				t.Errorf("channel %q: box %d's closing row is not drawn in %v", picked, i, want.GetForeground())
+			}
+			if wall := lines[rowContaining(plain, members[i])]; !strings.Contains(wall, want.Render("│ ")) {
+				t.Errorf("channel %q: %s's left wall is not drawn in %v", picked, members[i], want.GetForeground())
+			}
+		}
+	}
+}
+
+// A row's figures need the room the box leaves: a workflow's done/started count and
+// a subagent's token figure are dropped whole at 19 columns where they fitted 23,
+// and kept where the pair still fits. Drawn through the column, at its real width.
+func TestARowKeepsAFigureOnlyWhereItFitsInsideTheWalls(t *testing.T) {
 	for _, tc := range []struct {
-		channel string
-		backend lipgloss.Style
-		loose   lipgloss.Style
+		name   string
+		task   Task
+		figure string
+		kept   bool
 	}{
-		{"backend", AccentStyle, HintStyle},
-		{"", HintStyle, AccentStyle},
+		{"a short workflow", workflowTask("toolu_1", "tally", 2, 3), "2/3", true},
+		{"a long workflow", workflowTask("toolu_1", "dependency-audit", 2, 3), "2/", false},
+		{"a short subagent type", running("toolu_1", "reviewer", 1100), "1.1k", true},
+		{"a long subagent type", running("toolu_1", "code-reviewer", 1100), "1.", false},
 	} {
-		out := (Roster{}).Column(agents, noSubsOf, boxedWidth, 40, tc.channel)
-		backend := out[strings.Index(out, "john"):]
-		backend = backend[:strings.Index(backend, "╯")+len("╯\x1b[0m")]
-		if !strings.Contains(backend, tc.backend.Render(rule)) {
-			t.Errorf("channel %q: backend's closing row is not drawn in %v", tc.channel, tc.backend.GetForeground())
-		}
-		if !strings.Contains(out, tc.loose.Render(rule)) {
-			t.Errorf("channel %q: the loose box's closing row is not drawn in %v", tc.channel, tc.loose.GetForeground())
-		}
-		if !strings.Contains(out, tc.backend.Render("│ ")) {
-			t.Errorf("channel %q: backend's left wall is not drawn in %v", tc.channel, tc.backend.GetForeground())
+		agents, subs := alexWith(tc.task)
+		out := stripANSI(Roster{}.View(agents, subs, boxedWidth, 6))
+		if got := strings.Contains(out, tc.figure); got != tc.kept {
+			t.Errorf("%s: figure %q drawn %v, want %v:\n%s", tc.name, tc.figure, got, tc.kept, out)
 		}
 	}
 }

@@ -69,9 +69,9 @@ const (
 	groupsWidth = 16
 
 	// rosterWidth is 24 rather than the brief's 20: one of those columns is the
-	// rule between this sidebar and the pane beside it, and the row it draws is
-	// a glyph, a name, an unread badge and - indented under them - what the
-	// agent is doing, which is the column that ran out of room first.
+	// rule between this sidebar and the pane beside it, and four more are the walls
+	// of the box each section draws, so the row inside is a glyph, a name, an unread
+	// badge and - indented under them - what the agent is doing, in 19.
 	rosterWidth = 24
 
 	// dmTakeoverColumns is where a second column stops being worth having.
