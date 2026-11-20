@@ -36,7 +36,6 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 )
 
@@ -202,13 +201,14 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		UUID      string `json:"uuid"`
 		Sidechain bool   `json:"isSidechain"`
 		Timestamp string `json:"timestamp"`
-		// On-disk markers of lines that are not conversation, dropped: a failed
-		// turn's synthetic frame (see KindAPIError), which would restore as agent
-		// speech, and claude's injected task-ending note, as the operator's turn.
-		// isApiErrorMessage is is_api_error_message on the stream.
+		// On-disk markers of lines that are not conversation, dropped: a failed turn's
+		// synthetic frame (see KindAPIError), which would restore as agent speech, and
+		// a line claude wrote - an injected note, a turn it started - as the operator's
+		// turn. isApiErrorMessage is is_api_error_message on the stream.
 		APIError bool `json:"isApiErrorMessage"`
 		Meta     bool `json:"isMeta"` // claude injected the line; see the fail-safe below
-		Origin   struct {
+		scheduledMarks
+		Origin struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
 		Attachment json.RawMessage `json:"attachment"`
@@ -250,8 +250,8 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 			events[i].At = at
 		}
 	}
-	if f.Meta { // a line claude injected is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
-		events = slices.DeleteFunc(events, func(ev Event) bool { return ev.Kind == KindUserText && ev.Notice == "" })
+	if f.Meta || f.ownTurn() { // a line claude wrote is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
+		events = f.claudesTurn(events, f.Meta)
 	}
 	return events, nil
 }
