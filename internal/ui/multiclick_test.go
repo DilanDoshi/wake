@@ -154,31 +154,46 @@ func TestMoreClicksSelectInTheQueryBox(t *testing.T) {
 	}
 }
 
-// Chrome takes it too, bounded by the surface clicked: a roster row's first
-// click opens that conversation as it always has, and the two after it select
-// the name and then the row - the roster's row, not the frame's.
+// Chrome takes it too, bounded by the surface clicked: on the sidebar's pinned
+// all header the two clicks after the first select the word and then the
+// roster's row - the roster's row, not the frame's.
 func TestMoreClicksSelectInTheRoster(t *testing.T) {
+	frozenClock(t)
+	a := rosterApp(t)
+	line := frameRow(a, 0)
+	rest := line[strings.LastIndex(line, "│")+len("│"):]
+	word := strings.Fields(strings.ReplaceAll(rest, "─", " "))[0]
+	x := len([]rune(line[:strings.Index(line, rest)])) + len([]rune(rest[:strings.Index(rest, word)])) + 1
+
+	a, _ = click(a, x, 0)
+	a, _ = click(a, x, 0)
+	if got := selectedNow(a); got != word {
+		t.Errorf("a double-click on the roster selected %q, want the word %q", got, word)
+	}
+	a, _ = click(a, x, 0)
+	if got := selectedNow(a); !strings.Contains(got, word) || a.clicks.n != 3 {
+		t.Errorf("a triple-click on the roster selected %q (run %d), want the header row %q", got, a.clicks.n, word)
+	}
+}
+
+// An agent's row is a drag source, so a double-click on its name selects nothing
+// to copy: the first click opens its column and the rest only focus it.
+func TestMoreClicksOnAnAgentRowSelectNothing(t *testing.T) {
 	frozenClock(t)
 	a := rosterApp(t)
 	y, ok := rosterRow(a)
 	if !ok {
 		t.Fatal("no roster row on screen")
 	}
-	line := frameRow(a, y)
-	name := strings.Fields(line[strings.LastIndex(line, "│")+len("│"):])
-	x := len([]rune(line[:strings.Index(line, name[1])])) + 1
-
+	x := sidebarX(a)
 	a, _ = click(a, x, y)
-	if a.focus == "" {
-		t.Fatal("the first click on a roster row did not open its conversation")
+	a, _ = click(a, x, y)
+	a, _ = click(a, x, y)
+	if !a.sel.empty() || a.selecting {
+		t.Errorf("clicks on an agent row left a selection %+v", a.sel)
 	}
-	a, _ = click(a, x, y)
-	if got := selectedNow(a); got != name[1] {
-		t.Errorf("a double-click on the roster selected %q, want the name %q", got, name[1])
-	}
-	a, _ = click(a, x, y)
-	if got := selectedNow(a); got != strings.Join(name, " ") {
-		t.Errorf("a triple-click on the roster selected %q, want the roster row %q", got, strings.Join(name, " "))
+	if want := 2; len(a.grid.Cols) != want {
+		t.Errorf("%d columns after three clicks on one agent, want %d: only the first opens", len(a.grid.Cols), want)
 	}
 }
 

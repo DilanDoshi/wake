@@ -393,8 +393,9 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 
 	term := &guardedOutput{File: os.Stdout}
 	// The terminal's own title goes on its stack before anything of Wake's is
-	// written, for the pop below. See internal/ui/title.go.
-	_, _ = term.WriteString(ui.TitleStackPush)
+	// written, for the pop below. See internal/ui/title.go. Shift-clicks are
+	// asked for in the same write and given back with the pop: shiftescape.go.
+	_, _ = term.WriteString(ui.TitleStackPush + shiftEscapeOn)
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(term)}
 	if kill != nil {
 		// Only when there is a terminal to read. With input piped there is

@@ -87,6 +87,11 @@ var identityColors = map[string]lipgloss.AdaptiveColor{
 	"yellow": {Light: "#9a6700", Dark: "#f2cc60"},
 }
 
+// TagInk is the text of a dragged agent's tag (agentdragdraw.go), drawn on its
+// identity hue: Wake's own choice like the hues - the light theme's are dark and
+// the dark theme's bright, so each gets the opposite ink.
+var TagInk = lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#000000"}
+
 // identityStyle is the foreground style for an agent's colour, and false when it
 // has none or names a hue this build does not have. The caller draws its own
 // default on false, so an unknown colour never draws a wrong one.

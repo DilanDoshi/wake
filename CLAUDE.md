@@ -375,11 +375,35 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   than carrying on into the transcript (one `case` in `Composer.Wheel`); a draft the box shows whole, and a
   card's page scrolled or cut, keep the old wheel. The mouse reads every box through the frame's own
   lay-out (`Room`/`DM.laidOut`).
-- **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
+- **Drag selects, release copies**, on every surface but one: transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`) — the `/workflows` view included, where the press still moves its cursor. Every
   keystroke clears the highlight *and* does its job; width change clears, height doesn't; a click
-  copies nothing. Roster click targets are resolved at press.
+  copies nothing. **The exception is a sidebar agent's own row** (owner's 2026-11-19 ruling): a press on it
+  takes no selection, because that drag moves the agent (below), so an agent's name cannot be copied by
+  dragging or double-clicking it; the headers, the usage bar, the friend and blank sidebar cells still select.
+  Roster click targets are resolved at press.
+- **A sidebar agent row opens in a new column and can be dragged out** (owner's 2026-11-19 ruling,
+  `decisions.md`): a click adds a column at the grid's right end, next to the sidebar, whatever pane holds the
+  keys (`openInNewPane`, the one placement function); below the takeover width the window follows
+  the keys, so it is drawn in the group chat's place, and an agent already on screen is only focused. A team
+  header still picks the channel, and a workflow or dispatch row opens its agent here as before. A press
+  arms a drag; motion past `dragSlop` (2 cells) makes it live, and release drops it: on the bottom half of a
+  pane Grid.OpenBelow's rules allow (`CanOpenBelow`, one split per column, the room included) it opens below
+  that pane, anywhere else in a new column, and an agent already on screen is focused, never moved. Esc,
+  any other key, a resize, a button-less motion (what a terminal reports after a lost release) or letting go
+  anywhere in the sidebar's column, the strip under it included, cancels, and esc is nothing else (it must
+  not interrupt the pane holding the keys; an esc the pump hands over with the next mouse report reads as
+  alt+esc and runes, and that report is not typed). It is drawn at the pointer as a tag in the agent's hue
+  with the zone outlined where the agent will be drawn, laid over the frame like a screen selection: the outline
+  is built when the zone changes (the drop recomputes it, so a layout that changes mid-drag only leaves the
+  drawing stale), nothing re-lays out until the drop, and a frame with no live drag is untouched. A **Shift-click**
+  opens below the focused pane as `⌃B` does; Wake asks the terminal to deliver one with XTSHIFTESCAPE
+  (`CSI > 1 s`, in the title stack's push) and gives it back (`CSI > 0 s`) on the ordinary exit, the
+  emergency exit and around a hand-over - not after a SIGKILL or a panic Bubble Tea does not recover, as with
+  the mouse modes and the title stack - which costs a Shift-drag native selection in the terminals that hold
+  Shift back. Ten clicks make ten columns: nothing caps them and the window slides. `internal/ui/agentdrag.go`,
+  `agentdragdraw.go`, `cmd/wake/shiftescape.go`.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
   transcript row is the top edge (a pane can start on the window's first row) unless the drag has
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
@@ -654,7 +678,7 @@ yet says so in bold.**
 | What | Where |
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · `fleets.go` (`--fleet`, `wake fleets`) · `fleetend.go` (what a stop's removal came to) · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
-| Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
+| Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` · `shiftescape.go` (Shift-clicks asked for, and given back on every way out) |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
@@ -665,7 +689,7 @@ yet says so in bold.**
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` · `window.go` (the window's margins around the frame) |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty test `cmd/wake/draftwheelscreen_unix_test.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `agentdrag.go` (a sidebar agent's click, drag, drop zones and Shift-click) · `agentdragdraw.go` (the tag and the outline) · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty tests `cmd/wake/draftwheelscreen_unix_test.go`, `sidebardragscreen_unix_test.go`, `shiftescapescreen_unix_test.go` |
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |

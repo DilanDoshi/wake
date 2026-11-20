@@ -6313,3 +6313,61 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
   than 2.1.319 killed that work and may have sent no ending, leaving its row until the agent ends.
 - Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
   `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).
+
+## 2026-11-19 — a sidebar click opens a new column, and an agent can be dragged out to place it (the owner, via wake-orch)
+
+The owner runs 40-50 agents and `⇧↑↓` through the sidebar takes too long: "a click and a drag should get any agent
+onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `sidebarclick_test.go`,
+`agentdragdraw_test.go` and `cmd/wake/sidebardragscreen_unix_test.go`:
+
+- **A click on an agent row opens a new column at the grid's right end**, next to the sidebar, whichever pane
+  holds the keys - not "here" (the focused pane) as before. `openInNewPane` is the one placement
+  (`Grid.OpenRight` after the last column), so the click and a drop that is not below a pane share it. No fallback was added for a window with no room: `Layout.Regions` already draws one
+  column below the takeover width and the window follows the keys, so the new column is drawn in the group
+  chat's place, as a `⌃Y` from the room is. With four or more columns at width the window slides and the room
+  goes off screen, kept in the grid. **Nothing caps the columns**: ten clicks make ten (`TestTenClicksLeaveTenColumnsAndNothingCapsThem`);
+  the owner is to decide whether they want a cap, and none was built. An agent already on screen is focused,
+  never opened twice. A team header still picks its channel; a workflow or dispatch row opens its agent here.
+- **A press on an agent row arms a drag; it selects nothing.** Motion of two cells (`dragSlop`) makes it live;
+  letting go before that is a click. The target is the press-time agent (the roster re-ranks on every report), and
+  an agent the fleet no longer holds opens nothing. **The cost is the sidebar's drag-to-copy on an agent's row:**
+  an agent's name can no longer be copied by dragging or double-clicking it. Headers, the usage bar, the friend
+  and blank sidebar cells keep it (a wider cut was offered and not taken).
+- **Drop zones** (`dropZoneFor`, a pure function of the layout): over the sidebar's rows, nothing (letting go
+  cancels); an agent already on screen, its pane focused - a drag never moves one; the bottom half of a pane
+  `Grid.CanOpenBelow` allows and a column tall enough to split (`SplitRowsIn`), below that pane - in a split
+  column that takes the lower slot, `Grid.OpenBelow`'s own rule, and the displaced conversation keeps its
+  transcript off screen; anywhere else, a new column. The bottom half of a lower pane is a new column, since
+  nothing sits under the bottom of a column.
+- **Esc, any other key, a resize, a button-less motion and a drop on the sidebar's column cancel.** The column
+  counts at every row, the awareness strip under it included. A button-less motion is what a terminal reports
+  after a release that never arrived; one that reports none leaves the tag and outline drawn until the next key
+  or press. Esc is consumed: it must not also interrupt the agent in the pane holding the keys. Any other key
+  ends the drag and does its own job, as a keystroke clears a highlight. **An esc pressed while reports are
+  arriving can reach Bubble Tea in one read with the next report** (`\x1b\x1b[<32;61;6M`), which decodes as
+  alt+esc and the runes `[<32;61;6M`; the kill switch's pipe cannot split them (Bubble Tea's reader waits on
+  the descriptor, so a held remainder would never be read), so after an alt+esc that ended a drag one
+  report-shaped key is dropped (`strayReport`).
+- **It is drawn as a tag and an outline laid over the assembled frame**, the screen selection's mechanism
+  (`overlayAgentDrag`): the agent's name in its hue at the pointer, and the zone's box where the agent will be -
+  a new column's own share once it holds the keys (the whole pane area in a window too narrow to sit beside
+  another), a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
+  changes (a layout that changes mid-drag - a spawn, a `/quit` closing a pane - leaves the drawing stale until
+  the zone does; the drop recomputes it), and the box is where the pane lands to the cell, held by
+  `TestAnOutlineIsExactlyWhereTheAgentLands` at five widths with up to five columns open. Only the splice is
+  per motion, exact over wide characters (about 185 µs against the 245-280 µs a two-pane `View` already costs,
+  `BenchmarkLiveDragOverlay`), and a frame with no live drag is returned as it came. Nothing re-lays out until
+  the drop, as with a divider drag.
+- **A Shift-click opens below the focused pane, as `⌃B` does** (its refusal too, `noRowBelow`, with the cursor
+  left where it was). Bubble Tea 1.3.10's `MouseMsg` carries Shift, but Ghostty and cmux (and Kitty) hold a
+  Shift-click back for their own selection unless the program sends XTSHIFTESCAPE, `CSI > 1 s`. Wake sends it
+  in the write that pushes the title stack and sends `CSI > 0 s` with the pop (`handBack`), in the emergency
+  exit (`restoreTerminal`) and around a hand-over, since the setting outlives the program. A SIGKILL, or a panic
+  in a goroutine of Wake's own that Bubble Tea does not recover, leaves it set, as it leaves the mouse modes and
+  the title stack. **The terminal
+  cannot be asked for its setting first, so "given back" is the terminal's default** - a terminal configured to
+  capture Shift always is left releasing it until it is told otherwise. **The trade:** while Wake is open, a
+  Shift-drag in those terminals no longer starts the terminal's own selection (`live-testing.md` §4 named it the
+  escape hatch); Wake selects and copies everywhere itself. A Shift held through a drag changes nothing, and
+  Shift on an agent already on screen only focuses it. Which terminals deliver a Shift-click (cmux, Ghostty,
+  Terminal.app, iTerm2, tmux) is a hand check, `live-testing.md` §4.

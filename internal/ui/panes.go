@@ -258,6 +258,17 @@ func (a App) openDMWith(sessionID, name string) App {
 	})
 }
 
+// openInNewPane puts a conversation in a new column at the grid's right end,
+// next to the sidebar, whatever pane holds the keys. A click on a sidebar agent
+// lands here, and a drop that is not below a pane. Below the takeover width the
+// window follows the keys, so the new column is drawn in the group chat's place
+// (Layout.Regions); an agent already on screen is only focused (Grid.OpenRight).
+func (a App) openInNewPane(sessionID, name string) App {
+	return a.show(sessionID, name, func(g Grid) Grid {
+		return g.OpenRight(g.Cols[len(g.Cols)-1].Top, sessionID) // right of the last column
+	})
+}
+
 // openRight and openBelow are ⌃Y and ⌃B: the same open, placed beside the
 // focused pane instead of into it.
 //
