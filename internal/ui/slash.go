@@ -302,6 +302,11 @@ const wakeNameVerb = SlashPrefix + wakeNameCommand // for resumeVerb's reason
 const wakeHelpCommand = "wake-help"
 const wakeHelpVerb = SlashPrefix + wakeHelpCommand // for resumeVerb's reason
 
+// jumpCommand finds an agent by a few letters of its name and opens it (jumppicker.go).
+// Wake's own word: no recorded slash_commands carries it.
+const jumpCommand = "jump"
+const jumpVerb = SlashPrefix + jumpCommand // for resumeVerb's reason
+
 // quitCommand ends one agent and removes it from this window - `/manager-stop`
 // for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
 // back, and unlike ⌃C park it is not recoverable.
@@ -354,6 +359,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	friendsCommand:         App.friends,
 	wakeNameCommand:        App.renameFleet,
 	wakeHelpCommand:        App.openHelp,
+	jumpCommand:            App.jump,
 }
 
 // clearCommand is the room's own /clear (roomclear.go). The word is claude's, so

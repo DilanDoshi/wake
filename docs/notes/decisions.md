@@ -8,6 +8,30 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-20 — ⌃K and `/jump`: find an agent by a few letters of its name
+
+The owner runs 40-50 agents, and walking the sidebar with ⇧↑↓ is too slow. `wake-orch` briefed mockups of four
+shapes (the throwaway take is outside the repo); the owner picked **A, the compact box over the composer**, with
+a rule between the filter line and the results, and the sidebar search bar (D1) as a second PR.
+
+- **The key is ⌃K.** ⌘F reaches no macOS terminal (`keyprobe_test.go`: ⌘ belongs to the terminal's menus, and
+  bubbletea v1.3.10 has no Kitty keyboard protocol), ⌃F is fork, ⌃P is the text area's line-up and the completion
+  menu's walk key, and ⌃G/⌃L/⌃S are Claude Code's editor, redraw and stash. ⌃K is Slack's, Discord's and Linear's
+  "jump to" in the one form a terminal sends. **It costs the composer's delete-to-end-of-line**, which Claude
+  Code's shortcut page lists too; Wake already shadows ⌃A ⌃B ⌃D ⌃E ⌃F ⌃W ⌃Y, and ⌃U (to the start of the line)
+  stays. `keymap_test.go` cannot flag it: `claude-keymap.json` holds action bindings, not text editing, and
+  inventing an action id in a hand-kept fixture would be a second source of truth.
+- **The list is fleet-wide attention order, not the sidebar's.** The sidebar is the loose agents, then each
+  team's section, ranked inside each - a blocked agent in a team is first only in its own box. The picker takes
+  `Fleet.OnRoster()`, blocked first, then the better match, then that order.
+- **`↵` is a click.** It calls `openInNewPane` (an agent already on screen is only focused) and ends in the
+  helper the click's drop ends in (`selectOpened`), so the two cannot drift. `⌃B` and `⌃D` are the open keys'
+  placements; a refused `⌃B` keeps the box and the typed filter.
+- **Matching is on the name as drawn**, case and spaces ignored: its start, a run inside it, its letters in order.
+  Not team names, not directories (deferred).
+- **Not everywhere.** A `/workflows` or `/wake-help` view takes every key in its pane, so ⌃K is not read there
+  until it is closed; the board closes on the key and goes on to open the box.
+
 ## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
 
 The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again

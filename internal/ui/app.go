@@ -175,6 +175,7 @@ type App struct {
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 	help         helpState     // /wake-help's view and the shell usage it lists; see help.go
+	jumpPicker   JumpPicker    // ⌃K and /jump: a few letters of a name, ↵ opens the agent; see jumppicker.go
 
 	// rewindAfterRestore is the session whose both just restored its files, until
 	// its conversation rewind answers. See rewindmenu.go's restoreReported.

@@ -111,6 +111,10 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.resumePickerKey(m); handled {
 		return next, cmd, true
 	}
+	// The jump picker is a search box for the same reason, and hands ⌃C back the same way.
+	if next, cmd, handled := a.jumpKey(m); handled {
+		return next, cmd, true
+	}
 	// The /mcp menu is modal for the same reason, and hands ⌃C back the same way.
 	if next, cmd, handled := a.mcpMenuKey(m); handled {
 		return next, cmd, true
@@ -323,6 +327,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.cycleMode()
 	case tea.KeyCtrlX:
 		return a.nextBlocked(), nil, true
+	// ⌃K is Claude Code's delete-to-end-of-line too; here it jumps (decisions.md, 2026-11-20).
+	case tea.KeyCtrlK:
+		return a.openJump(""), nil, true
 	case tea.KeyCtrlT:
 		return a.flipMention()
 	case tea.KeyCtrlA:

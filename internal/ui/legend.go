@@ -53,6 +53,7 @@ var legendEntries = []legendEntry{
 	{"⇥", "next chat", "move the keys to the next open pane; over a slash or @ word it completes the word instead"},
 	{"⇧⇥", "permissions", "cycle the picked agent's permission mode, in Claude Code's own order"},
 	{"⌃X", "next blocked", "jump to the next agent waiting on an answer from you"},
+	{"⌃K", "jump to agent", "open the jump picker: type a few letters of an agent's name, ↵ opens it in a new pane, ⌃B below, ⌃D here"},
 	{"↑↓", "prompt history", "recall earlier prompts; in a multi-line draft they move the cursor; ↑ takes queued messages back"},
 	// Beside the bare arrows rather than with the other pane keys: ⇧↑↓ is the
 	// same two keys under a modifier, and a legend that separated them would make

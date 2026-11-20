@@ -35,7 +35,7 @@ var legendKeyNames = map[string][]legendKey{
 	"esc": {{name: "KeyEsc", msg: tea.KeyMsg{Type: tea.KeyEsc}}},
 	"⇥":   {{name: "KeyTab", msg: tea.KeyMsg{Type: tea.KeyTab}}},
 	"⇧⇥":  {{name: "KeyShiftTab", msg: tea.KeyMsg{Type: tea.KeyShiftTab}}},
-	"↑↓": {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
+	"↑↓":  {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
 	"⇧↑↓": {
 		{name: "KeyShiftUp", msg: tea.KeyMsg{Type: tea.KeyShiftUp}},
 		{name: "KeyShiftDown", msg: tea.KeyMsg{Type: tea.KeyShiftDown}},
@@ -56,6 +56,7 @@ var legendKeyNames = map[string][]legendKey{
 	"⌃Q":   {{name: "KeyCtrlQ", msg: tea.KeyMsg{Type: tea.KeyCtrlQ}}},
 	"⌃T":   {{name: "KeyCtrlT", msg: tea.KeyMsg{Type: tea.KeyCtrlT}}},
 	"⌃X":   {{name: "KeyCtrlX", msg: tea.KeyMsg{Type: tea.KeyCtrlX}}},
+	"⌃K":   {{name: "KeyCtrlK", msg: tea.KeyMsg{Type: tea.KeyCtrlK}}},
 	"⌃A":   {{name: "KeyCtrlA", msg: tea.KeyMsg{Type: tea.KeyCtrlA}}},
 	"⌃N⌃P": {{name: "KeyCtrlN", msg: tea.KeyMsg{Type: tea.KeyCtrlN}}, {name: "KeyCtrlP", msg: tea.KeyMsg{Type: tea.KeyCtrlP}}},
 	"⌃E":   {{name: "KeyCtrlE", msg: tea.KeyMsg{Type: tea.KeyCtrlE}}},

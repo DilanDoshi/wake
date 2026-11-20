@@ -38,7 +38,15 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
-## FOLLOW-UP, 2026-11-18 — the conversation draws one "↻ resumed" line per resume, and an agent can have many
+## FOLLOW-UP, 2026-11-20 — the jump picker finds live agents by name only
+
+`⌃K` lists the agents on the roster and matches their names. It does not offer a **parked** agent (waking one is
+`/resume`'s, and a jump that woke a process would be a different verb), and it does not match a **team** or a
+**directory** - typing `payments` finds nobody unless a name says so. It is also not read in a `/workflows` or
+`/wake-help` view, which take every key in their pane until closed. *Closes with:* the owner asking for
+the first two, and a `⌃K` read above those views if the third bites.
+
+## FOLLOW-UP, 2026-11-18 — the room draws one "↻ resumed" line per resume, and an agent can have many
 
 The **room** folds them now (`roomresumefold.go`, `decisions.md` 2026-11-18): a resume of an agent whose run is open
 replaces the head line with `↻ <name> resumed after the usage limit ×N`. **Not built: the same in a conversation.** It
