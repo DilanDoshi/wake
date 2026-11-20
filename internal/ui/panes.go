@@ -260,10 +260,18 @@ func (a App) openDMWith(sessionID, name string) App {
 
 // openInNewPane puts a conversation in a new column at the grid's right end,
 // next to the sidebar, whatever pane holds the keys. A click on a sidebar agent
-// lands here, and a drop that is not below a pane. Below the takeover width the
-// window follows the keys, so the new column is drawn in the group chat's place
-// (Layout.Regions); an agent already on screen is only focused (Grid.OpenRight).
+// lands here, and a drop that is not below a pane. An agent already on screen is
+// only focused (Grid.OpenRight).
+//
+// Where the window carries one column (Layout.Capacity) a new column would only
+// slide the others off screen, so it opens as a conversation does everywhere
+// else: in the focused pane, or beside the room when the room holds the keys
+// (openDMWith). Asked at the click, from the layout as it is, so a resize is read
+// the next time and nothing is cached per frame.
 func (a App) openInNewPane(sessionID, name string) App {
+	if a.layout.Capacity() == 1 {
+		return a.openDMWith(sessionID, name)
+	}
 	return a.show(sessionID, name, func(g Grid) Grid {
 		return g.OpenRight(g.Cols[len(g.Cols)-1].Top, sessionID) // right of the last column
 	})

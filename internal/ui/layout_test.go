@@ -372,6 +372,40 @@ func TestTheBreakpointsAreTheWindowsWidth(t *testing.T) {
 	}
 }
 
+// Capacity is how many columns Regions draws, at every width, with every sidebar
+// choice and any number of columns: it is the one number a sidebar click reads to
+// know whether a new column would sit beside the others, so it cannot be a second
+// account of the layout that drifts from this one.
+func TestCapacityIsHowManyColumnsRegionsDraws(t *testing.T) {
+	for window := 40; window <= 320; window++ {
+		for _, sidebars := range []struct{ roster, groups bool }{{false, false}, {true, false}, {true, true}} {
+			l := Layout{Width: window - 2*SideMargin, Height: 40, ShowRoster: sidebars.roster, ShowGroups: sidebars.groups}
+			if l.Capacity() < 1 {
+				t.Fatalf("a %d-column window has capacity %d, want at least the one pane", window, l.Capacity())
+			}
+			for cols := 1; cols <= 12; cols++ {
+				if got, want := l.Regions(cols, cols-1).Drawn(), min(cols, l.Capacity()); got != want {
+					t.Errorf("a %d-column window (roster %v, groups %v) with %d columns drew %d, want min(%d, capacity %d)",
+						window, sidebars.roster, sidebars.groups, cols, got, cols, l.Capacity())
+				}
+			}
+		}
+	}
+}
+
+// One column is what the takeover width means: below it a window carries a single
+// pane, and at it a second fits beside the first.
+func TestCapacityIsOneBelowTheTakeoverWidth(t *testing.T) {
+	for _, tc := range []struct{ window, want int }{
+		{sidebarsHideColumns - 1, 1}, {dmTakeoverColumns - 1, 1}, {dmTakeoverColumns, 3},
+	} {
+		l := Layout{Width: tc.window - 2*SideMargin, Height: 40, ShowRoster: true}
+		if got := l.Capacity(); got != tc.want {
+			t.Errorf("a %d-column window has capacity %d, want %d", tc.window, got, tc.want)
+		}
+	}
+}
+
 // A dragged divider lands on the column the hand is on, among any number of
 // columns: the split is solved against the running total share rounds on, not
 // the pair's own width, which put a middle divider of four a cell off it.

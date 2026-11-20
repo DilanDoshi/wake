@@ -434,3 +434,48 @@ func TestTheSidebarCancelsAtEveryRow(t *testing.T) {
 		}
 	}
 }
+
+// narrowFleet is a window that carries one column, with s1 open beside the room
+// and holding the keys.
+func narrowFleet(t *testing.T) App {
+	t.Helper()
+	return fleetApp(t, 110, 30, 4).openDMWith("s1", "agent01").withSize(110, 30)
+}
+
+// In a single-column layout a drop that is not below a pane replaces the pane on
+// screen, as the click does: no column is added.
+func TestANewColumnDropInASingleColumnLayoutReplacesTheShownPane(t *testing.T) {
+	a := narrowFleet(t)
+	r := a.regions()
+	x := midOf(r, a.columnOf("s1"))
+	a = pullAgent(t, a, "s3", x, topHalf())
+	if got := a.dragged.zone; got != (dropZone{kind: zoneColumn}) {
+		t.Fatalf("zone %+v over the shown pane's top half, want a new column", got)
+	}
+	a = letGoAt(a, x, topHalf())
+	if want := []string{"", "s3"}; !slices.Equal(tops(a), want) || a.focus != "s3" {
+		t.Errorf("columns %q focus %q, want s3 in s1's place", tops(a), a.focus)
+	}
+}
+
+// A drop below stays what it was where the grid allows it: the drawn column
+// splits, so one column holds two panes and still nothing is added off screen.
+func TestABelowDropInASingleColumnLayoutStillSplitsTheShownColumn(t *testing.T) {
+	a := narrowFleet(t)
+	x := midOf(a.regions(), a.columnOf("s1"))
+	a = pullAgent(t, a, "s3", x, bottomHalf(a))
+	a = letGoAt(a, x, bottomHalf(a))
+	if c := a.grid.Cols[1]; c.Top != "s1" || c.Bottom != "s3" || len(a.grid.Cols) != 2 {
+		t.Errorf("columns %+v, want s3 under s1 and no new column", a.grid.Cols)
+	}
+}
+
+// The outline over the shown pane is the whole pane area: where the agent lands.
+func TestTheNewColumnOutlineInASingleColumnLayoutIsTheShownPane(t *testing.T) {
+	a := narrowFleet(t)
+	x, y, w, h, ok := a.zoneRect(dropZone{kind: zoneColumn})
+	px, py, pw, ph, pok := paneRectOf(a, "s1")
+	if !ok || !pok || x != px || y != py || w != pw || h != ph {
+		t.Errorf("outline (%d,%d %dx%d ok=%v), shown pane (%d,%d %dx%d ok=%v)", x, y, w, h, ok, px, py, pw, ph, pok)
+	}
+}

@@ -260,7 +260,8 @@ cell crossed, at whatever rate your hardware produces, which is the thing that c
       terminal's own selection while Wake is open; `⌥` drag still does where it did.
 - [ ] **Click an agent in the sidebar.** It opens in a new column next to the sidebar and the
       pane that had the keys is untouched. Click an agent already open: its pane takes the keys,
-      no column is added. At under 120 columns the new pane is drawn alone, in the group chat's place.
+      no column is added. At under 120 columns the window carries one pane, so the click **replaces** the pane on screen (a second click
+      replaces that, the room's group chat is only a `⇥` away) and no columns pile up behind it.
 - [ ] **Drag an agent out of the sidebar.** A small tag in its colour follows the pointer with no lag;
       the pane under it outlines its bottom half (open below) or the column strip beside the sidebar
       (new column); the outline changes only when the zone does; nothing re-wraps until you let go.

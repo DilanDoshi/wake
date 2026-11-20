@@ -93,17 +93,70 @@ func TestAClickOnAnAgentAlreadyOpenFocusesItsPane(t *testing.T) {
 	}
 }
 
-// Below the takeover width exactly one column is drawn and the window follows
-// the keys, so the new column is drawn in the group chat's place - the same
-// frame a ⌃Y from the room gives. No second fallback is added.
-func TestAClickInANarrowWindowTakesTheGroupChatsPlace(t *testing.T) {
-	a := clickAgent(t, fleetApp(t, 110, 30, 2), "s1")
-	byKey := fleetApp(t, 110, 30, 2).openRight("s1", "agent01")
-	if got, want := a.regions().Cols, byKey.regions().Cols; !slices.Equal(got, want) {
-		t.Fatalf("regions %v after a click, %v after ⌃Y", got, want)
+// Where the window carries one column, a click replaces the pane on screen as
+// opening a conversation always has: from the room it takes the column beside it,
+// since the room is never replaced, and the group chat is drawn no more.
+func TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne(t *testing.T) {
+	a := clickAgent(t, fleetApp(t, 110, 30, 3), "s1")
+	if want := []string{"", "s1"}; !slices.Equal(tops(a), want) || a.focus != "s1" {
+		t.Fatalf("columns %q focus %q, want s1 in the column beside the room", tops(a), a.focus)
 	}
-	if a.regions().Cols[0] != 0 || a.regions().Cols[1] == 0 {
-		t.Errorf("regions %v: want the agent drawn alone and the room off screen", a.regions().Cols)
+	if got := a.regions().Cols; got[0] != 0 || got[1] == 0 {
+		t.Errorf("regions %v: want the agent drawn alone and the room off screen", got)
+	}
+	byKey := fleetApp(t, 110, 30, 3).openDMWith("s1", "agent01")
+	if !slices.Equal(a.regions().Cols, byKey.regions().Cols) || !slices.Equal(tops(a), tops(byKey)) {
+		t.Errorf("a click gave %v %q, opening a conversation gives %v %q", a.regions().Cols, tops(a), byKey.regions().Cols, tops(byKey))
+	}
+}
+
+// A click from a conversation replaces it - one agent on screen, the next in its
+// place - and what was replaced keeps its transcript.
+func TestAClickFromAConversationInASingleColumnLayoutReplacesIt(t *testing.T) {
+	a := clickAgent(t, fleetApp(t, 110, 30, 3), "s1")
+	a = clickAgent(t, a, "s2")
+	if want := []string{"", "s2"}; !slices.Equal(tops(a), want) || a.focus != "s2" {
+		t.Fatalf("columns %q focus %q after a second click, want s2 in s1's place", tops(a), a.focus)
+	}
+	if _, kept := a.dms["s1"]; !kept {
+		t.Error("the replaced conversation lost its transcript")
+	}
+}
+
+// A click from the room, with a conversation already in column 1, takes that
+// column rather than adding one.
+func TestAClickFromTheRoomWithAConversationOpenTakesItsColumn(t *testing.T) {
+	a := clickAgent(t, fleetApp(t, 110, 30, 3), "s1")
+	a = clickAgent(t, a.showRoom(), "s2")
+	if want := []string{"", "s2"}; !slices.Equal(tops(a), want) {
+		t.Errorf("columns %q, want s2 in column 1", tops(a))
+	}
+}
+
+// Nothing piles up off screen: ten clicks leave one conversation column beside the
+// room, not ten.
+func TestTenClicksInASingleColumnLayoutLeaveOneConversationColumn(t *testing.T) {
+	a := fleetApp(t, 110, 30, 12)
+	for i := 1; i <= 10; i++ {
+		a = clickAgent(t, a, fmt.Sprintf("s%d", i))
+	}
+	if want := []string{"", "s10"}; !slices.Equal(tops(a), want) || a.grid.Cols[1].Bottom != "" {
+		t.Fatalf("columns %+v after ten clicks, want the room and s10 alone", a.grid.Cols)
+	}
+}
+
+// The line is the layout's own: a window one column short of the takeover width
+// replaces, one at it adds a column. Width is the frame's, the window less its margins.
+func TestTheSingleColumnLineIsTheLayoutsCapacity(t *testing.T) {
+	for _, tc := range []struct {
+		window  int
+		columns int
+	}{{dmTakeoverColumns - 1, 2}, {dmTakeoverColumns, 3}} {
+		a := fleetApp(t, tc.window-2*SideMargin, 30, 4)
+		a = clickAgent(t, clickAgent(t, a, "s1"), "s2")
+		if len(a.grid.Cols) != tc.columns {
+			t.Errorf("a %d-column window holds %d columns after two clicks, want %d", tc.window, len(a.grid.Cols), tc.columns)
+		}
 	}
 }
 

@@ -385,8 +385,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Roster click targets are resolved at press.
 - **A sidebar agent row opens in a new column and can be dragged out** (owner's 2026-11-19 ruling,
   `decisions.md`): a click adds a column at the grid's right end, next to the sidebar, whatever pane holds the
-  keys (`openInNewPane`, the one placement function); below the takeover width the window follows
-  the keys, so it is drawn in the group chat's place, and an agent already on screen is only focused. A team
+  keys (`openInNewPane`, the one placement function) - **unless the window carries one column**
+  (`Layout.Capacity`, the count `Regions` itself draws, asked at the click so a resize is read next time): then
+  it replaces the pane on screen as opening a conversation does (`openDMWith`; from the room, the column beside
+  it) and nothing piles up off screen (owner's 2026-11-20 revision). An agent already on screen is only focused. A team
   header still picks the channel, and a workflow or dispatch row opens its agent here as before. A press
   arms a drag; motion past `dragSlop` (2 cells) makes it live, and release drops it: on the bottom half of a
   pane Grid.OpenBelow's rules allow (`CanOpenBelow`, one split per column, the room included) it opens below
@@ -402,7 +404,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`CSI > 1 s`, in the title stack's push) and gives it back (`CSI > 0 s`) on the ordinary exit, the
   emergency exit and around a hand-over - not after a SIGKILL or a panic Bubble Tea does not recover, as with
   the mouse modes and the title stack - which costs a Shift-drag native selection in the terminals that hold
-  Shift back. Ten clicks make ten columns: nothing caps them and the window slides. `internal/ui/agentdrag.go`,
+  Shift back. Ten clicks make ten columns in a window that carries more than one: nothing caps them and the window slides. `internal/ui/agentdrag.go`,
   `agentdragdraw.go`, `cmd/wake/shiftescape.go`.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
   transcript row is the top edge (a pane can start on the window's first row) unless the drag has

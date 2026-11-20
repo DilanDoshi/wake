@@ -143,7 +143,7 @@ func paneRectOf(a App, id string) (x, y, w, h int, ok bool) {
 // columns already open (so the window has slid), for each kind of drop. It is
 // compared with the real result, not with the formula that computed it.
 func TestAnOutlineIsExactlyWhereTheAgentLands(t *testing.T) {
-	for _, width := range []int{99, 110, 125, 150, 200} {
+	for _, width := range []int{99, 110, dmTakeoverColumns - 2*SideMargin - 1, dmTakeoverColumns - 2*SideMargin, 125, 150, 200} {
 		for open := range 6 {
 			base := fleetApp(t, width, 40, 12)
 			for i := 1; i <= open; i++ {

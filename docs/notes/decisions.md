@@ -6322,11 +6322,11 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
 
 - **A click on an agent row opens a new column at the grid's right end**, next to the sidebar, whichever pane
   holds the keys - not "here" (the focused pane) as before. `openInNewPane` is the one placement
-  (`Grid.OpenRight` after the last column), so the click and a drop that is not below a pane share it. No fallback was added for a window with no room: `Layout.Regions` already draws one
-  column below the takeover width and the window follows the keys, so the new column is drawn in the group
-  chat's place, as a `⌃Y` from the room is. With four or more columns at width the window slides and the room
-  goes off screen, kept in the grid. **Nothing caps the columns**: ten clicks make ten (`TestTenClicksLeaveTenColumnsAndNothingCapsThem`);
-  the owner is to decide whether they want a cap, and none was built. An agent already on screen is focused,
+  (`Grid.OpenRight` after the last column), so the click and a drop that is not below a pane share it. *(A window
+  that carries one column does not add one: see 2026-11-20 below.)* With four or more columns at width the window
+  slides and the room goes off screen, kept in the grid. **Nothing caps the columns in a window that carries more
+  than one**: ten clicks make ten (`TestTenClicksLeaveTenColumnsAndNothingCapsThem`); the owner is to decide
+  whether they want a cap, and none was built. An agent already on screen is focused,
   never opened twice. A team header still picks its channel; a workflow or dispatch row opens its agent here.
 - **A press on an agent row arms a drag; it selects nothing.** Motion of two cells (`dragSlop`) makes it live;
   letting go before that is a click. The target is the press-time agent (the roster re-ranks on every report), and
@@ -6371,3 +6371,28 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
   escape hatch); Wake selects and copies everywhere itself. A Shift held through a drag changes nothing, and
   Shift on an agent already on screen only focuses it. Which terminals deliver a Shift-click (cmux, Ghostty,
   Terminal.app, iTerm2, tmux) is a hand check, `live-testing.md` §4.
+
+## 2026-11-20 — in a window that carries one column a sidebar click replaces the pane on screen (the owner, via wake-orch)
+
+Revising 2026-11-19, the owner's words: "if the pane is small to only fit one window, when the user clicks on an
+agent in the right sidebar, it replaces the window currently open on the screen, like it does when there's only
+space for one chat rn." A new column in a one-column window was drawn alone and slid the others off screen, so
+every click piled another column up behind it.
+
+- **`openInNewPane` asks the layout.** `Layout.Capacity()` is how many columns the window can draw, and it is
+  `Regions`' own count, not a copy of it: `Regions` draws `min(Capacity, columns)`, so the line cannot drift from
+  what is drawn (`TestCapacityIsHowManyColumnsRegionsDraws`, at every width 40-320 with every sidebar choice and
+  one to twelve columns). It is one below the takeover width, and at it (roster shown) three. With a capacity of
+  one the click is `openDMWith`'s: it replaces the focused pane, and from the room it takes the column beside
+  it, since the room is never replaced - the group chat is drawn no more, and `⇥` brings it back. Otherwise a new
+  rightmost column, as before; the wide-window slide stays, with no cap. It is read at the click from the layout as
+  it then is, so a resize is picked up the next time and nothing is cached or computed per frame.
+- **A drag's new-column drop in a one-column window replaces the shown pane**, the same function. Its outline is
+  the whole pane area, which is where the agent lands either way. **A drop below is unchanged** and the grid
+  allows it there: the drawn column splits and holds two panes, so a below drop adds no column and leaves nothing
+  off screen (`TestABelowDropInASingleColumnLayoutStillSplitsTheShownColumn`).
+- Held by `TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne`, `...FromAConversation...ReplacesIt`,
+  `...FromTheRoomWithAConversationOpenTakesItsColumn`, `TestTenClicksInASingleColumnLayoutLeaveOneConversationColumn`
+  and `TestTheSingleColumnLineIsTheLayoutsCapacity` (a window one column short of the takeover width replaces, one at
+  it adds). `fits`' floor of one is the invariant "a window carries a pane"; the constants keep it out of reach, so
+  a mutation of it is equivalent and `TestCapacityIsHowManyColumnsRegionsDraws` pins the invariant instead.
