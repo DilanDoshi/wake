@@ -20,6 +20,7 @@ import (
 var injectedFixtures = map[string]string{
 	"subagent-handback.jsonl": "33333333-3333-4333-8333-333333333333",
 	"injected-meta.jsonl":     "77777777-0000-4000-8000-000000000000",
+	"loop-wakeup-turn.jsonl":  "b21fc9dd-3e72-4e83-ab96-7bbb2ac8e4d6",
 }
 
 const typedTurn = "the only turn the operator typed"
@@ -35,7 +36,8 @@ func injectedTranscript(t *testing.T, fixture, root string) []string {
 }
 
 // A reopened conversation shows the operator's own turns and nothing claude
-// injected as one - a subagent's hand-back, a skill's body, an idle notice.
+// injected as one - a subagent's hand-back, a skill's body, an idle notice, the
+// turn it started itself for a loop's wakeup.
 func TestARestoredConversationHasNoInjectedTurn(t *testing.T) {
 	for fixture, root := range injectedFixtures {
 		t.Run(fixture, func(t *testing.T) {

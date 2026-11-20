@@ -29,6 +29,25 @@ var ruledPromptSources = map[string]string{
 	"system": "claude's own injection",
 }
 
+// ruledTurnOrigins is every turnOrigin a user line has been seen to carry on disk.
+// Only "scheduled" makes a line claude's own by itself (injected()); the rest are ruled
+// here so a new value is read before anything restores it as the operator's turn.
+var ruledTurnOrigins = map[string]string{
+	"human":             "typed by the operator in an interactive claude",
+	"sdk":               "a headless session's stdin, which is Wake's own sends",
+	"peer":              "a peer's message or a subagent's hand-back",
+	"task_notification": "a background task's ending, dropped by decodeTranscript",
+	"system":            "claude's own injection; isMeta",
+	"auto_continuation": "claude resuming after a usage-limit reset; isMeta",
+	"scheduled":         "a turn claude started itself, claude's own whoever else marks it",
+}
+
+// ruledWakeupSources is every wakeupSource seen: both mark a turn claude started.
+var ruledWakeupSources = map[string]string{
+	"loop_wakeup":     "a self-paced /loop's next iteration; restored as the started turn the live stream gives it",
+	"schedule_wakeup": "a ScheduleWakeup the model made outside a /loop; claude's own",
+}
+
 // userMarks are the marks a user line carries, read off the line itself rather
 // than off what the decoder made of it.
 type userMarks struct {
@@ -179,6 +198,12 @@ func TestEveryRecordedMarkIsRuled(t *testing.T) {
 			}
 			if _, ruled := ruledPromptSources[m.PromptSource]; m.PromptSource != "" && !ruled {
 				t.Errorf("%s:%d carries promptSource %q, which ruledPromptSources does not rule", f, i+1, m.PromptSource)
+			}
+			if _, ruled := ruledTurnOrigins[m.TurnOrigin]; m.TurnOrigin != "" && !ruled {
+				t.Errorf("%s:%d carries turnOrigin %q, which ruledTurnOrigins does not rule", f, i+1, m.TurnOrigin)
+			}
+			if _, ruled := ruledWakeupSources[m.WakeupSource]; m.WakeupSource != "" && !ruled {
+				t.Errorf("%s:%d carries wakeupSource %q, which ruledWakeupSources does not rule", f, i+1, m.WakeupSource)
 			}
 		}
 	}

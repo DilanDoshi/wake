@@ -203,11 +203,10 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		Timestamp string `json:"timestamp"`
 		// On-disk markers of lines that are not conversation, dropped: a failed turn's
 		// synthetic frame (see KindAPIError), which would restore as agent speech, and
-		// a line claude wrote - an injected note, a turn it started - as the operator's
-		// turn. isApiErrorMessage is is_api_error_message on the stream.
+		// a line claude wrote (claudeOwnMarks) as the operator's turn. isApiErrorMessage
+		// is is_api_error_message on the stream.
 		APIError bool `json:"isApiErrorMessage"`
-		Meta     bool `json:"isMeta"` // claude injected the line; see the fail-safe below
-		scheduledMarks
+		claudeOwnMarks
 		Origin struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
@@ -250,8 +249,8 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 			events[i].At = at
 		}
 	}
-	if f.Meta || f.ownTurn() { // a line claude wrote is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
-		events = f.claudesTurn(events, f.Meta)
+	if f.claimed() { // a line claude wrote is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
+		events = f.claudesTurn(events)
 	}
 	return events, nil
 }

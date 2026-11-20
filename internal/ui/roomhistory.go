@@ -289,9 +289,10 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 	scratch := map[string]Agent{}
 	lines := make([]roomLine, 0, len(kept))
 	for _, ev := range kept {
-		if ev.Shell {
-			// A bang's record, which fold drops as echoed: kept as the turn claude
-			// answers it with (collapseBroadcasts), and never drawn.
+		if ev.Shell || ev.MessageStarted() {
+			// A bang's record, which fold drops as echoed, and a turn claude started
+			// itself: kept as the turn claude answers it with (collapseBroadcasts), and
+			// never drawn.
 			lines = append(lines, roomLine{ev: ev, by: agentOf(ev.SessionID)})
 			continue
 		}
@@ -413,6 +414,12 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			// two conversations are not a broadcast.
 			_, _, aimed := roomSendOf(l.ev.MessageID)
 			open[l.ev.SessionID] = aimed
+			continue
+		}
+		if l.ev.MessageStarted() {
+			// A turn claude started itself, a fork's copy of one too: not a broadcast the
+			// room sent, so what the agent says in it is not public.
+			open[l.ev.SessionID] = false
 			continue
 		}
 		if keeper, ok := copied[i]; ok {

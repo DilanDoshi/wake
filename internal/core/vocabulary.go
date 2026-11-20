@@ -759,27 +759,27 @@ func (e Event) MessageEnded() bool {
 // loop's next iteration (loop-self-paced-end.jsonl:53).
 const wakeupLoop = "loop_wakeup"
 
-// scheduledMarks are the keys on the user record of a turn claude starts itself, a
-// loop's wakeup or a scheduled task: wakeupSource names a wakeup, turnOrigin
-// "scheduled" any such turn (loop-wakeup-turn.jsonl, 2.1.329).
-type scheduledMarks struct {
+// claudeOwnMarks say claude wrote a user record itself, never the operator's turn (loop-wakeup-turn.jsonl).
+type claudeOwnMarks struct {
+	Meta         bool   `json:"isMeta"`
 	WakeupSource string `json:"wakeupSource"`
 	TurnOrigin   string `json:"turnOrigin"`
 }
 
-func (m scheduledMarks) ownTurn() bool { return m.WakeupSource != "" || m.TurnOrigin == "scheduled" }
+func (m claudeOwnMarks) claimed() bool {
+	return m.Meta || m.WakeupSource != "" || m.TurnOrigin == "scheduled"
+}
 
-// claudesTurn takes the operator's turn out of a record claude wrote itself. A loop
-// wakeup's own prompt, not its isMeta companion, becomes the started state the live
-// stream gives that turn, so a restored conversation and a live one agree.
-func (m scheduledMarks) claudesTurn(events []Event, meta bool) []Event {
+// claudesTurn takes the operator's turn out of such a record. One that started a turn is restored as
+// the started state the live stream gives it (a loop's: LoopWakeup); an isMeta record starts none.
+func (m claudeOwnMarks) claudesTurn(events []Event) []Event {
 	out, started := make([]Event, 0, len(events)), false
 	for _, ev := range events {
 		switch {
 		case ev.Kind != KindUserText || ev.Notice != "":
 			out = append(out, ev)
-		case !meta && !started && m.WakeupSource == wakeupLoop:
-			ev.Kind, ev.Text, ev.LoopWakeup, started = KindMessageState, "started", true, true
+		case !m.Meta && !started:
+			ev.Kind, ev.Text, ev.LoopWakeup, started = KindMessageState, "started", m.WakeupSource == wakeupLoop, true
 			out = append(out, ev)
 		}
 	}
