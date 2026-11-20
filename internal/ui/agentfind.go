@@ -33,8 +33,10 @@ func findClass(query, name string) (class int, ok bool) {
 	return 2, len(rest) == 0
 }
 
-// matchAgents is the agents query finds, as a new slice: whoever is blocked on you
-// first, then the better matches, and within each the order agents came in.
+// matchAgents is the agents query finds, as a new slice: the better matches first,
+// within a match quality whoever is blocked on you, and then the order agents came
+// in. A match comes before attention because a blocked agent found only by
+// scattered letters must not outrank the name that was typed.
 func matchAgents(query string, agents []Agent) []Agent {
 	type hit struct {
 		agent Agent
@@ -47,13 +49,16 @@ func matchAgents(query string, agents []Agent) []Agent {
 		}
 	}
 	slices.SortStableFunc(hits, func(x, y hit) int {
+		if x.class != y.class {
+			return x.class - y.class
+		}
 		if bx, by := x.agent.State == rpc.StateBlocked, y.agent.State == rpc.StateBlocked; bx != by {
 			if bx {
 				return -1
 			}
 			return 1
 		}
-		return x.class - y.class
+		return 0
 	})
 	out := make([]Agent, len(hits))
 	for i, h := range hits {

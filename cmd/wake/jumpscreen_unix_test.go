@@ -70,9 +70,13 @@ func TestCtrlKFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
 		t.Errorf("w4 is at (%d,%d) and w3 at (%d,%d): ⌃B should open below, in the same column.\n%s", w4.x, w4.y, w3.x, w3.y, s.dump())
 	}
 
-	// esc closes it and nothing else: no pane opens, the keys stay where they were.
+	// esc closes it and nothing else: no pane opens and none closes.
+	before := len(panesLeftOfTheSidebar(below, cols))
 	s.send("\x0b")
 	s.await("jump to agent")
 	s.send("\x1b")
 	s.awaitGone("jump to agent")
+	if after := len(panesLeftOfTheSidebar(s.settle(), cols)); after != before {
+		t.Errorf("esc left %d panes, want the %d there were.\n%s", after, before, s.dump())
+	}
 }

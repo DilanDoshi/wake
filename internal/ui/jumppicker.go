@@ -1,21 +1,14 @@
 package ui
 
-// The jump picker: ⌃K or `/jump [filter]` opens a box over the composer, a few
-// letters of an agent's name narrow the fleet, and ↵ puts the cursored agent on
-// screen the way a click on its sidebar row does (openInNewPane); ⌃B opens it below
-// the focused pane and ⌃D in it. It is a search box in the resume picker's shape:
-// read above App.key's switch, it owns every key while it is up, so typing narrows
-// and nothing a stray key does moves the keys to another pane under it.
-//
-// The list is the fleet fleet-wide in attention order, blocked first, narrowed by
-// agentfind.go. The cursor is an agent's id, not a row, so a report that re-ranks
-// the fleet cannot slide it onto another agent between a look and a ↵.
+// The jump picker: ⌃K or `/jump [filter]` opens a box over the composer; a few
+// letters of a name narrow the fleet (agentfind.go) and ↵ opens the cursored agent
+// as a click on its sidebar row does. A modal search box in the resume picker's
+// shape, read above App.key's switch. Its cursor is an agent's id, never a row.
 
 import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -53,7 +46,7 @@ type JumpPicker struct {
 	up     bool
 	Pane   string // the pane it was opened over; "" is the room
 	Query  string
-	Cursor string // the cursored agent's id; "" is the first match
+	Cursor string // the cursored agent's id; "" only while nothing matches
 }
 
 func (p JumpPicker) Open() bool { return p.up }
@@ -84,14 +77,18 @@ func (a App) jumpCursorAgent() (Agent, bool) {
 	return found[jumpIndex(found, a.jumpPicker.Cursor)], true
 }
 
-// jumpRoom is the rows the pane holding the keys has for the box. Below one it
-// cannot be drawn, and a box nobody can see must not take ↵.
+// jumpRoom is the rows the pane holding the keys has for the box, under a card it
+// is drawing. Below one it cannot be drawn, and a box nobody can see must not take ↵.
 func (a App) jumpRoom() int {
 	w, h, ok := a.paneSize(a.focus)
 	if !ok {
 		return 0
 	}
-	return a.menuRoom(a.focus, w, h)
+	room := a.menuRoom(a.focus, w, h)
+	if card := a.cardBlock(a.focus, w, false); card != "" {
+		room -= lipgloss.Height(card)
+	}
+	return room
 }
 
 // openJump puts the box up over the pane that holds the keys, with the filter
@@ -108,7 +105,7 @@ func (a App) openJump(query string) App {
 	a = a.closePicker().closeRewind()
 	a.statusUI = StatusView{}
 	a.jumpPicker = JumpPicker{up: true, Pane: a.focus, Query: query}
-	return a
+	return a.jumpHomed()
 }
 
 func (a App) closeJump() App {
@@ -116,18 +113,32 @@ func (a App) closeJump() App {
 	return a
 }
 
+// jumpHomed puts the cursor on the best match, pinned by its id from the first
+// look: a report that re-ranks the fleet cannot then move ↵ onto another agent.
+func (a App) jumpHomed() App {
+	a.jumpPicker.Cursor = ""
+	if found := a.jumpAgents(); len(found) > 0 {
+		a.jumpPicker.Cursor = found[0].ID
+	}
+	return a
+}
+
 // jump is `/jump [filter]`.
 func (a App) jump(arg string) (App, tea.Cmd) {
-	return a.clearDraft().openJump(strings.TrimSpace(arg)), nil
+	return a.clearDraft().openJump(typedQuery("", arg)), nil
 }
 
 // jumpKey drives the box: typing and ⌫ edit the filter, ↑↓ walk the matches, ↵ ⌃B
 // and ⌃D open the cursored agent, esc and ⌃K close it. ⌃C closes it and parks the
-// agent in front of you, so its first press stays visible for the ⌃C⌃C kill switch
-// (resumePickerKey's reasoning). Every other key is swallowed.
+// agent in front of you - above every guard, so its first press stays visible for the
+// ⌃C⌃C kill switch (resumePickerKey's reasoning). Every other key is swallowed.
 func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if !a.jumpPicker.Open() {
 		return a, nil, false
+	}
+	if m.Type == tea.KeyCtrlC {
+		model, cmd, _ := a.closeJump().park()
+		return model.(App), cmd, true
 	}
 	if a.focus != a.jumpPicker.Pane || a.jumpRoom() < 1 {
 		// withFocus closes the first; a resize can leave no room for the box. Handled,
@@ -135,9 +146,6 @@ func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.closeJump(), nil, true
 	}
 	switch m.Type {
-	case tea.KeyCtrlC:
-		model, cmd, _ := a.closeJump().park()
-		return model.(App), cmd, true
 	case tea.KeyEsc, tea.KeyCtrlK: // alt+esc, two fast escapes, is one close
 		return a.closeJump(), nil, true
 	case tea.KeyUp:
@@ -151,27 +159,19 @@ func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	case tea.KeyCtrlD:
 		return a.openJumped(App.openDMWith), nil, true
 	case tea.KeyBackspace:
-		return a.editJump(func(q string) string { return string(dropLast([]rune(q))) }), nil, true
+		return a.editJump(backspacedQuery), nil, true
 	case tea.KeySpace:
-		return a.editJump(func(q string) string { return q + " " }), nil, true
+		return a.editJump(func(q string) string { return typedQuery(q, " ") }), nil, true
 	case tea.KeyRunes:
-		typed := strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return -1
-			}
-			return r
-		}, string(m.Runes))
-		return a.editJump(func(q string) string { return q + typed }), nil, true
+		return a.editJump(func(q string) string { return typedQuery(q, string(m.Runes)) }), nil, true
 	}
 	return a, nil, true
 }
 
-func dropLast(r []rune) []rune { return r[:max(len(r)-1, 0)] }
-
 // editJump changes the filter and homes the cursor on the best match.
 func (a App) editJump(edit func(string) string) App {
-	a.jumpPicker.Query, a.jumpPicker.Cursor = edit(a.jumpPicker.Query), ""
-	return a
+	a.jumpPicker.Query = edit(a.jumpPicker.Query)
+	return a.jumpHomed()
 }
 
 // moveJump walks the matches without wrapping: a cursor that wraps makes the ends of
@@ -229,7 +229,7 @@ func (a App) jumpBox(width, room int) string {
 	}
 	from, to := windowAround(cur, len(found), size)
 	for i := from; i < to; i++ {
-		rows = append(rows, jumpRow(found[i], i == cur, inner))
+		rows = append(rows, a.jumpRow(found[i], i == cur, inner))
 	}
 	head := fmt.Sprintf("jump to agent · %d of %d", len(found), total)
 	foot := joinedWords(" · ", countWords(from, len(found)-to), jumpKeys)
@@ -240,9 +240,9 @@ func (a App) jumpBox(width, room int) string {
 // jumpCompact is the box in a pane with too few rows for it: the filter line over
 // the cursored agent, or the agent alone, so ↵ never opens a row the pane did not draw.
 func (a App) jumpCompact(found []Agent, total, cur, width, room int) string {
-	row := HintStyle.Render(fmt.Sprintf(jumpNoMatch, a.jumpPicker.Query))
+	row := detailRow(fmt.Sprintf(jumpNoMatch, a.jumpPicker.Query), width)
 	if len(found) > 0 {
-		row = jumpRow(found[cur], true, width)
+		row = a.jumpRow(found[cur], true, width)
 	}
 	if room <= 1 {
 		return row
@@ -262,14 +262,15 @@ func jumpFilter(query string) string {
 
 // jumpRow is one agent: the cursor, its glyph and name in its own hue, its team, and
 // what it is doing - the sidebar's tool line, or what it is waiting on you for.
-func jumpRow(ag Agent, cursored bool, width int) string {
+func (a App) jumpRow(ag Agent, cursored bool, width int) string {
 	lead := cardUnchosen
 	if cursored {
 		lead = cardCursor
 	}
-	head := ansi.Truncate(rowGlyph(ag, turnDone(ag, false))+" "+oneLine(ag.Name), jumpNameCol, ellipsis)
+	head := ansi.Truncate(rowGlyph(ag, a.fleet.done(ag.ID))+" "+oneLine(ag.Name), jumpNameCol, ellipsis)
 	name := identityRowStyle(ag, cursored).Render(head + strings.Repeat(" ", max(jumpNameCol-ansi.StringWidth(head), 0)))
-	team := HintStyle.Render(ansi.Truncate(oneLine(ag.Team), jumpTeamCol, ellipsis) + strings.Repeat(" ", max(jumpTeamCol-ansi.StringWidth(oneLine(ag.Team)), 0)))
+	team := ansi.Truncate(oneLine(ag.Team), jumpTeamCol, ellipsis)
+	team = HintStyle.Render(team + strings.Repeat(" ", max(jumpTeamCol-ansi.StringWidth(team), 0)))
 	room := max(width-ansi.StringWidth(lead)-jumpNameCol-jumpTeamCol-2, 0)
 	return ansi.Truncate(lead+name+" "+team+" "+jumpDoing(ag, room), width, ellipsis)
 }

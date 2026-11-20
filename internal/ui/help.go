@@ -31,8 +31,8 @@ const (
 	// save dialog is the one place it only closes the dialog; see workflowAliasKeys.
 	helpParkKey = "⌃C closes it and parks the agent in front of you"
 
-	// helpQueryMax bounds what a paste can put in the filter.
-	helpQueryMax = 40
+	// queryMax bounds what a paste can put in a filter: /wake-help's and the jump picker's.
+	queryMax = 40
 
 	// helpBodyTop is the rows above the body: the pane's title and the filter.
 	helpBodyTop = 2
@@ -175,30 +175,38 @@ func (a App) helpPage() int {
 	return max(room-1, 1)
 }
 
-// typed adds to the filter: one space between words, none leading, nothing
-// unprintable, and no more than helpQueryMax runes. A new query starts at the top.
-func (v HelpView) typed(text string) HelpView {
+// typedQuery is query with text typed onto it: one space between words, none
+// leading, nothing unprintable, and no more than queryMax runes.
+func typedQuery(query, text string) string {
 	for _, r := range text {
 		if unicode.IsSpace(r) {
 			r = ' '
 		}
 		switch {
 		case unicode.IsControl(r):
-		case r == ' ' && (v.Query == "" || strings.HasSuffix(v.Query, " ")):
-		case utf8.RuneCountInString(v.Query) >= helpQueryMax:
+		case r == ' ' && (query == "" || strings.HasSuffix(query, " ")):
+		case utf8.RuneCountInString(query) >= queryMax:
 		default:
-			v.Query += string(r)
+			query += string(r)
 		}
 	}
-	v.Scroll = 0
+	return query
+}
+
+// backspacedQuery drops query's last rune.
+func backspacedQuery(query string) string {
+	r := []rune(query)
+	return string(r[:max(len(r)-1, 0)])
+}
+
+// typed adds to the filter. A new query starts at the top.
+func (v HelpView) typed(text string) HelpView {
+	v.Query, v.Scroll = typedQuery(v.Query, text), 0
 	return v
 }
 
 // backspaced drops the filter's last rune.
 func (v HelpView) backspaced() HelpView {
-	if r := []rune(v.Query); len(r) > 0 {
-		v.Query = string(r[:len(r)-1])
-	}
-	v.Scroll = 0
+	v.Query, v.Scroll = backspacedQuery(v.Query), 0
 	return v
 }

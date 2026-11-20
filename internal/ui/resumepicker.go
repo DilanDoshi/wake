@@ -148,8 +148,8 @@ func (p ResumePicker) filtered() []resumeRow {
 // openResume puts the picker up over the composer that opened it.
 func (a App) openResume(rows []resumeRow, more int, multi bool) App {
 	a.resumePicker = ResumePicker{Rows: rows, More: more, Multi: multi, Selected: map[string]bool{}}
-	a.statusUI = StatusView{} // one menu at a time: a disk walk can land after /status opened
-	return a.clearDraft()
+	a.statusUI = StatusView{}         // one menu at a time: a disk walk can land after /status opened
+	return a.closeJump().clearDraft() // or after ⌃K
 }
 
 // closeResume takes it down with nothing sent, and ends the reads behind it.

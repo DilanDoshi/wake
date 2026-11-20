@@ -24,6 +24,13 @@ a rule between the filter line and the results, and the sidebar search bar (D1) 
 - **The list is fleet-wide attention order, not the sidebar's.** The sidebar is the loose agents, then each
   team's section, ranked inside each - a blocked agent in a team is first only in its own box. The picker takes
   `Fleet.OnRoster()`, blocked first, then the better match, then that order.
+- **A better match comes before attention.** Within a match quality, blocked agents first, then the order
+  `OnRoster` gives. The first draft put blocked ahead of everything, and typing `db` then `↵` opened a blocked
+  `docs-bulk-upload` (found only by its letters in order) over `db-migrate`. With nothing typed every agent is
+  the same quality, so the box is attention order, blocked first, as the owner asked.
+- **A box nobody can see takes no key.** The pane's rows for a menu are what `menuRoom` leaves under a card; with
+  none, `⌃K` says the pane is too short, and a resize that leaves none closes the box on the next key (handled,
+  not declined: a declined key's App is thrown away). The cursor is pinned to an agent's id from the first look.
 - **`↵` is a click.** It calls `openInNewPane` (an agent already on screen is only focused) and ends in the
   helper the click's drop ends in (`selectOpened`), so the two cannot drift. `⌃B` and `⌃D` are the open keys'
   placements; a refused `⌃B` keeps the box and the typed filter.

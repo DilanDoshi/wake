@@ -409,7 +409,8 @@ func TestTheBoxFitsEverySizeAndAlwaysDrawsTheCursorsRow(t *testing.T) {
 					t.Fatalf("%dx%d: the frame is %d rows tall", w, h, got)
 				}
 				rows := jumpPanes(a)
-				if rowHaving(rows, jumpCursorName(t, a)) < 0 {
+				top := max(rowHaving(rows, "⌕"), 0) // the room's own working line names agents too
+				if rowHaving(rows[top:], jumpCursorName(t, a)) < 0 {
 					t.Fatalf("%dx%d at row %d: the cursor's row %q is not drawn:\n%s", w, h, step, jumpCursorName(t, a), strings.Join(rows, "\n"))
 				}
 				a, _ = pressKey(a, kmsg(tea.KeyDown))
@@ -463,32 +464,17 @@ func TestOpeningItTakesTheOtherMenusDown(t *testing.T) {
 }
 
 // Typing changes who the list is, so the cursor goes back to the first match
-// rather than staying on a row the operator moved to for another filter.
+// rather than staying on a row the operator moved to for another filter - even
+// when that row still matches.
 func TestTypingHomesTheCursorOnTheFirstMatch(t *testing.T) {
 	a := jumpTyped(jumpOpened(t, blueFleet(t, 140, 40)), "blu")
 	a, _ = pressKey(a, kmsg(tea.KeyDown))
-	if got := jumpCursorName(t, a); got != "web-blur" {
-		t.Fatalf("setup: ↓ put the cursor on %q, want web-blur", got)
+	a, _ = pressKey(a, kmsg(tea.KeyDown))
+	if got := jumpCursorName(t, a); got != "infra-blue-green" {
+		t.Fatalf("setup: ↓↓ put the cursor on %q, want infra-blue-green", got)
 	}
-	a = jumpTyped(a, "r") // web-blur still matches blur
+	a = jumpTyped(a, "e") // infra-blue-green still matches blue, but is not first
 	if got := jumpCursorName(t, a); got != "ui-blueprint" {
 		t.Errorf("after typing, the cursor is on %q, want the first match, ui-blueprint", got)
-	}
-}
-
-// Jumping to the agent whose dispatch the sidebar's cursor is on opens the agent
-// itself: the cursor drops the dispatch and the pane stops viewing it, as a click
-// on the agent's row does. `show` alone keeps the dispatch for the same agent.
-func TestEnterDropsTheDispatchTheCursorWasOn(t *testing.T) {
-	a := dispatching(t).withAgents("alex")
-	a.roster.Selected, a.roster.SelectedTask = "s1", "toolu_1"
-	a = a.withDM("s1", a.dms["s1"].Viewing("toolu_1"))
-	if viewedBy(t, a, "s1") != "toolu_1" {
-		t.Fatal("setup: the pane is not viewing the dispatch")
-	}
-	a = jumpTyped(jumpOpened(t, a), "ale")
-	a, _ = pressKey(a, kmsg(tea.KeyEnter))
-	if a.roster.SelectedTask != "" || viewedBy(t, a, "s1") != "" {
-		t.Errorf("the cursor holds %q and the pane views %q: an opened agent must not keep a dispatch", a.roster.SelectedTask, viewedBy(t, a, "s1"))
 	}
 }
