@@ -1,5 +1,5 @@
 # BEAT 29 — channels. A roster team header is a channel: ↵ on it makes that
-# team's thread the room's base, titled with the team, until `── all ──` or
+# team's thread the room's base, titled with the team, until `all` or
 # another team is picked. The roster walks on ⇧↑↓, sent here as Ctrl+G/Ctrl+K
 # through shiftkeys.py (setup.sh's env.sh).
 Output .work/out/29-channels.mp4

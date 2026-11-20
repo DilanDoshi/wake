@@ -2,7 +2,7 @@
 
 // Channels on a real screen: a team header picked in the roster - by a click, or
 // ⇧↑↓ onto it and ↵ - titles the room with the team and keeps the words of
-// everyone outside it out, and `── all ──` brings them back. internal/ui proves
+// everyone outside it out, and `all` brings them back. internal/ui proves
 // the filter, the walk and the hit in process; this is the half a person sees.
 
 package main

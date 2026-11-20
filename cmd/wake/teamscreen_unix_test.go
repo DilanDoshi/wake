@@ -1,7 +1,7 @@
 //go:build unix
 
-// Team sections on a real screen: /team groups the roster and the board under
-// `──── name ────` dividers, drawn by the real binary through a pty. internal/ui
+// Team sections on a real screen: /team groups the roster into boxes and the board
+// under `──── name ────` dividers, drawn by the real binary through a pty. internal/ui
 // tests the window arithmetic in process; this is the half a person sees, and
 // HANDOFF's lesson is that in-process greens have hidden rendered-frame bugs.
 
@@ -110,8 +110,8 @@ func TestTeamSectionsRenderInTheTiledBoard(t *testing.T) {
 }
 
 // A team is set off from whatever is above it by a blank row in the roster, on a
-// real screen: the top block's last agent, a blank, then `──── backend ────`, and
-// the same between backend's last row and `──── frontend ────`.
+// real screen: the top block's closing row, a blank, then `╭─ backend ─╮`, and
+// the same between backend's closing row and `╭─ frontend ─╮`.
 func TestTeamSectionsAreSetOffByABlankRowInTheRoster(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
@@ -120,17 +120,17 @@ func TestTeamSectionsAreSetOffByABlankRowInTheRoster(t *testing.T) {
 	teamedFleet(t, s)
 	s.settle()
 
-	// The sidebar is what follows the last "│" of a row: its divider, drawn on every
-	// row, and nothing the sidebar itself draws contains one. A row with no divider
-	// is not a blank sidebar row, so ok is false and a test asking for one fails.
+	// The sidebar is what follows the divider, which stands at one column in the
+	// same place on every row: the margin, then the 24 columns the sidebar owns. A
+	// row with no divider there is not a blank sidebar row, so ok is false and a
+	// test asking for one fails.
+	const divider = 100 - 1 - 24
 	sidebar := func(line string) (text string, ok bool) {
 		r := []rune(line)
-		for i := len(r) - 1; i >= 0; i-- {
-			if r[i] == '│' {
-				return strings.TrimSpace(string(r[i+1:])), true
-			}
+		if len(r) <= divider || r[divider] != '│' {
+			return "", false
 		}
-		return "", false
+		return strings.TrimSpace(string(r[divider+1:])), true
 	}
 	lines := s.lines()
 	for _, team := range []string{"backend", "frontend"} {
@@ -140,14 +140,17 @@ func TestTeamSectionsAreSetOffByABlankRowInTheRoster(t *testing.T) {
 				at = y
 			}
 		}
-		if at < 2 {
-			t.Fatalf("no `%s` divider in the sidebar:\n%s", team, s.dump())
+		if at < 3 {
+			t.Fatalf("no `%s` top edge in the sidebar:\n%s", team, s.dump())
 		}
 		if got, ok := sidebar(lines[at-1]); !ok || got != "" {
-			t.Errorf("the row above the %s divider is %q (divider drawn: %v), want a blank sidebar row:\n%s", team, got, ok, s.dump())
+			t.Errorf("the row above the %s top edge is %q (divider drawn: %v), want a blank sidebar row:\n%s", team, got, ok, s.dump())
 		}
-		if got, _ := sidebar(lines[at-2]); got == "" || strings.Contains(got, "─") {
-			t.Errorf("the row above the blank is %q, want an agent's row:\n%s", got, s.dump())
+		if got, _ := sidebar(lines[at-2]); !strings.HasPrefix(got, "╰") || !strings.HasSuffix(got, "╯") {
+			t.Errorf("the row above the blank is %q, want the box above's closing row:\n%s", got, s.dump())
+		}
+		if got, _ := sidebar(lines[at-3]); !strings.HasPrefix(got, "│ ") || !strings.HasSuffix(got, " │") {
+			t.Errorf("the row above the closing row is %q, want an agent's row between walls:\n%s", got, s.dump())
 		}
 	}
 }

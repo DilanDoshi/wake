@@ -18,7 +18,7 @@ import (
 // trailingBlankBoxRows counts the blank prompt rows at the bottom of the first
 // composer box on screen - the rows a stale scroll leaves below the draft.
 func trailingBlankBoxRows(s *screen) int {
-	lines := s.lines()
+	lines := paneRows(s)
 	top, bottom := -1, -1
 	for i, l := range lines {
 		if top < 0 && strings.Contains(l, "╭") {

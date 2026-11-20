@@ -514,14 +514,14 @@ func rosterNamesIn(rows []string) []string {
 // than on the glyph alone: `·` is also StateEnded's own state glyph, but it is
 // bare in the room's own target line too - "→ @robin · direct" - which a
 // fresh `/new` now leaves drawn (see starts.go's draftMention), and an
-// unanchored match read "direct" off that line as a roster row. headLine
-// starts a row at column 0 of the sidebar, which is always immediately after
-// the divider - so requiring that adjacency is exact rather than heuristic.
-var rosterRow = regexp.MustCompile(`(?:^|│)[●◐○▪·] ([a-z][a-z0-9-]*)`)
+// unanchored match read "direct" off that line as a roster row. A member is
+// drawn between its box's walls, so a row starts with the divider and then the
+// left wall - requiring that adjacency is exact rather than heuristic.
+var rosterRow = regexp.MustCompile(`(?:^|│)│ [●◐○▪·] ([a-z][a-z0-9-]*)`)
 
-// rosterHeader is a channel header row in the sidebar, `── all ──` or a team's,
-// anchored on the divider for rosterRow's reason.
-var rosterHeader = regexp.MustCompile(`(?:^|│)─+ ([a-z][a-z0-9_-]*) ─`)
+// rosterHeader is a channel header row in the sidebar, the top edge of `all`'s
+// box or a team's, anchored on the divider for rosterRow's reason.
+var rosterHeader = regexp.MustCompile(`(?:^|│)╭─+ ([a-z][a-z0-9_-]*) ─`)
 
 // rosterStops is every sidebar row ⇧↑↓ stops on, in the order it walks them:
 // agents by name and channel headers as "── <name>".
@@ -594,6 +594,21 @@ func (s *screen) openAgent(name string) {
 	s.click(s.cols-3, row)
 	s.await("@" + name)
 }
+
+// paneRows is the screen's rows without the right sidebar. The sidebar's boxes
+// open with ╭ and close with ╰, as every composer's do, so a test that finds a
+// composer by its corner reads the rows of the panes only. A window narrower than
+// the sidebar's breakpoint draws none.
+func paneRows(s *screen) []string {
+	if s.cols < sidebarShownColumns {
+		return s.lines()
+	}
+	return leftOf(s.lines(), s.cols)
+}
+
+// sidebarShownColumns is the window width from which the sidebar is drawn -
+// ui.sidebarsHideColumns, spelled here because internal/ui does not export it.
+const sidebarShownColumns = 100
 
 // rowOf is the first screen row containing text, or -1.
 func (s *screen) rowOf(text string) int { return rowIn(s.lines(), text) }

@@ -257,7 +257,7 @@ func TestTheFirstReadingShortensTheRosterAndClicksFollow(t *testing.T) {
 	a := pick(newRoomApp(t).withSize(100, 24).withUsageReport(nil, names...), "s30")
 	bottom := -1
 	for y, row := range sidebarRows(a) {
-		if strings.HasPrefix(strings.TrimSpace(ansi.Strip(row)), "○ ") {
+		if strings.HasPrefix(inBox(ansi.Strip(row)), "○ ") {
 			bottom = y
 		}
 	}

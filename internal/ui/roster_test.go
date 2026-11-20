@@ -165,10 +165,10 @@ func TestALongNameIsCutRatherThanWrappedOverTheAgentsBelowIt(t *testing.T) {
 		{ID: "s2", Name: "alex", State: rpc.StateBlocked},
 		{ID: "s3", Name: "jamie", State: rpc.StateIdle},
 	}
-	out := stripANSI(Roster{}.View(agents, nil, rosterWidth, 3))
+	out := stripANSI(Roster{}.View(agents, nil, rosterWidth, 4)) // three rows and the box's closing one
 	for _, name := range []string{"alex", "jamie"} {
 		if !strings.Contains(out, name) {
-			t.Errorf("a 35-character name pushed %s out of a 3-row sidebar: the long row wrapped instead of being cut, and took the rest of the fleet with it:\n%s", name, out)
+			t.Errorf("a 35-character name pushed %s out of a 4-row sidebar: the long row wrapped instead of being cut, and took the rest of the fleet with it:\n%s", name, out)
 		}
 	}
 }
@@ -190,7 +190,7 @@ func TestAPathIsCutToItsFileAndACommandIsNotMangled(t *testing.T) {
 				{ID: "s1", Name: "syd", State: rpc.StateWorking, Tool: tc.tool, ToolArg: tc.arg},
 			}, nil,
 
-				rosterWidth, 4))
+				rosterWidth+2*boxInset, 4)) // rows keep rosterWidth inside the box
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("the sidebar does not say %q:\n%s", tc.want, out)
 			}
@@ -224,7 +224,7 @@ func TestAnAgentWhoseStateHasNotArrivedYetStillDrawsAGlyph(t *testing.T) {
 	for _, state := range []string{"", "a state from a later build"} {
 		out := stripANSI(Roster{}.View([]Agent{{ID: "s1", Name: "sydney", State: state}}, nil, rosterWidth, 2))
 		row, _, _ := strings.Cut(out, "\n")
-		if !strings.HasPrefix(row, unknownGlyph+" sydney") {
+		if row = inBox(row); !strings.HasPrefix(row, unknownGlyph+" sydney") {
 			t.Errorf("state %q drew %q, want a row beginning %q: a row with no glyph reads as an agent with no state", state, row, unknownGlyph+" sydney")
 		}
 	}
@@ -375,9 +375,9 @@ func TestTheCursorAndABlockedAgentAreDrawnDifferentlyFromEveryoneElse(t *testing
 		{ID: "blocked", Name: "two", State: rpc.StateBlocked},
 		{ID: "plain", Name: "three", State: rpc.StateIdle},
 	}
-	lines := strings.Split(Roster{Selected: "cursor"}.View(agents, nil, rosterWidth, 3), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("wanted one line per agent, got %d", len(lines))
+	lines := strings.Split(Roster{Selected: "cursor"}.View(agents, nil, rosterWidth, 4), "\n")
+	if len(lines) != 4 { // one line per agent, and the box's closing row
+		t.Fatalf("wanted one line per agent and the closing row, got %d", len(lines))
 	}
 
 	seen := map[string]string{}
@@ -386,7 +386,7 @@ func TestTheCursorAndABlockedAgentAreDrawnDifferentlyFromEveryoneElse(t *testing
 		// glyph sits between them and differs per state, so cutting on the name
 		// compares glyphs and passes whatever the styles are - which is a test
 		// that cannot fail wearing the name of one that can.
-		esc := ansiPattern.FindString(lines[i])
+		esc := rowStyle(lines[i])
 		if esc == "" {
 			t.Fatalf("row %q carries no styling at all at a forced colour profile: %q", name, lines[i])
 		}
@@ -403,8 +403,8 @@ func TestTheCursorAndABlockedAgentAreDrawnDifferentlyFromEveryoneElse(t *testing
 // starts in.
 func TestARosterWithNoCursorDrawsNoCursor(t *testing.T) {
 	forceColour(t)
-	plain := Roster{}.View([]Agent{{Name: "one", State: rpc.StateIdle}}, nil, rosterWidth, 1)
-	selected := Roster{Selected: "s1"}.View([]Agent{{ID: "s1", Name: "one", State: rpc.StateIdle}}, nil, rosterWidth, 1)
+	plain := Roster{}.View([]Agent{{Name: "one", State: rpc.StateIdle}}, nil, rosterWidth, 2)
+	selected := Roster{Selected: "s1"}.View([]Agent{{ID: "s1", Name: "one", State: rpc.StateIdle}}, nil, rosterWidth, 2)
 	if plain == selected {
 		t.Errorf("an agent with no id is drawn as the cursor when nothing is selected:\n%q", plain)
 	}
@@ -418,11 +418,11 @@ func TestAnUnreadCountSurvivesANameTooLongForTheColumn(t *testing.T) {
 		{ID: "s1", Name: strings.Repeat("n", 30), State: rpc.StateIdle, Unread: 7},
 	}, nil,
 
-		rosterWidth, 1))
-	if !strings.HasSuffix(strings.TrimRight(out, " "), "7") {
+		rosterWidth, 2))
+	if row, _, _ := strings.Cut(out, "\n"); !strings.HasSuffix(inBox(row), "7") {
 		t.Errorf("a 30-character name pushed the unread count off the row:\n%q", out)
 	}
-	measureColumn(t, out, rosterWidth, 1)
+	measureColumn(t, out, rosterWidth, 2)
 
 	// And in a column too narrow for both, the count is what is left. lipgloss
 	// reads a non-positive MaxWidth as "no maximum" and hands back the whole
@@ -435,7 +435,7 @@ func TestAnUnreadCountSurvivesANameTooLongForTheColumn(t *testing.T) {
 		{ID: "s1", Name: "sydney", State: rpc.StateIdle, Unread: 7},
 	}, nil,
 
-		2, 1))
+		2+2*boxInset, 2)) // a row of two columns inside the box
 	if !strings.Contains(narrow, "7") {
 		t.Errorf("a 2-column sidebar drew %q and not the count: the count is the whole reason the row is worth looking at", narrow)
 	}

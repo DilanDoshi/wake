@@ -72,7 +72,7 @@ func shape(rows []Task) []string {
 func TestASubagentsOwnSubagentsDrawUnderIt(t *testing.T) {
 	f := nestedFleet(t)
 	agents := []Agent{{ID: "s1", Name: "alex", State: rpc.StateWorking}}
-	out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth, 12))
+	out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth+2*boxInset, 12)) // rows keep rosterWidth inside the box
 
 	outer, inner := -1, []int{}
 	lines := strings.Split(out, "\n")
