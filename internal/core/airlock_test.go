@@ -252,12 +252,12 @@ var claudeWireVocabulary = wordSet([]string{
 	// (2026-10-02-mid-turn-delivery-findings.md).
 	"cancel_async_message", "message_uuid", "priority",
 
-	// The live checklist tools and their input keys. TodoWrite is retired in
-	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
-	// calls (task-checklist.jsonl). "subject" and "taskId" are policed for
-	// "patch" and "content"'s reason - wire keys with one meaning here, and
-	// Wake's own words are ChecklistOp.Text and .ID. "deleted" is the fourth
-	// status the 2.1.240 bundle lists beside the three drawn ones.
+	// The live checklist tools and their input keys. They build a list across
+	// TaskCreate/TaskUpdate calls (task-checklist.jsonl). "subject" and
+	// "taskId" are policed for "patch" and "content"'s reason - wire keys with
+	// one meaning here, and Wake's own words are ChecklistOp.Text and .ID.
+	// "deleted" is the fourth status the 2.1.240 bundle lists beside the three
+	// drawn ones.
 	"TaskCreate", "TaskUpdate", "subject", "taskId", "deleted",
 	"total_tokens", "tool_uses", "duration_ms",
 
@@ -1178,14 +1178,14 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// TodoWrite and its whole-list envelope. Retired in 2.1.240 (off unless
-	// CLAUDE_CODE_ENABLE_TASKS is false) and never called in the corpus, so its
-	// `todos` key stays transcribed from the shipped binary rather than recorded
+	// TodoWrite and its whole-list envelope. Never called in the corpus (Claude
+	// Code offers it only beside the model-gated task tools), so its `todos`
+	// key is matched against Claude Code and maintained by hand, not recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.
-	"todos":     "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
-	"TodoWrite": "retired in 2.1.240 and never called in the corpus",
+	"todos":     "TodoWrite is never called in the corpus; a checklist is TaskCreate/TaskUpdate",
+	"TodoWrite": "never called in the corpus",
 	"deleted":   "the fourth TaskUpdate status; the recorded session never deletes an item",
 
 	// primaryArg keys for tools the corpus never exercised.

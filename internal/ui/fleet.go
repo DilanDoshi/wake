@@ -49,6 +49,7 @@ package ui
 // could be work per change" the non-negotiables forbid.
 
 import (
+	"cmp"
 	"slices"
 	"time"
 
@@ -179,10 +180,11 @@ type Agent struct {
 	// goal's reason; the ↻ marker and its detail read it. See loop.go.
 	loop LoopState
 
-	// Doing is the present-tense label of whatever task the agent last marked
-	// in progress - claude's activeForm, which is the word it puts on its own
-	// working line. Empty for an agent that has written no task list, which is
-	// most of them; the heartbeat falls back to its word pool there.
+	// Doing is the label of whatever task the agent last marked in progress -
+	// claude's activeForm, the word it puts on its own working line, or the
+	// item's subject when it sent none (see activeForm). Empty for an agent that
+	// keeps no task list, which is most of them; the heartbeat falls back to
+	// its word pool there.
 	Doing string
 
 	// LastLine is the last line of the agent's own most recent prose, bounded
@@ -286,9 +288,9 @@ type Fleet struct {
 	tasks map[string]Tasks
 
 	// checklists is each session's live task list, accumulated from the run of
-	// TaskCreate/TaskUpdate ops that build it - claude's replacement for the
-	// retired TodoWrite, which sent the whole list every call. A second map for
-	// tasks' reason, and folded by foldChecklist. See checklist.go.
+	// TaskCreate/TaskUpdate ops that build it, where TodoWrite sent the whole
+	// list every call. A second map for tasks' reason, and folded by
+	// foldChecklist. See checklist.go.
 	checklists map[string]checklist
 
 	// subs is each session's subagent backlog, folded whether or not a DM is
@@ -500,14 +502,16 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	return f, out
 }
 
-// activeForm is the present-tense label of the item a task list marks in
-// progress, and "" for a list with none. The first one wins: claude's own tool
-// description says at least one task is in progress at all times, and two would
-// be the model contradicting itself rather than a case to render.
+// activeForm is the label of the item a task list marks in progress, and "" for
+// a list with none: its present-tense activeForm, else its subject, as claude's
+// own spinner does - activeForm has been optional since claude 2.1.69. The first
+// one wins: claude's own tool description says at least one task is in progress
+// at all times, and two would be the model contradicting itself rather than a
+// case to render.
 func activeForm(todos []core.Todo) string {
 	for _, t := range todos {
 		if t.Status == core.TodoActive {
-			return t.ActiveForm
+			return cmp.Or(t.ActiveForm, t.Text)
 		}
 	}
 	return ""

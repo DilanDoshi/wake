@@ -8,6 +8,29 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-20 — the task tools follow Claude Code's default: Wake does not turn them on (the owner, via wake-orch)
+
+wake-orch's check of the task-label surfaces (claude 2.1.328, live) found the pinned checklist and the working
+label on the conversation line, the room line and the `/board` row never fire for a default agent.
+
+- **It is the model, not the version.** Claude Code offers `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` (and
+  `TodoWrite`) by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier (2.1.268+); a Sonnet 5.5, Opus 5.5,
+  Haiku 5.5 or Fable 5 agent has none. The public docs' "Task tool availability" says it, and every `init` in the
+  corpus agrees: each one that lists them is on an older model.
+- **The ruling: Wake does not export `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` to its agents** - not in `core.agentEnv`,
+  not anywhere - and follows Claude Code's own default, since claude is going that way. An operator who wants the
+  list exports the variable before the first `wake` of a fleet: Wake passes the environment through
+  (`core.agentEnv` scrubs only nested-session variables) and a daemon starts its agents with the one it began
+  with. `docs/user_manual/02-the-room.md` says so.
+- **Why not forced.** Live (haiku-5-5, tools on) a three-item job cost ten extra tool calls - a `ToolSearch` to load
+  the deferred tools, three `TaskCreate`, six `TaskUpdate` - and the tools' definitions and reminders sit in every
+  agent's context, times thirty agents. Anthropic took them off newer models on purpose (the docs: "Claude keeps
+  track of multi-step work without a written checklist").
+- **What goes with it.** With the tools on, the label of the item in flight is its `activeForm`, else its
+  subject: `activeForm` is optional since claude 2.1.69 (its own spinner falls back the same way) and the live
+  run sent none (`activeForm`; held by `internal/ui/checklist_label_test.go`). CLAUDE.md's trap and the
+  "retired in 2.1.240" comments now say model-gated.
+
 ## 2026-11-12 — the completion menu walks every offer: a window over the matches, sized to its pane, moved the least distance
 
 The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant

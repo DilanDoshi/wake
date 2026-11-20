@@ -2,6 +2,11 @@
 
 Recorded 2026-08-22 against claude 2.1.240. Fixture: `testdata/stream/task-checklist.jsonl`.
 
+> **Update 2026-11-20.** "Retired" below is what 2.1.240 showed on one model. The task tools are
+> **model-gated**: Claude Code offers them by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier
+> (2.1.268+), and `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` brings them back on any model (public docs, "Task tool
+> availability"). Every `init` in the corpus that lists them is on such a model. See `decisions.md`, 2026-11-20.
+
 ## What was wrong
 
 `internal/render/todo.go` draws a task list correctly, but nothing fed it. It decoded

@@ -683,8 +683,9 @@ relabel `idle`, which is wrong the moment a task takes more than one turn.
 items going all-`completed` is the agent's *own* declaration that its self-tracked plan is finished —
 a semantic signal, per-agent, already decoded (`internal/ui/checklist.go`; `status` is
 `pending|in_progress|completed`). An "all items completed" derivation (which `checklist.go` does not
-expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (it is
-off unless `CLAUDE_CODE_ENABLE_TASKS`), so it is a signal *when present*, not a universal one.
+expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (the task
+tools are model-gated: a default Sonnet, Opus or Haiku 5.x agent has none, `decisions.md` 2026-11-20), so it is
+a signal *when present*, not a universal one.
 
 **Candidate approaches (none decided):**
 - **Derive "done" client-side from the checklist** — all items `completed` → a "done" annotation on the

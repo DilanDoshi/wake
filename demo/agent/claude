@@ -5,9 +5,10 @@ Wake spawns whatever `claude` is on PATH and reads stream-json off its stdout.
 This speaks that wire well enough to drive a real Wake: init, assistant text,
 tool calls, permission asks, subagent dispatches, dynamic workflows,
 background shells, interrupts and per-turn results. It deliberately does **not** emit a
-`TodoWrite` checklist: that tool is retired upstream and no fixture calls it,
-so emitting one would put a shape on camera that current Claude Code does not
-produce.
+`TodoWrite` checklist: no fixture calls it (Claude Code offers it only beside the task
+tools, which are model-gated), so emitting one would put a shape on camera that no
+recording carries. A scenario can script `TaskCreate`/`TaskUpdate` with a plain `tool`
+step, shaped like `testdata/stream/task-checklist.jsonl`.
 
 **The frame shapes are copied from `testdata/stream/`** — the words are
 authored, the protocol is not. Anything this emits that the corpus does not

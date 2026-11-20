@@ -266,9 +266,9 @@ type ToolCall struct {
 
 	// Checklist is the one create-or-update a TaskCreate/TaskUpdate carries,
 	// and nil for every other call. It is *one op*, not the whole list, because
-	// live claude (2.1.240) builds a checklist across many calls where the
-	// retired TodoWrite sent the whole list each time - so the accumulation is
-	// a fold above the airlock, and Todos above is the snapshot it produces.
+	// the task tools build a checklist across many calls where TodoWrite sent
+	// the whole list each time - so the accumulation is a fold above the
+	// airlock, and Todos above is the snapshot it produces.
 	Checklist *ChecklistOp `json:"checklist,omitempty"`
 
 	// Send is who a SendMessage call reaches and what it says, and nil for
