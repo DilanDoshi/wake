@@ -132,7 +132,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   enters an agent's context. `internal/ui/help.go`, `helpcontent.go`, `helpdraw.go`, `slashhelp.go`, `decisions.md`
   (2026-10-27). A bare `/help` is not claimed (the option, in `decisions.md`).
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
-  (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
+  (`⎿ ◈ name done/started`, the count when the pair fits the row's 19 columns). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
   agent's) — draws Wake's own view in that pane, since headless claude cannot draw its `/workflows`
   menu: list → run (phases | agents) → agent (prompt, activity off the agent's disk transcript,
@@ -360,7 +360,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The sidebar's sections are boxes** (owner's 2026-11-19 pick; the board keeps its dividers): a team's header is
   the top edge, `│ … │` walls stand around its members and a `╰──╯` row closes under the last; the agents above the
   first team are a box under the pinned `all`. A row has the column less four (19 at the default 23): a name is cut
-  at the right wall and the unread badge stays, and the token, goal and loop figures drop whole sooner. The edge,
+  at the right wall and the unread badge stays, the token, goal, loop and workflow-count figures drop whole sooner
+  and a tool argument is cut sooner (`Read(internal…)`). The edge,
   walls and closing row wear the channel's state (accent while picked, muted). The closing row rides on the
   section's last item as the header does on its first (`rosterItem.footer`, `trail`), counted in `rowsForRow` and
   skipped by `At`, so a window cuts between items and a cut box runs on as walls with no edge. A drag copies the

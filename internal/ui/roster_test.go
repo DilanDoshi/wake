@@ -173,29 +173,30 @@ func TestALongNameIsCutRatherThanWrappedOverTheAgentsBelowIt(t *testing.T) {
 	}
 }
 
-// Twenty columns cannot hold a path and the tool that opened it, so the tail is
+// Nineteen columns cannot hold a path and the tool that opened it, so the tail is
 // kept: the head of a path is what every agent in the fleet has in common.
-// A command is left alone, because the informative end of one is the front.
+// A command is left alone, because the informative end of one is the front. One
+// that does not fit is cut with an ellipsis, as the sidebar's own width draws it.
 func TestAPathIsCutToItsFileAndACommandIsNotMangled(t *testing.T) {
 	for _, tc := range []struct {
 		name, tool, arg, want, unwanted string
 	}{
 		{"path", "Edit", "internal/ui/roster.go", "roster.go", "internal"},
 		{"command", "Bash", "go test ./internal/ui", "go test", ""},
-		{"trailing slash", "Read", "internal/ui/", "internal/ui", ""},
-		{"no separator", "Grep", "parseFrame", "parseFrame", ""},
+		{"trailing slash", "Read", "internal/ui/", "internal…", ""},
+		{"no separator", "Grep", "parseFrame", "parseFra…", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := stripANSI(Roster{}.View([]Agent{
 				{ID: "s1", Name: "syd", State: rpc.StateWorking, Tool: tc.tool, ToolArg: tc.arg},
 			}, nil,
 
-				rosterWidth+2*boxInset, 4)) // rows keep rosterWidth inside the box
+				rosterWidth-dividerWidth, 4)) // the sidebar's own width, walls and all
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("the sidebar does not say %q:\n%s", tc.want, out)
 			}
 			if tc.unwanted != "" && strings.Contains(out, tc.unwanted) {
-				t.Errorf("the sidebar spent its twenty columns on %q, which every agent in the fleet shares:\n%s", tc.unwanted, out)
+				t.Errorf("the sidebar spent its columns on %q, which every agent in the fleet shares:\n%s", tc.unwanted, out)
 			}
 		})
 	}
@@ -449,8 +450,8 @@ func TestAnAgentWithNothingUnreadCarriesNoBadge(t *testing.T) {
 		{ID: "s1", Name: "sydney", State: rpc.StateIdle},
 	}, nil,
 
-		rosterWidth, 1))
-	if strings.Contains(out, "0") {
+		rosterWidth, 2)) // the row and the box's closing one
+	if !strings.Contains(out, "sydney") || strings.Contains(out, "0") {
 		t.Errorf("an agent with nothing unread drew %q", out)
 	}
 }

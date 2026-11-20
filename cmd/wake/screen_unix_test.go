@@ -598,12 +598,16 @@ func (s *screen) openAgent(name string) {
 // paneRows is the screen's rows without the right sidebar. The sidebar's boxes
 // open with ╭ and close with ╰, as every composer's do, so a test that finds a
 // composer by its corner reads the rows of the panes only. A window narrower than
-// the sidebar's breakpoint draws none.
-func paneRows(s *screen) []string {
-	if s.cols < sidebarShownColumns {
-		return s.lines()
+// the sidebar's breakpoint draws none, and one with the roster closed (⌃R) has
+// nothing to cut: nothing that looks for a pane's corners is run in that state.
+func paneRows(s *screen) []string { return paneRowsOf(s.lines(), s.cols) }
+
+// paneRowsOf is paneRows over rows already read.
+func paneRowsOf(rows []string, cols int) []string {
+	if cols < sidebarShownColumns {
+		return rows
 	}
-	return leftOf(s.lines(), s.cols)
+	return leftOf(rows, cols)
 }
 
 // sidebarShownColumns is the window width from which the sidebar is drawn -
@@ -642,7 +646,7 @@ func (s *screen) agentName() string {
 	s.t.Helper()
 	name := ""
 	s.awaitFrame("a conversation name on a composer border", func(rows []string) bool {
-		for _, line := range rows {
+		for _, line := range paneRowsOf(rows, s.cols) {
 			if m := paneTitle.FindStringSubmatch(line); m != nil && strings.Contains(line, "╭") {
 				name = m[1]
 				return true

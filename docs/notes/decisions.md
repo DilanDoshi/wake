@@ -6333,7 +6333,8 @@ right sidebar only; `/board`'s team dividers stay `──── name ───�
   at 19: a name is cut at the wall (a hard cut, no ellipsis, as before) and the unread badge is kept; the goal, loop
   and token figures are dropped whole sooner (a working agent's `↓ 550` fits a name of eleven columns, not twelve),
   and a nested subagent's figure goes first. **A workflow's done/started count** needs a name of nine columns or
-  fewer, and a subagent type such as `code-reviewer` loses its token figure. **The nesting cap `maxSubDepth` (2) was
+  fewer, a subagent type such as `code-reviewer` loses its token figure, and a tool argument has 17 columns after
+  its indent, so a long one is cut with an ellipsis sooner (`Read(internal…)`, `Grep(parseFra…)`). **The nesting cap `maxSubDepth` (2) was
   derived from `general-purpose` fitting whole at depth 2 in 23 columns; in 19 only the top level fits it whole**,
   so a nested one is cut at the wall (`general-purpo`); the cap is now a bound on the indent, pinned from below by
   the recorded nest. A team name up to 15 columns shows whole in its edge (17 before).

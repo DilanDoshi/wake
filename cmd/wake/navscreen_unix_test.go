@@ -135,7 +135,9 @@ func TestTheSidebarsAreSeparatedByARule(t *testing.T) {
 	s.await("ready")
 	s.settle() // every drawn region is up on arrival
 
-	row := s.lines()[3] // a row below the headers, inside every column
+	// A row below the headers, inside every column, without the sidebar's own box
+	// walls: they are the sidebar's rows, not rules between regions.
+	row := leftOf(s.lines(), s.cols)[3]
 	if n := strings.Count(row, "│"); n != 2 {
 		t.Fatalf("want two rules between three regions, got %d in %q.\n%s", n, row, s.dump())
 	}

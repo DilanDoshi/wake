@@ -301,10 +301,40 @@ func TestTheBoxWearsItsChannelsState(t *testing.T) {
 			if !strings.Contains(closing[i], want.Render(rule)) {
 				t.Errorf("channel %q: box %d's closing row is not drawn in %v", picked, i, want.GetForeground())
 			}
-			if wall := lines[rowContaining(plain, members[i])]; !strings.Contains(wall, want.Render("│ ")) {
+			wall := lines[rowContaining(plain, members[i])]
+			if !strings.Contains(wall, want.Render("│ ")) {
 				t.Errorf("channel %q: %s's left wall is not drawn in %v", picked, members[i], want.GetForeground())
 			}
+			if !strings.Contains(wall, want.Render(" │")) {
+				t.Errorf("channel %q: %s's right wall is not drawn in %v", picked, members[i], want.GetForeground())
+			}
 		}
+	}
+}
+
+// The cursor on a header brightens and bolds its name and nothing else: the box
+// around it keeps the channel's own colour, and so does its closing row.
+func TestTheCursorOnAHeaderBoldsTheNameAndNotTheBox(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor, so bold and bright render apart
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	agents := boxFleet(t)
+	rule := "╰" + strings.Repeat("─", boxedWidth-2) + "╯"
+
+	out := (Roster{Header: "frontend"}).Column(agents, noSubsOf, boxedWidth, 40, "backend")
+	lines, plain := strings.Split(out, "\n"), strings.Split(stripANSI(out), "\n")
+
+	edge := lines[rowContaining(plain, " frontend ")]
+	if want := centredEdge(boxBorder.TopLeft, boxBorder.TopRight, "frontend", boxedWidth, HintStyle, TextStyle.Bold(true)); edge != want {
+		t.Errorf("the cursored edge is %q, want %q", edge, want)
+	}
+	member := lines[rowContaining(plain, "omar")]
+	if !strings.Contains(member, HintStyle.Render("│ ")) || !strings.Contains(member, HintStyle.Render(" │")) {
+		t.Errorf("the cursor on frontend's header changed its members' walls: %q", member)
+	}
+	closing := lines[rowContaining(plain, "lena")+1]
+	if !strings.Contains(closing, HintStyle.Render(rule)) {
+		t.Errorf("the cursor on frontend's header changed its closing row: %q", closing)
 	}
 }
 
@@ -383,9 +413,14 @@ func TestTheTopEdgeOfABoxIsAlwaysOneRow(t *testing.T) {
 	}
 }
 
-// The board's divider is not a box: only the sidebar changed shape.
+// The board's divider is not a box: only the sidebar changed shape. Asked of the
+// band the board's two views draw, not of the rule drawer under it.
 func TestTheBoardKeepsItsPlainDivider(t *testing.T) {
-	got := stripANSI(teamHeaderLine("backend", 30, HintStyle, HintStyle))
+	band := teamHeaderBand("backend", 30)
+	if len(band) != teamHeaderRows {
+		t.Fatalf("the board's header band is %d rows, want %d", len(band), teamHeaderRows)
+	}
+	got := stripANSI(band[teamHeaderRows-1])
 	if strings.ContainsAny(got, "╭╮╰╯│") || !strings.HasPrefix(got, "─") || !strings.HasSuffix(got, "─") {
 		t.Errorf("the board's team divider is %q, want the plain rule", got)
 	}
