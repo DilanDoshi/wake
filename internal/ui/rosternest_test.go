@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -72,7 +70,7 @@ func shape(rows []Task) []string {
 func TestASubagentsOwnSubagentsDrawUnderIt(t *testing.T) {
 	f := nestedFleet(t)
 	agents := []Agent{{ID: "s1", Name: "alex", State: rpc.StateWorking}}
-	out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth, 12))
+	out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth+2*boxInset, 12)) // rows keep rosterWidth inside the box
 
 	outer, inner := -1, []int{}
 	lines := strings.Split(out, "\n")
@@ -165,24 +163,34 @@ func TestARowWhoseParentsLoopIsStillListedOnce(t *testing.T) {
 	}
 }
 
-// The indent stops at maxSubDepth, the deepest level at which general-purpose -
-// the type every recorded nest dispatches - is still drawn whole in the
-// sidebar's 23 drawn columns (rosterWidth less the divider). A row deeper than
-// that is drawn at the cap's indent, still in tree order under its parent.
-func TestTheIndentStopsWhereGeneralPurposeStillFitsWhole(t *testing.T) {
-	const name = "general-purpose"
-	width := rosterWidth - dividerWidth
+// The indent stops at maxSubDepth: a row deeper than that is drawn at the cap's
+// indent, still in tree order under its parent. The cap is at least as deep as the
+// recorded nest goes, and in the room a row has inside its box (the sidebar's 23
+// columns less the walls) the recorded nest's every type is drawn whole at the
+// level it is dispatched on. A deeper general-purpose is cut at the wall: it
+// stopped fitting the cap's level when the box took four columns.
+func TestTheIndentStopsAtMaxSubDepth(t *testing.T) {
+	width := rosterWidth - dividerWidth - 2*boxInset
+	f := nestedFleet(t)
+	rows := f.RunningTasks("s1")
+	deepest := 0
+	for _, row := range rows {
+		deepest = max(deepest, row.Depth)
+		if got := subagentRow(row, width); !strings.Contains(got, subagentName(row)) {
+			t.Errorf("the recorded nest's %s row at depth %d is cut in %d columns: %q", subagentName(row), row.Depth, width, got)
+		}
+	}
+	if deepest == 0 || maxSubDepth < deepest {
+		t.Errorf("the recorded nest goes %d deep and maxSubDepth is %d: the nest would be drawn flat", deepest, maxSubDepth)
+	}
 	at := func(depth int) Task {
-		return Task{ID: "x", Dispatch: "toolu_x", Kind: core.TaskAgent, Status: core.TaskRunning, Type: name, Depth: depth}
-	}
-	if row := subagentRow(at(maxSubDepth), width); !strings.Contains(row, name) {
-		t.Errorf("at the cap the name is cut: %q", row)
-	}
-	if deeper := toolIndent + subStep*(maxSubDepth+1) + lipgloss.Width(subGlyph+" "+name); deeper <= width {
-		t.Errorf("one level deeper still fits %s whole (%d of %d columns): the cap is too shallow", name, deeper, width)
+		return Task{ID: "x", Dispatch: "toolu_x", Kind: core.TaskAgent, Status: core.TaskRunning, Type: "general-purpose", Depth: depth}
 	}
 	if got, cap := subColumn(subagentRow(at(maxSubDepth+3), width)), subColumn(subagentRow(at(maxSubDepth), width)); got != cap {
 		t.Errorf("a row past the cap draws its ⎿ at %d, want the cap's %d", got, cap)
+	}
+	if row := subagentRow(at(maxSubDepth), width); strings.Contains(row, "general-purpose") {
+		t.Errorf("general-purpose fits whole at the cap in %d columns (%q): the premise of this test, and of the cap's note in rostersubs.go, is out of date", width, row)
 	}
 }
 

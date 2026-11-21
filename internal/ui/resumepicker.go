@@ -121,6 +121,8 @@ type ResumePicker struct {
 	Selected map[string]bool
 	Seq      uint64             // which /resume opened it; a fill for another is not its own
 	cancel   context.CancelFunc // ends the transcript reads behind it, if any
+
+	windowBlurred bool // the window lacks the keyboard: the search box is drawn plain; set at draw time, see windowfocus.go
 }
 
 // Open reports whether there is a picker at all. Empty is closed - a machine
@@ -432,8 +434,12 @@ func (p ResumePicker) searchBox(width int) string {
 	if p.Query == "" {
 		style = HintStyle
 	}
+	box := ComposerStyle
+	if p.windowBlurred {
+		box = BoxStyle
+	}
 	line := style.Render(ansi.Truncate(p.searchText(), max(width-cardFrameWidth, 1), ellipsis))
-	return ComposerStyle.Width(max(width-boxFrameWidth, 1)).Render(line)
+	return box.Width(max(width-boxFrameWidth, 1)).Render(line)
 }
 
 // keyHint is the key line the menu advertises, and it names ⇥ only where it does

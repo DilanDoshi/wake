@@ -22,7 +22,8 @@ import (
 
 const (
 	// workflowSidebarRow is the running run's row: its glyph, its name, and
-	// the last snapshot's agents done of started.
+	// the last snapshot's agents done of started. The name is short so the pair
+	// fits the 19 columns a row has inside its box.
 	workflowSidebarRow = "◈ " + workflowName + " 2/3"
 	// workflowTitle is the view's pane title, over whichever pane it covers.
 	workflowTitle = "› workflows"
@@ -95,7 +96,7 @@ func TestAWorkflowRowOpensItsViewAndStopsTheRun(t *testing.T) {
 	name := s.agentName()
 	lines := s.lines()
 	row := s.rowOf(workflowSidebarRow)
-	if row < 1 || !strings.Contains(sidebar(lines[row-1]), name) {
+	if row < 1 || !strings.Contains(sidebar(lines[row-1], s.cols), name) {
 		t.Fatalf("the workflow row is not in the sidebar under %s's row.\n%s", name, s.dump())
 	}
 

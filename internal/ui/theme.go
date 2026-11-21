@@ -42,6 +42,11 @@ var (
 	// which is also the colour of inline code. An address is not the message.
 	Mention = lipgloss.AdaptiveColor{Light: "#5769f7", Dark: "#b1b9f9"} // suggestion
 
+	// Skill is the colour Claude Code draws a skill or command word in. Wake
+	// draws the /name a message opens with the same way; LastRead happens to
+	// share the hue, but a word in a turn is not the last-read rule.
+	Skill = lipgloss.AdaptiveColor{Light: "#8700ff", Dark: "#af87ff"} // skill
+
 	// Own is the ground behind the operator's own message, the way Claude Code
 	// shades a turn you typed.
 	Own = lipgloss.AdaptiveColor{Light: "#f0f0f0", Dark: "#373737"} // userMessageBackground
@@ -86,6 +91,11 @@ var identityColors = map[string]lipgloss.AdaptiveColor{
 	"violet": {Light: "#a21caf", Dark: "#e879f9"},
 	"yellow": {Light: "#9a6700", Dark: "#f2cc60"},
 }
+
+// TagInk is the text of a dragged agent's tag (agentdragdraw.go), drawn on its
+// identity hue: Wake's own choice like the hues - the light theme's are dark and
+// the dark theme's bright, so each gets the opposite ink.
+var TagInk = lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#000000"}
 
 // identityStyle is the foreground style for an agent's colour, and false when it
 // has none or names a hue this build does not have. The caller draws its own
@@ -155,12 +165,6 @@ var (
 	// keeps TextStyle's foreground, so the shading distinguishes without
 	// making your own words a different colour from the conversation.
 	OwnStyle = lipgloss.NewStyle().Background(Own).Foreground(Text)
-
-	// MentionStyle colours an @handle inside a message you typed, so the room
-	// reads as a record of who you addressed. It carries Own's background
-	// because the only place it is used is inside that shaded block, and a span
-	// whose style ends mid-line takes the background with it.
-	MentionStyle = lipgloss.NewStyle().Foreground(Mention).Background(Own)
 
 	// HintStyle is for key hints and other chrome that must recede. It also
 	// draws a received peer message's body (crossSessionBody), so an incoming

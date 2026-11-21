@@ -1,7 +1,7 @@
 package ui
 
-// The roster's channel headers: a pinned `── all ──` over every agent, and each
-// team header a place the cursor can stop, picked by ↵ or a click.
+// The roster's channel headers: a pinned `all` over every agent, and each team
+// header, the top edge of its box, a place the cursor can stop, picked by ↵ or a click.
 
 import (
 	"strings"
@@ -86,10 +86,11 @@ func TestTheCursorWalksOntoChannelHeaders(t *testing.T) {
 }
 
 // A team header under the cursor is on screen at any column that can hold its
-// block - the blank, the header and its first member - under all and the count.
+// block - the blank, the header, its first member and the closing row if it is the
+// last - under all and the count.
 func TestTheWindowKeepsACursoredHeaderOnScreen(t *testing.T) {
 	agents := gapFleet(t, gapSessions()...)
-	for height := 5; height <= 8; height++ {
+	for height := 6; height <= 9; height++ {
 		lines := columnLines(Roster{Header: "frontend"}, agents, 30, height, "")
 		var found bool
 		for _, l := range lines {
@@ -120,6 +121,10 @@ func TestEveryDrawnRowIsTheRowAClickHits(t *testing.T) {
 					}
 				}
 				switch {
+				case isFooter(strings.TrimRight(line, " ")):
+					if ok {
+						t.Errorf("height %d, cursor %+v, row %d is a box's closing row and hits %+v", height, r, y, spot)
+					}
 				case drawnHeader != "":
 					if !ok || spot.header != drawnHeader {
 						t.Errorf("height %d, cursor %+v, row %d draws the %s header and hits %+v (%v)", height, r, y, drawnHeader, spot, ok)
@@ -151,8 +156,11 @@ func TestTheSidebarMarksTheSelectedChannelAndTheCursor(t *testing.T) {
 		t.Fatalf("no %s header drawn", name)
 		return ""
 	}
-	muted := func(name string) string { return teamHeaderLine(name, width, HintStyle, HintStyle) }
-	lit := func(name string) string { return teamHeaderLine(name, width, AccentStyle, AccentStyle) }
+	edge := func(name string, rule, text lipgloss.Style) string {
+		return centredEdge(boxBorder.TopLeft, boxBorder.TopRight, name, width, rule, text)
+	}
+	muted := func(name string) string { return edge(name, HintStyle, HintStyle) }
+	lit := func(name string) string { return edge(name, AccentStyle, AccentStyle) }
 	cases := []struct {
 		r             Roster
 		channel, name string
@@ -162,8 +170,8 @@ func TestTheSidebarMarksTheSelectedChannelAndTheCursor(t *testing.T) {
 		{Roster{}, "", "backend", muted("backend")},
 		{Roster{}, "backend", core.BroadcastName, muted(core.BroadcastName)},
 		{Roster{}, "backend", "backend", lit("backend")},
-		{Roster{Header: "frontend"}, "backend", "frontend", teamHeaderLine("frontend", width, HintStyle, TextStyle.Bold(true))},
-		{Roster{Header: "backend"}, "backend", "backend", teamHeaderLine("backend", width, AccentStyle, AccentStyle.Bold(true))},
+		{Roster{Header: "frontend"}, "backend", "frontend", edge("frontend", HintStyle, TextStyle.Bold(true))},
+		{Roster{Header: "backend"}, "backend", "backend", edge("backend", AccentStyle, AccentStyle.Bold(true))},
 	}
 	for _, c := range cases {
 		if got := drawn(c.r, c.channel, c.name); got != c.want {

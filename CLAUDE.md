@@ -135,7 +135,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   enters an agent's context. `internal/ui/help.go`, `helpcontent.go`, `helpdraw.go`, `slashhelp.go`, `decisions.md`
   (2026-10-27). A bare `/help` is not claimed (the option, in `decisions.md`).
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
-  (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
+  (`⎿ ◈ name done/started`, the count when the pair fits the row's 19 columns). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
   agent's) — draws Wake's own view in that pane, since headless claude cannot draw its `/workflows`
   menu: list → run (phases | agents) → agent (prompt, activity off the agent's disk transcript,
@@ -329,6 +329,19 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `claude mcp login` owns the tty, the pump stops, cooked mode is restored and signals are muted —
   all or nothing. Handing the terminal over (like `git commit` to an editor) is not a PTY.
 - **A pane that holds the keys is always drawn**; every focus change goes through `App.refocus`.
+- **A window the terminal reports blurred draws no caret and no focus colour** (owner's 2026-11-18 ask).
+  `tea.WithReportFocus` (DECSET 1004) delivers `BlurMsg`/`FocusMsg`; the zero value is focused, so a
+  terminal that never reports is drawn as before. bubbles' cursor hides itself and stops blinking on the
+  one and lights and re-arms on the other; Wake adds the border (`Composer.windowBlurred`, the one
+  predicate beside `blurred`; the resume picker's search box and the `/workflows` save dialog's caret
+  take the flag at draw time) and keeps a pane that takes the keys behind a blurred window dark
+  (`Refocus`). **A typed key heals a missed report; a wheel or a paste does not** (a terminal delivers
+  either over a window without focus). Bubble Tea decodes a report only as all that is left of a read,
+  so the kill switch moves one that shares a read with a click's mouse reports to its end (`focusLast`:
+  those and nothing else, and never inside an open bracketed paste), and **ignores reports for ⌃C⌃C** — they are the terminal's, not the
+  operator's; the emergency restore writes `?1004l`; a hand-over has Bubble Tea's release and restore
+  around it and starts from a key, which has already healed the window. `internal/ui/windowfocus.go`,
+  `decisions.md` (2026-11-18).
 
 **Rewind**
 - `esc esc` idle sends `rewind_conversation` (a `control_request`) with `target_message_uuid` and
@@ -360,6 +373,16 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
   through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
   `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
+- **The sidebar's sections are boxes** (owner's 2026-11-19 pick; the board keeps its dividers): a team's header is
+  the top edge, `│ … │` walls stand around its members and a `╰──╯` row closes under the last; the agents above the
+  first team are a box under the pinned `all`. A row has the column less four (19 at the default 23): a name is cut
+  at the right wall and the unread badge stays, the token, goal, loop and workflow-count figures drop whole sooner
+  and a tool argument is cut sooner (`Read(internal…)`). The edge,
+  walls and closing row wear the channel's state (accent while picked, muted). The closing row rides on the
+  section's last item as the header does on its first (`rosterItem.footer`, `trail`), counted in `rowsForRow` and
+  skipped by `At`, so a window cuts between items and a cut box runs on as walls with no edge. A drag copies the
+  walls it covers; a double- or triple-click leaves them out. `internal/ui/rostersection.go`, `decisions.md`
+  (2026-11-19).
 - **Over the right sidebar the wheel scrolls the roster** (owner's 2026-11-06 ask), only one taller than
   its column; one that fits takes no wheel. An item a notch (an agent with its gap and team header, so a
   header never parts from its member), held where the wheel left it: the selection never moves, and one
@@ -378,11 +401,37 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   than carrying on into the transcript (one `case` in `Composer.Wheel`); a draft the box shows whole, and a
   card's page scrolled or cut, keep the old wheel. The mouse reads every box through the frame's own
   lay-out (`Room`/`DM.laidOut`).
-- **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
+- **Drag selects, release copies**, on every surface but one: transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`) — the `/workflows` view included, where the press still moves its cursor. Every
   keystroke clears the highlight *and* does its job; width change clears, height doesn't; a click
-  copies nothing. Roster click targets are resolved at press.
+  copies nothing. **The exception is a sidebar agent's own row** (owner's 2026-11-19 ruling): a press on it
+  takes no selection, because that drag moves the agent (below), so an agent's name cannot be copied by
+  dragging or double-clicking it; the headers, the usage bar, the friend and blank sidebar cells still select.
+  Roster click targets are resolved at press.
+- **A sidebar agent row opens in a new column and can be dragged out** (owner's 2026-11-19 ruling,
+  `decisions.md`): a click adds a column at the grid's right end, next to the sidebar, whatever pane holds the
+  keys (`openInNewPane`, the one placement function) - **unless the window carries one column**
+  (`Layout.Capacity`, the count `Regions` itself draws, asked at the click so a resize is read next time): then
+  it replaces the pane on screen as opening a conversation does (`openDMWith`; from the room, the column beside
+  it) and nothing piles up off screen (owner's 2026-11-20 revision). An agent already on screen is only focused. A team
+  header still picks the channel, and a workflow or dispatch row opens its agent here as before. A press
+  arms a drag; motion past `dragSlop` (2 cells) makes it live, and release drops it: on the bottom half of a
+  pane Grid.OpenBelow's rules allow (`CanOpenBelow`, one split per column, the room included) it opens below
+  that pane, anywhere else in a new column, and an agent already on screen is focused, never moved. Esc,
+  any other key, a resize, a button-less motion (what a terminal reports after a lost release) or letting go
+  anywhere in the sidebar's column, the strip under it included, cancels, and esc is nothing else (it must
+  not interrupt the pane holding the keys; an esc the pump hands over with the next mouse report reads as
+  alt+esc and runes, and that report is not typed). It is drawn at the pointer as a tag in the agent's hue
+  with the zone outlined where the agent will be drawn, laid over the frame like a screen selection: the outline
+  is built when the zone changes (the drop recomputes it, so a layout that changes mid-drag only leaves the
+  drawing stale), nothing re-lays out until the drop, and a frame with no live drag is untouched. A **Shift-click**
+  opens below the focused pane as `⌃B` does; Wake asks the terminal to deliver one with XTSHIFTESCAPE
+  (`CSI > 1 s`, in the title stack's push) and gives it back (`CSI > 0 s`) on the ordinary exit, the
+  emergency exit and around a hand-over - not after a SIGKILL or a panic Bubble Tea does not recover, as with
+  the mouse modes and the title stack - which costs a Shift-drag native selection in the terminals that hold
+  Shift back. Ten clicks make ten columns in a window that carries more than one: nothing caps them and the window slides. `internal/ui/agentdrag.go`,
+  `agentdragdraw.go`, `cmd/wake/shiftescape.go`.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
   transcript row is the top edge (a pane can start on the window's first row) unless the drag has
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
@@ -505,9 +554,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
   threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
-  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`). **The
+  daemon's resume line (`core.NoticeAutoResumed`) has no addressee and is no broadcast**: it is its own agent's
+  thread's, so a narrowed room or a channel draws only its members' (`focusAdmits`).
 - **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
-  room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
+  room's base, titled with the team, until the pinned `all` (at the sidebar's top, the default) or another
   team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
   members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
   narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
@@ -515,6 +566,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the channel it was typed in** (`Room.typedIn`; a room bang keeps its dispatch channel), and one aimed
   outside it says `@who is outside the <team> channel: replies show under all`, a timed notice; the replies
   stay their own thread's, and a restore keeps the channel's own rule (owner, 2026-11-03).
+- **The room folds an agent's repeated resumes** (owner's 2026-11-18 ask): a `↻ … resumed after …` line for an
+  agent whose run is open - nothing else in its thread since, bar a turn-end marker the API failed - is not drawn;
+  the run's first line is redrawn in place as `×N` (`Room.counts`, by line id: `roomLine` takes no field, its copies
+  are budgeted). A turn that ends successfully ends the run; a restore folds bare repeats, having no failure evidence; a
+  conversation still draws every resume. `internal/ui/roomresumefold.go`, `decisions.md` (2026-11-18).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
@@ -539,8 +595,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   so its answer is the DM's or the room's as a typed message's is, live and on a restore. Addressed at
   dispatch; an ended or parked agent gets nothing and a notice says so. In the room `@who !cmd` and `@manager
   !cmd` run in that agent's `Cwd` and reach it (a parked one runs and says so), `@team`/`@all` are refused, a
-  bare `!cmd` reaches nobody; the room draws it as what was said, `@who !cmd` and its output. The record reads back off
-  disk as the same echoed block. `bangapp.go`, `decisions.md` (2026-10-25).
+  bare `!cmd` reaches nobody; the room draws it as `@who !cmd` on the operator's own row with what it printed folded
+  under it (three rows and a pointer, `⌃E` or a click opens; `… exited N` stays drawn; owner's 2026-11-18 ask), and a reopened
+  room draws a room-aimed one the same way (`roombang.go`). The record reads back off disk as the same echoed block. `bangapp.go`, `decisions.md` (2026-10-25).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
   typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
@@ -657,8 +714,9 @@ yet says so in bold.**
 | What | Where |
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · `fleets.go` (`--fleet`, `wake fleets`) · `fleetend.go` (what a stop's removal came to) · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
-| Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
+| Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads, and `focusLast`; `pipequeue_unix.go`/`_other.go`) · `handover.go` · `shiftescape.go` (Shift-clicks asked for, and given back on every way out) |
+| Window focus (blur hides the caret and accent) | `internal/ui/windowfocus.go` · `Composer.windowBlurred` (`composer.go`) · `composersFocused` (`panes.go`) · `ResumePicker.windowBlurred` · tests `internal/ui/windowfocus_test.go`, `cmd/wake/focusreport_unix_test.go`, `focuslastprop_unix_test.go` (50,000 random reads), `focuspaste_unix_test.go`, pty `cmd/wake/focusscreen_unix_test.go` |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records, a skill call's record read back as typed; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
@@ -668,21 +726,21 @@ yet says so in bold.**
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` · `window.go` (the window's margins around the frame) |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty test `cmd/wake/draftwheelscreen_unix_test.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `agentdrag.go` (a sidebar agent's click, drag, drop zones and Shift-click) · `agentdragdraw.go` (the tag and the outline) · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty tests `cmd/wake/draftwheelscreen_unix_test.go`, `sidebardragscreen_unix_test.go`, `shiftescapescreen_unix_test.go` |
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) · `roomresumefold.go` (an agent's repeated resumes, folded) · `roomlinemoves.go` (where each line's rows sit, and how a rebuild moves them) · pty test `cmd/wake/roomresumefoldscreen_unix_test.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `previewrows.go` (the answer's rows under the transcript's last line) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) · `turnoutcome.go` (how the last turn ended: `notDone`, the failed bit) |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rosterscroll.go` (the window, the wheel over the sidebar; pty test `cmd/wake/sidebarwheelscreen_unix_test.go`) · `rostersubs.go` · `tasktree.go` (running dispatches as a tree) · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionwindow.go` (the window, its rows, the key line) · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty tests `cmd/wake/atmenuscreen_unix_test.go`, `completionscrollscreen_unix_test.go` (the window) · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
-| `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` (dispatch, `@who !cmd`, delivery) · `bangproc_unix.go` · the record `core.EncodeShellRun`/`Session.SendShell`, read back by `localreply.go`'s `shellRecord` · the block `internal/core/fence.go` · findings `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md` |
+| `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` (dispatch, `@who !cmd`, delivery) · `roombang.go` (the room's line: message, folded output, read-back; pty test `cmd/wake/roombangscreen_unix_test.go`) · `bangproc_unix.go` · the record `core.EncodeShellRun`/`Session.SendShell`, read back by `localreply.go`'s `shellRecord` · the block `internal/core/fence.go` · findings `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |

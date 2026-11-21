@@ -95,6 +95,7 @@ type WorkflowView struct {
 	Armed    bool
 	Save     *saveDialog // the save dialog over the run level, nil while closed
 	Personal string      // where the daemon puts a personal-scope save, off its latest runs reply
+	blurred  bool        // the window lacks the keyboard, so the dialog draws no caret; set at draw time
 
 	// Settling is a /workflows view nothing has been pressed in yet. Until then
 	// its level follows the run count, because the runs on disk arrive after it

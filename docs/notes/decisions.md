@@ -8,6 +8,75 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
+
+The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again
+and again. They are real, separate `continue`s (`resumeOnLogin` resumes every stopped agent on each account flip,
+and the limit stops them again), so the daemon is untouched and only the room's drawing folds
+(`internal/ui/roomresumefold.go`).
+
+- **The rule, one pure step** (`resumeRuns.step`), run per change by `Room.appendLine` and over a restored batch by
+  `foldHist`, never per frame. An agent has one open run, opened by a resume. The next resume of the same kind
+  (limit vs connection) is **not a line of the room**: the head is redrawn in place as `↻ name resumed after the usage limit ×N`.
+  Any other line in that agent's thread (`focusAdmits`: its prose, an ask, a message to it, a broadcast) ends the
+  run, so a resume the agent answered is followed by a new line. Another agent's lines between never end it. Wake's own
+  room lines with no addressee (the `/login` panel, `/adopt`'s listing, a picker's echo, a bare `!cmd`) are drawn in every
+  thread, so they end every run: a resume after one is a new line below it. An answer the room never drew (a conversation
+  that is open holds its turn private) does not end it, and a restore agrees.
+- **A failed turn's `⤷ turn ended, nothing said` is part of the run** (live). The brief assumed the limited turn
+  leaves no other room line; it leaves that marker (the failed turn's `result` is a `KindTurnEnd`, `api-error-auth.jsonl`).
+  Only a marker the API failed is transparent: `appendLine` stamps it `noticeFailedTurn` from the fleet's per-agent
+  failed bit (#220), true exactly at a failed turn's end. The first marker after the head stays drawn, later ones fold
+  away. **The run follows how a turn ended, not whether it did work**: a turn that used a tool and then hit the limit
+  again is a resume that re-stopped and folds (the owner's spec: "a turn that ended on the limit or an unreachable
+  API"); a turn that **ended successfully** with nothing said has an unstamped marker, which ends the run and stays.
+- **Restore has no failure evidence.** The brief said the failed turn's `KindAPIError` is on disk; `decodeTranscript`
+  drops every `isApiErrorMessage` record, so a restored room holds bare back-to-back resumes and folds those. The one wrong
+  case: a restored resume whose turn did only tool calls and said nothing (invisible in the restored room) folds with the
+  next resume. Not recovered - it would mean changing the airlock decoder every history path shares. A restored run and the
+  live run after it are two lines (each part is folded from nothing).
+- **Cost.** A fold walks back from the transcript's end to its head (the distance from the tail, one `roomLine` copy per
+  step). The runs map is cloned per run change; in a capped room where every line opens or ends a run `Before` allocates
+  about 330 bytes an event more than the 6,138 it takes without resumes (the budget test's fixture holds none).
+- **The resume the agent answers is the last one its run counts.** The fold is decided when the resume is announced,
+  before its turn's outcome exists, so `R ×4` can end in a resume that worked; the answer then ends the run.
+- **No per-line state.** `roomLine` is copied through every history merge and `room_retention_test.go` budgets
+  `Before`'s bytes per event at 6,144 against a measured 6,138 - a new field on `roomLine` (even a bool) fails it. So the
+  count is `Room.counts`, by the head's line id (a head that counts, nothing else), and a folded line is dropped, not kept
+  hidden: it costs no row, no retention slot, no `/clear` reminder tick. The failed bit rides the marker's own event
+  as a UI-defined notice (as `noticeTakenBack` does).
+- **Nothing a reader holds moves.** A resume is one muted line however wide the pane, so the head's row is rewritten at
+  its own height (`transcript.rewritten`): no `lineMoves`, no scroll or selection to translate. The room has no last-read
+  markers (the DM's `lastread.go`); its anchors are the scroll offset and the selection, both row indices. The count is
+  drawn last and the words are cut first, so a narrow pane keeps the figure. A head a focus hides takes the count and shows
+  it when drawn; a head retention reclaimed leaves nothing to fold into, so the next resume heads a new line.
+- **The conversation still draws every resume.** Each `continue` is a message the model read and the DM is the
+  record at Claude Code's fidelity; its event marks, retention and rewind targets anchor to events, and the screenful
+  was the fleet's, not one thread's. `deferred.md` keeps it.
+
+---
+
+## 2026-11-18 — the update cue follows newer releases; only the strip's marker moves forward, the cache mirrors GitHub
+
+A room left open named the first newer release it heard of for as long as it ran (`deferred.md`'s gap, now
+built): the hourly keystroke ask continues after a release is known, and a strictly newer answer replaces the
+strip's marker. A failed, equal or older answer leaves it (`ui.dueUpdateCheck`). The marker never clears
+in-process: the build's version is compiled in, and `wake upgrade` replaces the binary on disk, not the window.
+
+- **The cache does not move forward only** (wake-orch, 2026-11-18, after two reviews). A guard that never wrote an
+  older release over a newer one was built and dropped: a release pulled or rolled back (cache v0.1.17, GitHub's
+  latest back to v0.1.16) stayed named by every window and its daily notice, while `wake upgrade`, which asks
+  GitHub live, said v0.1.16 was the latest; only deleting `~/.wake/update-check.json` ended it, and a mistagged
+  v1.0.0 would hide every real release under it. Probed over 30 days: 30 notices with the guard, 0 without, where
+  the cache reset at the first daily ask. The guard's gain was a stale edge's older answer hiding the marker from a
+  new window for at most a day, and an open room already keeps its marker. `TestThePulledReleaseIsForgottenAtTheNextDailyAsk`
+  pins it.
+- **Accepted:** a window left open and typed in repeats the once-a-day notice (the shared `Notified`), where it was
+  once per process; and a failing release host (offline, a 5xx) is retried on the hourly key by a room that knows a
+  release too, as one that knew none always did (10 s timeout, off the draw goroutine).
+
+---
+
 ## 2026-11-12 — the completion menu walks every offer: a window over the matches, sized to its pane, moved the least distance
 
 The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant
@@ -5507,7 +5576,7 @@ still runs in the UI, where the operator is, and only its result now travels.
   written, so a lost `started` costs nothing. A room restore reads it
   the same way: a bang's record (`Event.Shell`) opens the turn claude answers it with, the room's only when the
   stamp is a room send - never by text, since two conversations running one command print one block at one
-  moment - and is never drawn. Without it, a DM bang after a broadcast left the broadcast's turn open and
+  moment - and is drawn only when the room aimed it (2026-11-18 below). Without it, a DM bang after a broadcast left the broadcast's turn open and
   restored the private answer into the room.
 - **A turn, as Claude Code's is - the owner's pick (2026-10-25) of two.** 2.1.310's interactive `!` starts a
   model turn every time, in auto and default mode alike, which older builds did not. The alternative
@@ -5549,7 +5618,7 @@ still runs in the UI, where the operator is, and only its result now travels.
   each way, open=1 22.2→21.5ms, open=30 24.9→24.1ms, glamour 72.7→73.2ms - noise.
 - **Left out** (`deferred.md`): a bang behind a busy turn is not in the window's queue, so `↑` cannot take it
   back, a `⌃]` behind one ends the turn instead of backgrounding its work, and an `esc` leaves it for claude to
-  run after; the room's own bang line is still not restored after a room restore.
+  run after; the room's own bang line is still not restored after a room restore (closed by 2026-11-18, below).
 - **Held by** core's `shellrun_test.go` (the recorded records, Wake's stamped line against
   `testdata/input/shell-run.stdin.jsonl`, the round trip with the tags quoted in either half, pasted tags, and
   `shell-run.jsonl` started, answered with a turn and not replayed), the daemon's `shellrun_test.go` (the line
@@ -6313,3 +6382,241 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
   than 2.1.319 killed that work and may have sent no ending, leaving its row until the agent ends.
 - Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
   `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).
+
+## 2026-11-18 — a room bang's output folds under its message (the owner, via wake-orch)
+
+The owner's words: when you run a command in the main room, "it should print the output (by default
+minimized) in the main room as well under the message that sent it like it does in the dms." The room
+already drew `@who !cmd` and what it printed, but as one shaded line: the command and its output ran
+together, whatever the length (up to `bangMaxBytes`), and a reopened room drew nothing of a bang.
+
+- **Two parts, one line of text.** The message is the operator's own shaded row (`youSaid`); what it
+  printed is the peer fold's Muted body (`foldRows`, `peerFoldRows` = 3 rows, then `⤷ +N lines · ⌃E or
+  click to expand`). `⌃E` opens every fold, a click one, through the room's existing line-id set; no
+  second fold. A bang's room line stays `@who !cmd\noutput` (`bangLine`), so the split is its first row -
+  a command of several rows folds its later rows with the output. `internal/ui/roombang.go`.
+- **How it ended is never folded away.** Every row Wake appends under an output opens with
+  `bangNoteLead` (`… exited 1`, `… timed out`, `… truncated`), and the trailing run of them is drawn under
+  the pointer. Read off the text, so a reopened room keeps it; a command whose last row begins `… ` gets
+  that row shown too, which costs nothing.
+- **A reopened room draws a room-aimed bang** (it used to read the record only to open the turn its answer
+  belongs to). `core.Unfence` undoes the block `Fenced` made, so a live line and a restored one are the same
+  text and draw alike; a fork's copy of the record is drawn once (`forkCopies`), and a window that already
+  drew the bang live never asks for that session's history (`askRoomHistory`). **Restore cannot show**: a
+  bare room `!cmd` (it reaches no agent, so no transcript holds it), a bang whose agent had ended or was
+  parked (nothing was written), and a bang typed in a conversation, which stays that conversation's.
+- **A copy rejoins what the pane wrapped**, as the old one-line block did (`typedLeadRows`: `typedRows`' match,
+  kept as far as the text goes, so a fold's pointer ends it and the message above it still pastes back as the
+  one line it was). The output keeps its first row's indent (`bangBody`), which `crossSessionBody`'s trim lost.
+  At most `bangNoteMax` rows (what `bangRun` can leave: the cut, how it ended, the group reclaim) count as
+  notes, so output that opens its rows with `… ` still folds.
+- **No live echo to other windows**, as for any room send: a second window of the fleet sees the bang when
+  it reopens, as it sees a typed message. The conversation draws the block whole, as before.
+- **`@team` and `@all` stay refused** (a bang has one directory), the draft kept, before anything runs.
+- Held by `internal/ui/roombang_test.go`, `bangprivacy_test.go` and `cmd/wake/roombangscreen_unix_test.go`.
+
+## 2026-11-14 — a message that opens with a /command is your own turn, the word in Claude's skill colour (the owner, via wake-orch)
+
+The owner's report, with a screenshot: a message opening `/init-orch you are responsible for …` was drawn as one
+orange `⌘` row cut with "…". "When I use a skill in a message it should just be purple / the skill colour and the
+message should send normally." It always did send normally (a skill is claude's, and passes to the agent byte for
+byte); only the drawing was wrong, and it lost the argument.
+
+- **Every `/name` turn is an ordinary turn.** The conversation's `› you` head and shaded body, the room's shaded
+  line, wrapped as prose is and never cut. Only the command word is tinted, in `Skill` (`skill` in
+  `claude-palette.json`, held by `palette_test`), by `colourLead` in `chat_blocks.go` - the place the room already
+  tinted a leading `@handle`, extended rather than paralleled. A name must be a command's (`commandWord`): a path,
+  `/foo.md`, `//x` and `/123go` are words.
+- **The tint changes the foreground only.** A span carrying a background reads to lipgloss's wrap as a visible
+  blank, so it will not break at the spaces inside it and the first line split mid-word (`/init-` over
+  `orch you are …`); the turn's own style supplies the ground. `TestATintedTurnWrapsExactlyAsPlainTextDoes` holds the
+  turn to plain `shadedOwn`'s wrap at every width, which a comparison with the whitespace squashed cannot see.
+  The room's `@handle` line had the same split before this and no longer does.
+- **What a leading `@word` means is the surface's** (`leadMention`). The room tints a handle and the word behind it
+  (`@who /skill args`). A conversation's own turn routes nothing, so its `@word` is text: only a `/command`
+  opening the message is a skill call. A message the room routed there had its handle taken off before it was
+  sent, so the word behind the handle is the call, and the handle stays plain. A word is looked for behind a
+  handle only past whitespace: `@internal/ui` is one path. A handle is a name or a team as the router reads it
+  (`@deploy_bot`, `@2026q4`), the `/` the one character it never takes. The room tints by shape, as it tints the handle: an
+  `@x /foo` naming no live agent goes to the manager as typed and is still tinted (deferred).
+- **A reopened conversation draws a skill call as the live one.** Claude records it as its name twice and then the
+  arguments, `<command-message>…<command-name>/name</command-name>…<command-args>…`, which drew as raw tags; the
+  airlock reads it back as `/name args` (`unwrapSkillCall`, `localreply.go`; `testdata/stream/loop-self-paced-end.jsonl`,
+  `workflow-saved-command.jsonl`), only a whole record of string content: a record's tags inside an array block are
+  text. A built-in's record is still dropped whole on restore (`deferred.md`).
+- **The orange `⌘` row is gone, not kept for Wake's commands.** A typed Wake command is claimed before anything is
+  sent (`slash`, `roomCommand`, `mentionCommand`, asked by `submit` for both surfaces), so `/board`, `/wake-help`,
+  `/status` open their view and leave nothing in a transcript: there was nothing for the row to draw.
+  `/effort` and `/model` with an argument, `/compact`, `/context` and a conversation's `/clear` are claude's and read
+  as the turn they are. The one turn a Wake menu writes is the effort and model picker's `/effort high`, claude's
+  command with its argument, sent and drawn as a typed one is. `TestEveryWakeCommandIsClaimedBeforeAnythingIsSent`
+  holds the premise (that `slash` claims every one, and that a conversation's transcript gains no turn). Whether
+  Wake's commands should leave an orange line is new behaviour, left to the owner.
+- Rendering and decoding only. What reaches claude (2.1.322) is unchanged; no routing file is touched.
+- Held by `internal/ui/skillecho_test.go` and `internal/core/skillcall_test.go`.
+
+## 2026-11-18 — a blurred window draws no caret and no focus colour (the owner, via wake-orch)
+
+The ask: "when I am clicked off the Wake session, i.e. a different terminal window, can the cursor and the
+colour around the query bar go away?" The terminal says so (DECSET 1004), Bubble Tea delivers `BlurMsg` and
+`FocusMsg` once `tea.WithReportFocus` asks, and a terminal that never reports is a window that is focused.
+
+- **The caret was already bubbles'.** `cursor.Update` blurs on `BlurMsg` (hidden, no re-arm: the tick in flight
+  is dropped) and focuses on `FocusMsg` (shown, blink restarted), and `update`'s fall-through already hands
+  every unclaimed message to the focused composer. So the caret needed no Wake code, only the messages;
+  `windowfocus_test.go` pins it, since a bubbles upgrade is what could change it.
+- **The border is Wake's.** `Composer.windowBlurred` joins `blurred` in `boxStyle`, the one predicate, set for
+  every composer in `composersFocused` (the loop `withFocus` already ran). The resume picker's search box is
+  the other accent-bordered input, and the `/workflows` save dialog draws its own caret (a reverse-video
+  cell): both take the flag at draw time. `Refocus` does nothing in a blurred window: a pane that takes the
+  keys behind it (a fork arriving, a click) must not light up.
+- **A typed key heals a missed report; a wheel or a paste does not.** A typed key cannot come from an
+  unfocused window, and a window left dark for good is worse than one lit a moment too long. A terminal
+  delivers the wheel over a window without focus, and a paste can arrive in one (a drop on a background
+  window, tmux's `paste-buffer`), so neither proves it.
+- **Bubble Tea drops a report that shares a read with other bytes.** `detectReportFocus` compares the
+  remainder of the read whole, so `ESC [ O` followed by a mouse report is dropped, silently and without keys
+  (measured: every case with a neighbour lost it). A click that focuses a window sends the report and the
+  press together, so `alignedPipe.Read` moves the last report to the end of the read (`focusLast`; of several
+  the last is the state) - **only when the rest of the read is mouse reports.** The first version reordered
+  whatever shared the read, and the adversarial review found what that breaks: a paste whose end marker lands
+  in a later read took the report into its text, and Bubble Tea's own `ESC [ O A` (Shift+Up in the DECCKM
+  form) became the rune A and a blur. Anything else is left as it was, and the report is dropped as before.
+  How often a real terminal glues the two was not measured: none was available. **A paste spanning reads is
+  tracked** (`alignedPipe.pasting`, `pasteOpen`): the second review found that a paste whose body is nothing but
+  report-shaped bytes had its middle read reordered, since `focusLast` sees one chunk and cannot know a paste is
+  open. While one is open every byte is the paste's and `focusLast` does not run. That state is lost if the
+  chunk holding an end marker is dropped (the pump drops a whole read when the forward queue is full): reordering
+  then stays off until the next paste's markers, which is today's behaviour, the report dropped.
+- **Known, and Bubble Tea's.** An Escape keypress and a report in one read decode as alt+esc and `[O` with or
+  without `focusLast`; a report split right after its ESC across two reads (SSH, tmux) arrives as an Escape
+  and `[O`, and disarms ⌃C⌃C - the lone-ESC residual `chunker.step` documents for mouse reports.
+- **The kill switch ignores reports for ⌃C⌃C.** They are the terminal's, not the operator's; a mouse report
+  still disarms, as any input does. The emergency restore writes `?1004l`, or a wedged exit leaves the shell
+  sent a report on every window switch.
+- **A hand-over needs no code of its own.** Bubble Tea's release turns reporting off before the child runs and
+  its restore turns it on after; `TestTheHandOverSwitchesFocusReportingOffForTheChildAndBackOn` pins Bubble
+  Tea's order (it reads what Bubble Tea writes, not the tty the child is handed). The hand-over starts from a
+  key (`↵` or a digit in the `/mcp` menu), which has already healed a window thought blurred, so there is no
+  reset on its return; a terminal does not say what it holds when reporting is switched back on, and a sign-in
+  that opens a browser may well return to a blurred window, which costs today's behaviour until the next report.
+- **Not done:** the real terminals. Only a pty and vt10x ran; cmux, Terminal.app, iTerm2, Ghostty and tmux
+  (`focus-events on`) are `live-testing.md`'s checklist. Held by `windowfocus_test.go`,
+  `cmd/wake/focusreport_unix_test.go` and `focusscreen_unix_test.go`.
+
+## 2026-11-19 — the sidebar's sections are boxes
+
+The owner picked variant C of wake-orch's mockups (a team drawn as a box, `│` walls and a closing row), for the
+right sidebar only; `/board`'s team dividers stay `──── name ────` (`teamHeaderLine`).
+
+- **A section is a box**: the header is its top edge (`╭── name ──╮`, one row, through `titledEdge`), members stand
+  between `│ ` and ` │`, and a `╰──╯` row closes under the last. The agents above the first team are a box too, under
+  the pinned `all`, whose row stays the one-row top edge (`allRows` is unchanged). The blank row between sections stays.
+- **The closing row rides on the section's last item**, as the header and the gap ride on its first
+  (`rosterItem.footer`, `trail`). The window still cuts between items, so `heights`, `grow`, `lastTop`, `window`, the
+  wheel and the seam read `rowsForRow` and needed no change; `At` skips the closing row (no one's, like the gap) and
+  counts the subagent rows above it. The last window ends on a closing row.
+- **A cut box runs on**: a window that starts or ends inside a team draws walls with no edge on that side, and the
+  count row stays one full-width row outside every box. The pinned `all` edge is sticky: scrolled over a team's
+  walls it still names the channel a click picks.
+- **Rows have the column less four** (`boxInset` each side), 19 at the default 23. `headLine` keeps its budget, now
+  at 19: a name is cut at the wall (a hard cut, no ellipsis, as before) and the unread badge is kept; the goal, loop
+  and token figures are dropped whole sooner (a working agent's `↓ 550` fits a name of eleven columns, not twelve),
+  and a nested subagent's figure goes first. **A workflow's done/started count** needs a name of nine columns or
+  fewer, a subagent type such as `code-reviewer` loses its token figure, and a tool argument has 17 columns after
+  its indent, so a long one is cut with an ellipsis sooner (`Read(internal…)`, `Grep(parseFra…)`). **The nesting cap `maxSubDepth` (2) was
+  derived from `general-purpose` fitting whole at depth 2 in 23 columns; in 19 only the top level fits it whole**,
+  so a nested one is cut at the wall (`general-purpo`); the cap is now a bound on the indent, pinned from below by
+  the recorded nest. A team name up to 15 columns shows whole in its edge (17 before).
+- **State is the channel's**: the edge, walls and closing row are the accent while the channel is picked and muted
+  otherwise (`channelStyles`); the cursor on a header brightens and bolds the name only.
+- **Accepted edge cases** (owner, via wake-orch): a roster that opens on a team has `all`'s top edge directly above
+  that team's; and a drag copies the walls it covers (a double- or triple-click does not: box-drawing runes are gaps).
+- Held by `internal/ui/rosterbox_test.go`, `cmd/wake/boxscreen_unix_test.go`.
+
+## 2026-11-19 — a sidebar click opens a new column, and an agent can be dragged out to place it (the owner, via wake-orch)
+
+The owner runs 40-50 agents and `⇧↑↓` through the sidebar takes too long: "a click and a drag should get any agent
+onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `sidebarclick_test.go`,
+`agentdragdraw_test.go` and `cmd/wake/sidebardragscreen_unix_test.go`:
+
+- **A click on an agent row opens a new column at the grid's right end**, next to the sidebar, whichever pane
+  holds the keys - not "here" (the focused pane) as before. `openInNewPane` is the one placement
+  (`Grid.OpenRight` after the last column), so the click and a drop that is not below a pane share it. *(A window
+  that carries one column does not add one: see 2026-11-20 below.)* With four or more columns at width the window
+  slides and the room goes off screen, kept in the grid. **Nothing caps the columns in a window that carries more
+  than one**: ten clicks make ten (`TestTenClicksLeaveTenColumnsAndNothingCapsThem`); the owner is to decide
+  whether they want a cap, and none was built. An agent already on screen is focused,
+  never opened twice. A team header still picks its channel; a workflow or dispatch row opens its agent here.
+- **A press on an agent row arms a drag; it selects nothing.** Motion of two cells (`dragSlop`) makes it live;
+  letting go before that is a click. The target is the press-time agent (the roster re-ranks on every report), and
+  an agent the fleet no longer holds opens nothing. **The cost is the sidebar's drag-to-copy on an agent's row:**
+  an agent's name can no longer be copied by dragging or double-clicking it. Headers, the usage bar, the friend
+  and blank sidebar cells keep it (a wider cut was offered and not taken).
+- **Drop zones** (`dropZoneFor`, a pure function of the layout): over the sidebar's rows, nothing (letting go
+  cancels); an agent already on screen, its pane focused - a drag never moves one; the bottom half of a pane
+  `Grid.CanOpenBelow` allows and a column tall enough to split (`SplitRowsIn`), below that pane - in a split
+  column that takes the lower slot, `Grid.OpenBelow`'s own rule, and the displaced conversation keeps its
+  transcript off screen; anywhere else, a new column. The bottom half of a lower pane is a new column, since
+  nothing sits under the bottom of a column.
+- **Esc, any other key, a resize, a button-less motion and a drop on the sidebar's column cancel.** The column
+  counts at every row, the awareness strip under it included. A button-less motion is what a terminal reports
+  after a release that never arrived; one that reports none leaves the tag and outline drawn until the next key
+  or press. Esc is consumed: it must not also interrupt the agent in the pane holding the keys. Any other key
+  ends the drag and does its own job, as a keystroke clears a highlight. **An esc pressed while reports are
+  arriving can reach Bubble Tea in one read with the next report** (`\x1b\x1b[<32;61;6M`), which decodes as
+  alt+esc and the runes `[<32;61;6M`; the kill switch's pipe cannot split them (Bubble Tea's reader waits on
+  the descriptor, so a held remainder would never be read), so after an alt+esc that ended a drag one
+  report-shaped key is dropped (`strayReport`).
+- **It is drawn as a tag and an outline laid over the assembled frame**, the screen selection's mechanism
+  (`overlayAgentDrag`): the agent's name in its hue at the pointer, and the zone's box where the agent will be -
+  a new column's own share once it holds the keys (the whole pane area in a window too narrow to sit beside
+  another), a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
+  changes (a layout that changes mid-drag - a spawn, a `/quit` closing a pane - leaves the drawing stale until
+  the zone does; the drop recomputes it), and the box is where the pane lands to the cell, held by
+  `TestAnOutlineIsExactlyWhereTheAgentLands` at five widths with up to five columns open. Only the splice is
+  per motion, exact over wide characters (about 185 µs against the 245-280 µs a two-pane `View` already costs,
+  `BenchmarkLiveDragOverlay`), and a frame with no live drag is returned as it came. Nothing re-lays out until
+  the drop, as with a divider drag.
+- **A Shift-click opens below the focused pane, as `⌃B` does** (its refusal too, `noRowBelow`, with the cursor
+  left where it was). Bubble Tea 1.3.10's `MouseMsg` carries Shift, but Ghostty and cmux (and Kitty) hold a
+  Shift-click back for their own selection unless the program sends XTSHIFTESCAPE, `CSI > 1 s`. Wake sends it
+  in the write that pushes the title stack and sends `CSI > 0 s` with the pop (`handBack`), in the emergency
+  exit (`restoreTerminal`) and around a hand-over, since the setting outlives the program. A SIGKILL, or a panic
+  in a goroutine of Wake's own that Bubble Tea does not recover, leaves it set, as it leaves the mouse modes and
+  the title stack. **The terminal
+  cannot be asked for its setting first, so "given back" is the terminal's default** - a terminal configured to
+  capture Shift always is left releasing it until it is told otherwise. **The trade:** while Wake is open, a
+  Shift-drag in those terminals no longer starts the terminal's own selection (`live-testing.md` §4 named it the
+  escape hatch); Wake selects and copies everywhere itself. A Shift held through a drag changes nothing, and
+  Shift on an agent already on screen only focuses it. Which terminals deliver a Shift-click (cmux, Ghostty,
+  Terminal.app, iTerm2, tmux) is a hand check, `live-testing.md` §4.
+
+## 2026-11-20 — in a window that carries one column a sidebar click replaces the pane on screen (the owner, via wake-orch)
+
+Revising 2026-11-19, the owner's words: "if the pane is small to only fit one window, when the user clicks on an
+agent in the right sidebar, it replaces the window currently open on the screen, like it does when there's only
+space for one chat rn." A new column in a one-column window was drawn alone and slid the others off screen, so
+every click piled another column up behind it.
+
+- **`openInNewPane` asks the layout.** `Layout.Capacity()` is how many columns the window can draw, and it is
+  `Regions`' own count, not a copy of it: `Regions` draws `min(Capacity, columns)`, so the line cannot drift from
+  what is drawn (`TestCapacityIsHowManyColumnsRegionsDraws`, at every width 40-320 with every sidebar choice and
+  one to twelve columns). It is one below the takeover width, and at it (roster shown) three. With a capacity of
+  one the click is `openDMWith`'s: it replaces the focused pane, and from the room it takes the column beside
+  it, since the room is never replaced - the group chat is drawn no more, and `⇥` brings it back. Otherwise a new
+  rightmost column, as before; the wide-window slide stays, with no cap. It is read at the click from the layout as
+  it then is, so a resize is picked up the next time and nothing is cached or computed per frame.
+- **A drag's new-column drop in a one-column window replaces the shown pane**, the same function. Its outline is
+  the pane it replaces - half a column when that pane is half of a split one. **Every outline is the pane in the grid
+  the drop would produce** (`zoneRect` applies the drop's own grid operation - `Grid.OpenEnd`, `App.here`,
+  `OpenBelow` - and reads `paneRect`), so it is where the agent lands by construction; found by probing the
+  revision, since a split column beside a one-column window had the outline cover the whole area while the agent
+  landed in half of it (`TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces`). **A drop below is unchanged** and the grid
+  allows it there: the drawn column splits and holds two panes, so a below drop adds no column and leaves nothing
+  off screen (`TestABelowDropInASingleColumnLayoutStillSplitsTheShownColumn`).
+- Held by `TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne`, `...FromAConversation...ReplacesIt`,
+  `...FromTheRoomWithAConversationOpenTakesItsColumn`, `TestTenClicksInASingleColumnLayoutLeaveOneConversationColumn`
+  and `TestTheSingleColumnLineIsTheLayoutsCapacity` (a window one column short of the takeover width replaces, one at
+  it adds). `fits`' floor of one is the invariant "a window carries a pane"; the constants keep it out of reach, so
+  a mutation of it is equivalent and `TestCapacityIsHowManyColumnsRegionsDraws` pins the invariant instead.

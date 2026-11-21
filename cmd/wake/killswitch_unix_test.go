@@ -240,7 +240,9 @@ func TestTheEmergencyRestorePutsTheTerminalBack(t *testing.T) {
 	case out := <-seen:
 		// The title stack pop is converseModel's on an ordinary exit; this exit
 		// skips that path, so it writes its own, after the alt screen is left.
-		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?25h", "\x1b[?1049l\x1b[23;0t"} {
+		// And focus reporting off: left on, the shell is sent `^[[I` and `^[[O` on every
+		// window switch after Wake is gone.
+		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?1004l", "\x1b[?25h", "\x1b[?1049l\x1b[23;0t" + shiftEscapeOff} {
 			if !strings.Contains(out, want) {
 				t.Errorf("the restore did not write %q; it wrote %q", want, out)
 			}
@@ -388,9 +390,10 @@ func TestThereIsNoKillSwitchWithoutATerminal(t *testing.T) {
 // decodedModel is what a real Bubble Tea decoded off the kill switch's Input,
 // and it quits once until says it has seen enough.
 type decodedModel struct {
-	until func(decodedModel) bool
-	mice  int
-	keys  []string
+	until       func(decodedModel) bool
+	mice        int
+	keys        []string
+	focus, blur int // the terminal's focus reports, as Bubble Tea names them
 }
 
 func (decodedModel) Init() tea.Cmd { return nil }
@@ -399,6 +402,10 @@ func (d decodedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseMsg:
 		d.mice++
+	case tea.FocusMsg:
+		d.focus++
+	case tea.BlurMsg:
+		d.blur++
 	case tea.KeyMsg:
 		d.keys = append(slices.Clone(d.keys), msg.String())
 	}

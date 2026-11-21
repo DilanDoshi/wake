@@ -226,6 +226,7 @@ func everyClickLandsOnTheRowDrawnThere(t *testing.T, a App) {
 	t.Helper()
 	rows := sidebarRows(a)
 	block := len(a.usageDrawn())
+	agentRows := 0
 	for y, row := range rows {
 		text := strings.TrimSpace(ansi.Strip(row))
 		spot, ok := a.clickedRow(y)
@@ -235,11 +236,15 @@ func everyClickLandsOnTheRowDrawnThere(t *testing.T, a App) {
 			if ok {
 				t.Errorf("a click on usage row %d (%q) opened %s", y, text, got.Name)
 			}
-		case strings.HasPrefix(text, "○ "):
-			if want := strings.TrimPrefix(text, "○ "); !ok || got.Name != want {
+		case strings.HasPrefix(inBox(text), "○ "):
+			agentRows++
+			if want := strings.TrimPrefix(inBox(text), "○ "); !ok || got.Name != want {
 				t.Errorf("a click on row %d, drawn as %q, opened %q", y, want, got.Name)
 			}
 		}
+	}
+	if agentRows == 0 {
+		t.Error("no agent row was drawn above the usage block, so no click on one was checked")
 	}
 }
 
@@ -257,7 +262,7 @@ func TestTheFirstReadingShortensTheRosterAndClicksFollow(t *testing.T) {
 	a := pick(newRoomApp(t).withSize(100, 24).withUsageReport(nil, names...), "s30")
 	bottom := -1
 	for y, row := range sidebarRows(a) {
-		if strings.HasPrefix(strings.TrimSpace(ansi.Strip(row)), "○ ") {
+		if strings.HasPrefix(inBox(ansi.Strip(row)), "○ ") {
 			bottom = y
 		}
 	}

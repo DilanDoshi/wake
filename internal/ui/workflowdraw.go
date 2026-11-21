@@ -92,6 +92,7 @@ func (a App) viewTitle(session, suffix string, width int) string {
 // it draws, as its composer's edge would, over the view itself.
 func (a App) workflowPane(width, height int) string {
 	v := a.workflow.view
+	v.blurred = a.windowBlurred
 	// v.Session is whose runs these are: the pane's own, or the one /workflows @who named.
 	head := a.viewTitle(v.Session, workflowTitleSuffix, width)
 	if height <= workflowTitleRows {
@@ -116,7 +117,7 @@ func (v WorkflowView) render(runs []workflowRunView, w, h int) string {
 		rows = v.listRows(runs, w, h)
 	}
 	if v.Save != nil {
-		rows = v.Save.over(rows, w, v.Personal)
+		rows = v.Save.over(rows, w, v.Personal, v.blurred)
 	}
 	return fitBlock(rows, w)
 }

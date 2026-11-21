@@ -445,6 +445,10 @@ var claudeWireVocabulary = wordSet([]string{
 	"<command-name>", "</command-args>",
 	"<local-command-caveat>", "</local-command-caveat>",
 
+	// The record a skill or custom command leaves, which unwrapSkillCall reads
+	// back as the command that was typed. Policed for the same reason.
+	"<command-message>", "</command-message>", "</command-name>", "<command-args>",
+
 	// The cross-session envelope a peer's message arrives wrapped in. Policed
 	// like the abort markers: the tag is the only thing identifying the frame,
 	// and a view matching on it would be reading Claude's wire format. The open
@@ -847,10 +851,13 @@ var notNamedByTheAirlock = map[string]string{
 // loop-self-paced-end.jsonl.
 // 258 → 259: a waiting subagent's whole summary (subagentWaiting), which keeps its
 // `completed` notification from ending it. subagent-waits-background.jsonl.
-// 259 → 261: "wakeupSource" and "turnOrigin", the on-disk marks of a turn claude
+// 259 → 263: a skill call's record, <command-message>, </command-message>,
+// </command-name> and <command-args>, which unwrapSkillCall reads back as the
+// command that was typed. loop-self-paced-end.jsonl, workflow-saved-command.jsonl.
+// 263 → 265: "wakeupSource" and "turnOrigin", the on-disk marks of a turn claude
 // started itself (a loop's wakeup), which DecodeTranscriptLine reads so that
 // record is never the operator's turn. loop-wakeup-turn.jsonl.
-const policedWordCount = 261
+const policedWordCount = 265
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -871,6 +878,8 @@ var notWireVocabulary = wordSet([]string{
 	"encode shell run", "%w: encode shell run: no command",
 	// The line break between a shell run's two streams.
 	"\n",
+	// What cannot be in a command's name (unwrapSkillCall).
+	" <",
 	"encode ", "encode mcp reconnect", "encode mcp toggle",
 	// account.go: where Claude's config file lives (named outside core too),
 	// the reset clause of a usage-limit message, and the parse of its date.
@@ -1261,6 +1270,10 @@ var embeddedMarkers = map[string]bool{
 	"</local-command-stdout>":  true,
 	"<command-name>":           true,
 	"</command-args>":          true,
+	"<command-message>":        true,
+	"</command-message>":       true,
+	"</command-name>":          true,
+	"<command-args>":           true,
 	"<local-command-caveat>":   true,
 	"</local-command-caveat>":  true,
 	"Current model:":           true,

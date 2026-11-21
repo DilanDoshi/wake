@@ -65,8 +65,8 @@ func (a App) screenSelectedText() string {
 	return selectedText(strings.Split(a.assembleFrame(), "\n"), 0, a.sel.marked(), nil)
 }
 
-// rosterHit is the roster row a press landed on, resolved at press time (see
-// mouse.go's press) and opened by screenClick on an empty release. Resolved at
+// rosterHit is the header or dispatch row a press landed on, resolved at press
+// time (see pressRoster) and acted on by screenClick on an empty release. Resolved at
 // press because the roster reorders by attention on every fleet report, so
 // resolving on release would open whatever agent slid onto that row in the
 // window between the two.
@@ -75,12 +75,32 @@ type rosterHit struct {
 	ok                         bool
 }
 
+// pressRoster is a press on the right sidebar. An agent's own row arms a drag and
+// takes no selection; any other row takes the frame-wide one so its text can be
+// copied, and a header or dispatch row resolves its click on release. The target
+// is resolved *now*, not then: the roster reorders by attention on every fleet
+// report, so a report between press and release would otherwise open whatever
+// agent slid onto the row. See screenClick.
+func (a App) pressRoster(x, y int) App {
+	if d, ok := a.dragSource(y); ok {
+		a.dragged = d
+		a.dragged.x0, a.dragged.y0 = x, y
+		return a.cleared()
+	}
+	a = a.startScreenSelection(x, y)
+	if spot, ok := a.clickedRow(y); ok {
+		a.rosterHit = rosterHit{id: spot.agent.ID, name: spot.agent.Name, dispatch: spot.dispatch, header: spot.header, ok: true}
+	}
+	return a
+}
+
 // screenClick does what a click - a press and release on one cell - means for
-// the chrome it landed on. Only the roster has one: it opens the row's
-// conversation, the same as a click there has always done, or picks the channel
-// a header row names. Every other surface has no click action, so a click on it
-// does nothing and leaves no highlight, exactly as a click in the transcript
-// that hits no folded tool does.
+// the chrome it landed on. Only the roster has one: a dispatch row opens its
+// agent here, as it always has, and a header row picks the channel it names (an
+// agent's own row is a drag source and opens in a new column: agentdrag.go).
+// Every other surface has no click action, so a click on it does nothing and
+// leaves no highlight, exactly as a click in the transcript that hits no folded
+// tool does.
 func (a App) screenClick() App {
 	h := a.rosterHit
 	if !h.ok {
