@@ -82,7 +82,7 @@ const (
 	// parkConfirmed is said when a fleet report first names the session as
 	// parked, and it is the only place the promise is made.
 	//
-	// The split is /fork's rule one key over, and CLAUDE.md states it: **the
+	// The split is the fork's rule, and CLAUDE.md states it: **the
 	// report is the confirmation and the keypress is not.** The daemon refuses
 	// a park for real reasons - a session already ended, one it does not hold -
 	// and the refusal arrives after the keypress, so a sentence promising

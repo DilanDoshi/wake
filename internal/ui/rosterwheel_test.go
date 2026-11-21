@@ -542,7 +542,7 @@ func TestHeadersUnderTheWheel(t *testing.T) {
 	// Nor does ⌃D or a bare /fork open or fork an agent in its place.
 	for name, press := range map[string]func(App) (tea.Model, tea.Cmd, bool){
 		"⌃D":    func(a App) (tea.Model, tea.Cmd, bool) { return a.key(tea.KeyMsg{Type: tea.KeyCtrlD}) },
-		"/fork": forkAsk,
+		"/fork": func(a App) (tea.Model, tea.Cmd, bool) { m, cmd := forkAsk(a); return m, cmd, true },
 	} {
 		m, cmd, _ := press(a)
 		if next := m.(App); next.focus != "" || len(writtenFrames(t, next, cmd)) > 0 {
@@ -631,7 +631,7 @@ func TestForkInAConversationWhoseRowTheWheelHid(t *testing.T) {
 	if agentRowY(a, "agent04") >= 0 {
 		t.Fatalf("agent04 is still drawn: %v", drawnAgents(a))
 	}
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	var forked []string
 	for _, f := range writtenFrames(t, m.(App), cmd) {
 		if f.Kind == rpc.FrameFork {

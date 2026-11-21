@@ -12,7 +12,7 @@ Nothing you say to one reaches the other.
 ```
 wake fork alex           # from the shell, a name from the pool
 wake fork alex backend   # a name you choose
-/fork                    # in the conversation with the keys
+/fork                    # in the conversation with the keys (in the room: the agent the sidebar has picked)
 /fork @alex              # from anywhere: that agent's conversation
 @alex /fork              # the same, aimed from the room
 ```
@@ -41,7 +41,7 @@ means, and both forks open.
 `/fork`. Anything the parent says afterwards never reaches the fork, and vice versa.
 
 **You can fork a running agent.** The parent survives being forked and its next turn works normally;
-its transcript is not touched. You can also fork an agent that has already ended, and you can fork a
+its transcript is not touched. You can also fork an agent that has already ended (`/fork` typed in its own conversation, or `wake fork` from the shell; `/fork @name` names a live or parked one), and you can fork a
 fork — the chain carries.
 
 **A fork runs in the same directory as its parent.** So two forks of an agent that is editing files

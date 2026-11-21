@@ -137,7 +137,7 @@ func TestWakeHelpWithAnArgumentOpensFiltered(t *testing.T) {
 	}
 }
 
-// Every key is the view's while it is up: none opens, arms, forks or reaches the
+// Every key is the view's while it is up: none opens, arms, jumps or reaches the
 // draft - the workflow view's own rule - and esc is the way out.
 func TestWakeHelpTakesEveryKeyWhileUp(t *testing.T) {
 	a, rec := helpRoom(t, 160, 40)

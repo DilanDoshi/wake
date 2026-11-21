@@ -2,7 +2,7 @@ package ui
 
 // Branching a conversation from inside it.
 //
-// # Why a key writes a frame and the daemon does the rest
+// # Why a command writes a frame and the daemon does the rest
 //
 // The same reason ⎋ does: this view never touches a process. /fork mints the
 // fork's own id - Wake originates identity, and maySpawn refuses anything that
@@ -27,7 +27,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
@@ -38,7 +37,7 @@ import (
 
 const (
 	// forkFailed names the write that could not happen, so the notice row says
-	// which key was pressed rather than only what the socket said about it.
+	// which command was asked for rather than only what the socket said about it.
 	forkFailed = "forking that conversation"
 
 	// noForkTarget is /fork with no agent in front of it. A fork is taken *from*
@@ -48,9 +47,9 @@ const (
 	// forkUsage is what a /fork argument that is not one @who is told.
 	forkUsage = forkVerb + " takes one " + agentPrefix + "who, or none to branch the conversation you are in"
 
-	// forkAsked is said on the keypress rather than on the confirmation,
-	// because the daemon may refuse and the operator should know the key was
-	// read either way. Two presses produce the same line, which notice folds
+	// forkAsked is said when the command is read rather than on the confirmation,
+	// because the daemon may refuse and the operator should know the command was
+	// read either way. Two asks produce the same line, which notice folds
 	// into one entry with a count - `forking @alex… (×2)` is the right reading
 	// of two forks asked for, and both of them arrive.
 	forkAsked = "forking %s%s…"
@@ -98,25 +97,18 @@ func SnapshotNotice(fork, parent string) string {
 }
 
 // forkAgent is `/fork [@who]`, which took ⌃F's fork when ⌃F became the jump picker.
-// Bare is the conversation with the keys, by dmTarget's rule (the roster's pick, and
-// otherwise the first agent in attention order; with a DM open that is the
-// conversation on screen); @who is that agent, as /status @who names one.
+// Bare is the conversation you are in or, in the room, the agent the roster has
+// picked - commandTarget's rule, as /status and /mcp have it - and @who is that
+// agent. It never guesses: ⌃F's fallback to the first agent in attention order
+// is gone, since a typed command must not branch an agent it was not aimed at.
 //
-// An ended agent is deliberately **not** refused here. Its transcript is on
-// disk and the recordings forked exited parents throughout; the daemon decides,
-// and it says yes.
+// Bare on an ended agent's own conversation is not refused here: its transcript is
+// on disk, the recordings forked exited parents throughout, and the daemon decides.
+// @who names a live or parked agent, as every @who does.
 func (a App) forkAgent(arg string) (App, tea.Cmd) {
 	a = a.clearDraft()
-	if fields := strings.Fields(arg); len(fields) > 0 {
-		agent, ok := a.namedTarget(fields, forkUsage)
-		if !ok {
-			return a, nil
-		}
-		return a.forkOf(agent)
-	}
-	agent, ok := a.dmTarget()
+	agent, ok := a.commandTarget(arg, forkUsage, a.unseenOr(noForkTarget))
 	if !ok {
-		notice.Report("%s", a.unseenOr(noForkTarget))
 		return a, nil
 	}
 	return a.forkOf(agent)
@@ -134,7 +126,7 @@ func (a App) forkOf(agent Agent) (App, tea.Cmd) {
 	})
 }
 
-// forkAskedOf is the keypress line for one target, named or not.
+// forkAskedOf is the asked line for one target, named or not.
 func forkAskedOf(parent string) string {
 	if parent == "" {
 		return forkAskedUnnamed

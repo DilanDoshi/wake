@@ -14,12 +14,9 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// forkAsk is a bare `/fork` as the old ⌃F key was asked: the model and command it
-// came back with, and that it was taken.
-func forkAsk(a App) (tea.Model, tea.Cmd, bool) {
-	next, cmd := a.forkAgent("")
-	return next, cmd, true
-}
+// forkAsk is a bare `/fork` asked of forkAgent directly: the model and command it
+// came back with. The door itself - Enter, submit, slash - is typeCommand's.
+func forkAsk(a App) (tea.Model, tea.Cmd) { return a.forkAgent("") }
 
 // typeCommand types a draft into whatever holds the keys and sends it, the way a
 // person does, and returns what came back.
@@ -59,14 +56,40 @@ func TestSlashForkTypedInAConversationForksThatConversation(t *testing.T) {
 	}
 }
 
-// From the room a bare /fork is what ⌃F was there: the roster's pick, and
-// otherwise the first agent in attention order.
-func TestBareSlashForkInTheRoomForksTheRostersPick(t *testing.T) {
+// The conversation with the keys is the target even when the roster's cursor sits
+// on another agent: a typed command must not branch an agent it was not typed to.
+func TestBareSlashForkInAConversationIgnoresTheRostersCursor(t *testing.T) {
+	a := forkFleet(t).openDMWith("s2", "sydney").opened(t)
+	a.layout.ShowRoster = true
+	a.roster = Roster{Selected: "s3"}
+	a, cmd := typeCommand(a, "/fork")
+	if got := forked(t, a, cmd); len(got) != 1 || got[0] != "s2" {
+		t.Errorf("/fork typed in sydney's conversation with robin picked forked %v, want [s2]", got)
+	}
+}
+
+// From the room a bare /fork is the roster's pick, as /status's is, and with
+// nothing picked it asks which agent rather than guessing the first.
+func TestBareSlashForkInTheRoomForksTheRostersPickAndNeverGuesses(t *testing.T) {
 	a := forkFleet(t)
+	a.layout.ShowRoster = true
 	a.roster = Roster{Selected: "s3"}
 	a, cmd := typeCommand(a, "/fork")
 	if got := forked(t, a, cmd); len(got) != 1 || got[0] != "s3" {
 		t.Errorf("/fork with robin picked forked %v, want [s3]", got)
+	}
+}
+
+func TestBareSlashForkInTheRoomWithNothingPickedAsksWhichAgent(t *testing.T) {
+	a := forkFleet(t)
+	a.layout.ShowRoster = true
+	notice.Reset()
+	a, cmd := typeCommand(a, "/fork")
+	if got := forked(t, a, cmd); len(got) != 0 {
+		t.Errorf("/fork with nothing picked forked %v, want none", got)
+	}
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), noForkTarget) {
+		t.Errorf("it said %q, want %q", n.String(), noForkTarget)
 	}
 }
 

@@ -128,7 +128,7 @@ func TestTheForkOpensInEveryStateItsFirstReportCanCarry(t *testing.T) {
 			conn, sent := pipeClient(t)
 			a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-			m, cmd, _ := forkAsk(a)
+			m, cmd := forkAsk(a)
 			a = m.(App)
 			go func() { _ = runCmdQuietly(cmd) }()
 			forkID := awaitFrame(t, sent).SessionID
@@ -235,7 +235,7 @@ func TestTheDecisionThatAStartHasArrivedReadsNothingButTheIdAndTheState(t *testi
 // What a mismatch costs is why it is worth a static assertion: the wait has no
 // deadline by design, so waiting on the wrong id is not a failure. It is a fork
 // that runs, and a pane that never opens, forever.
-func TestTheIdCtrlFWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
+func TestTheIdSlashForkWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
 	fn := funcDeclIn(t, "fork.go", "forkOf")
 	minted := mintedOnceIn(t, fn, "uuid.NewString")
 

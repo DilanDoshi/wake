@@ -147,7 +147,7 @@ command that ships without a line here fails the build; `/wake-help` draws the s
 /workflows [@who]                   a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
 /wake-name [<name>]                 rename this fleet; bare says its name
 /jump [<filter>]                    find an agent by a few letters of its name and open it in a new pane; ⌃F is the same (see below)
-/fork [@who]                        branch a conversation: a new agent with its history so far; bare is the one with the keys
+/fork [@who]                        branch a conversation: a new agent with its history so far; bare is the one with the keys, or in the room the one the sidebar has picked
 /wake-help [<filter>]               every key and command Wake has, narrowed as you type; read-only (see below)
 /friends [skip|ollie|bo|puff|none]  the friend on the usage bar; bare opens a picker that previews in the corner
 /groupchat-filter [on|off]          whether a lone @name narrows the room by default (bare reports)

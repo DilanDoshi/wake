@@ -107,7 +107,7 @@ becoming the place things go to be forgotten.
 | A `+` on the right sidebar to create a session | Not built — `/new` is the way in today. Another lane owns `roster.go` |
 | **The manager, from inside Wake** | **Built, 2026-08-15.** Spec §12 gives it "a permanent seat in every group" and the build had no way to seat it: `wake manager` at a shell was the only thing that produced one, so the room refused every unaddressed draft and pointed the operator *out* of the room to fix it. Every verb that opens the TUI now seats one (`cmd/wake/ensuremanager.go`), and `/manager` is the switch — absent → spawn, parked → wake, running → park. A **command rather than a key**: with the default on it is the rarest verb in the build, and every remaining ctrl byte is either Enter, Tab, the composer's newline, or a flow-control code sitting beside a `⌃Q` bound to *quit* |
 | **Toggle into an agent from the right sidebar** | **Built, 2026-08-12 (second live run).** `↑↓` walks the roster and `⌃D` opens what it lands on; a **click on a row** opens that agent (in a new column beside the others since 2026-11-19, and a row can be dragged out to place it). Until then `Roster.Move` had no caller and `press` took only the x coordinate, so an agent that was neither first in attention order, nor blocked, nor already open could not be reached from inside Wake at all |
-| `⌃D` to make a new agent | `⌃D` exists but means **open DM**. The founding message asked for it to create one. `⌃F` forks and `/new` creates; a *key* that creates is still unbound |
+| `⌃D` to make a new agent | `⌃D` exists but means **open DM**. The founding message asked for it to create one. `/fork` forks and `/new` creates; a *key* that creates is still unbound |
 | One status update per agent in an **expanded** right sidebar | Only the one line is built. The expanded view is not |
 | **Rename an agent, or assign it a task** | **Built, 2026-08-12.** `/name <new>` and `/task <what it is working on>`, each addressed to the conversation you are in or to an `@handle`. `alex <> ui fixes` is reachable. **A rename changes the handle** — `@old` stops resolving, because a name is released and reissued and an alias would resolve to two live agents. Refused for a parked or ended session, and for the manager |
 | Pixel icons, up to 16 | Explicitly **out of v1** (§17: "Pixel sprites — block glyphs stand in") |
@@ -117,7 +117,7 @@ becoming the place things go to be forgotten.
 name them from inside itself"* — the largest single gap between the founding message and the build,
 and not any phase's task. `/new` creates, `/name` renames, `/task` labels, and `/add-<agent-name>`
 is refused with its argument written down rather than left open. What is left of the theme is a
-**key** that creates (the founding message asked for ⌃D; ⌃D opens a DM and ⌃F forks) and the `+` on
+**key** that creates (the founding message asked for ⌃D; ⌃D opens a DM and `/fork` forks) and the `+` on
 the right sidebar, both of which are surface rather than capability.
 
 ---
@@ -187,7 +187,7 @@ reserved.
 
 **Fork did not take `⇧⇥` and did not take `⌃O`, `⌃X` or `⌃Y`.** It took `⌃F`, paying one shadowed
 textarea binding (`CharacterForward`, which is `→` by another name in a one-line composer),
-precisely so this collision keeps its options.
+precisely so this collision keeps its options. (`⌃F` became the jump picker on 2026-11-20 and fork moved to `/fork`; the shadowed binding is the picker's now.)
 
 **The rebinding spent one of the three.** `⌃O` is detach (2026-08-11, §3a), which was the argued
 choice of the three because it is the only one the existing probe already covered — which left

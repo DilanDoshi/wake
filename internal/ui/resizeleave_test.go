@@ -129,7 +129,7 @@ func TestAForkArrivingBesideItsParentsWordsDrawsOneRule(t *testing.T) {
 		a = updated(a, streamMsg{batch: batch{frames: frames}, gen: a.gen})
 	}
 	say(eventFrame("s1", "read before the fork."))
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID

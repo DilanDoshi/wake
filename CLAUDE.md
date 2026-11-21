@@ -147,9 +147,11 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   not a row**, pinned from the first look, so a report that re-ranks the fleet cannot move `↵` onto another
   agent. `internal/ui/jumppicker.go`, `agentfind.go`.
 - **`/fork [@who]`** (owner's 2026-11-20 ruling: ⌃F is the finder, fork is a command) branches a conversation,
-  as `⌃F` did: bare is `dmTarget`'s (with a DM open, the conversation on screen; in the room, the roster's pick,
-  else the first agent in attention order), `/fork @who` is that agent, `@who /fork` aims it from the room, and a
-  team is refused. One `forkOf` writes the one `FrameFork`; the daemon's refusals are unchanged.
+  as `⌃F` did: bare is `commandTarget`'s, as `/status`'s is (the conversation you are in; in the room, the roster's
+  pick, and with none an ask for one - never a guess at the first agent), `/fork @who` is that agent, `@who /fork`
+  aims it from the room, and a team is refused. A typed command never branches an agent it was not aimed at: with a
+  conversation open, the roster's cursor on another agent changes nothing. One `forkOf` writes the one `FrameFork`;
+  the daemon's refusals are unchanged. Like `/status`, it clears the draft it was typed in, a refusal included.
   `internal/ui/fork.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`, the count when the pair fits the row's 19 columns). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a

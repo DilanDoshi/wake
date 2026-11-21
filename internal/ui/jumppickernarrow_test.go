@@ -37,8 +37,8 @@ func TestEnterInASingleColumnLayoutTakesTheColumnBesideTheRoom(t *testing.T) {
 	}
 }
 
-// From a conversation it replaces that one, which keeps its transcript, and ten
-// jumps leave one conversation column beside the room, not ten.
+// From a conversation it replaces that one, which keeps its transcript, and twenty
+// jumps leave one conversation column beside the room, not twenty.
 func TestEnterInASingleColumnLayoutReplacesTheConversationOnScreen(t *testing.T) {
 	a := jumpTo(t, blueFleet(t, 110, 30), "pay-l")
 	a = jumpTo(t, a, "scratch")

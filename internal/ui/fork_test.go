@@ -22,15 +22,12 @@ import (
 // its own, and the reaper's entire proof that a process group is an agent's is
 // that UUID appearing in the argv - so a fork that let the daemon mint one
 // would be a fork this client could not then recognise when it arrived.
-func TestCtrlFAsksTheDaemonToForkTheOpenConversation(t *testing.T) {
+func TestSlashForkAsksTheDaemonToForkTheOpenConversation(t *testing.T) {
 	fresh(t)
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(120, 30)
 
-	_, cmd, handled := forkAsk(a)
-	if !handled {
-		t.Fatal("/fork fell through to the composer")
-	}
+	_, cmd := forkAsk(a)
 	go func() { _ = runCmdQuietly(cmd) }()
 
 	f := awaitFrame(t, sent)
@@ -65,7 +62,7 @@ func TestTheForkOpensItsOwnConversationWhenTheDaemonConfirmsIt(t *testing.T) {
 	// The model the key hands back, not the one it was given: fork records the
 	// id it minted on the App it returns, and a test that discarded it would be
 	// asserting about a client that never pressed anything.
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -100,7 +97,7 @@ func TestARefusedForkStopsTheClientWaitingForIt(t *testing.T) {
 	// The model the key hands back, not the one it was given: fork records the
 	// id it minted on the App it returns, and a test that discarded it would be
 	// asserting about a client that never pressed anything.
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -137,12 +134,12 @@ func TestASecondForkAskedForBeforeTheFirstArrivesIsNotLost(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	first := awaitFrame(t, sent).SessionID
 
-	m, cmd, _ = forkAsk(a)
+	m, cmd = forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	second := awaitFrame(t, sent).SessionID
@@ -193,7 +190,7 @@ func TestTheSnapshotSentenceDoesNotNameAParentWhoseNameWentBackToThePool(t *test
 	seed := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}}
 	a := NewRoomApp(conn, Stream{}, &seed).withSize(160, 30).openDMWith("s1", "alex")
 
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -227,7 +224,7 @@ func TestAnErrorAboutAnotherAgentLeavesAPendingForkAlone(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-	m, cmd, _ := forkAsk(a)
+	m, cmd := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
