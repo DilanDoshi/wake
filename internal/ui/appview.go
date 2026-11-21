@@ -425,6 +425,7 @@ func (a App) menuBlock(id string, width, height int) string {
 func (a App) menuAround(card, id string, width, height int) string {
 	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
 	stack = above(stack, a.resumeView(id, width, height, stack))
+	stack = above(stack, a.jumpView(id, width, height, stack))
 	stack = above(stack, a.mcpView(id, width, height, stack))
 	stack = above(stack, a.statusView(id, width, height, stack))
 	return above(stack, a.completionView(width, id))

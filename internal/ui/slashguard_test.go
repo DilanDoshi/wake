@@ -107,7 +107,7 @@ func TestWakeOwnsNoCommandClaudeAlsoHas(t *testing.T) {
 	// decisions.md's rule for one of those is that it carries a count, so a
 	// command cannot be added without the passthrough guard being looked at. Named
 	// for its half of the overload: commandCount is how many goroutines a Cmd costs.
-	const wakeCommandCount = 21
+	const wakeCommandCount = 23
 	if len(commands) != wakeCommandCount {
 		t.Fatalf("Wake owns %d slash commands and wakeCommandCount says %d: a command added without "+
 			"looking at the passthrough list is one that may already work for the agent", len(commands), wakeCommandCount)
@@ -267,8 +267,8 @@ func TestABareOnlyCommandIsOnlyTakenBare(t *testing.T) {
 	}
 }
 
-// roomTargetCommands is a subset of commands and holds exactly the nine that
-// take an @who (name, task, color, team, quit, park, mcp, workflows, status). A
+// roomTargetCommands is a subset of commands and holds exactly the ten that
+// take an @who (name, task, color, team, quit, park, mcp, workflows, status, fork). A
 // word here that commands does not have would dispatch through a nil function on
 // `@who /that`; the count is the vocabulary's own guard, so a tenth cannot be
 // added without this rule being looked at - the same reason wakeCommandCount and
@@ -280,7 +280,7 @@ func TestRoomTargetCommandsAreASubsetOfCommands(t *testing.T) {
 			t.Errorf("teamTargetCommands has %q and roomTargetCommands does not, so `@team /%s` folds into nothing", word, word)
 		}
 	}
-	const roomTargetCommandCount = 9
+	const roomTargetCommandCount = 10
 	if len(roomTargetCommands) != roomTargetCommandCount {
 		t.Errorf("roomTargetCommands has %d entries, want %d: a change to the set of @who commands has to be "+
 			"looked at, not slipped in", len(roomTargetCommands), roomTargetCommandCount)

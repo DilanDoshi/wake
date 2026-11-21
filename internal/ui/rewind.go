@@ -117,7 +117,7 @@ func (a App) rewindTargetsArrived(f rpc.Frame) App {
 	if _, held := a.dms[f.SessionID]; !held {
 		return a
 	}
-	if f.SessionID != a.focus || !a.rewindArmable() || a.picker.Open() || a.statusUI.Open() {
+	if f.SessionID != a.focus || !a.rewindArmable() || a.picker.Open() || a.statusUI.Open() || a.jumpPicker.Open() {
 		return a
 	}
 	if len(f.RewindTargets) == 0 {

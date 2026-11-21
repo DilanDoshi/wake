@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -134,6 +135,29 @@ func TestResumePickerTypingBuildsTheQuery(t *testing.T) {
 	a, _, _ = a.resumePickerKey(tea.KeyMsg{Type: tea.KeyBackspace})
 	if a.resumePicker.Query != "ir i" {
 		t.Errorf("after ⌫ query = %q, want %q", a.resumePicker.Query, "ir i")
+	}
+}
+
+// The search box edits its query with the same two functions /wake-help's and the
+// jump picker's do, so the edges agree: no leading space, one between words, nothing
+// unprintable, a bounded paste, and ⌫ on nothing is nothing.
+func TestResumePickerQueryEdgesAreTheSharedNormalisers(t *testing.T) {
+	press := func(a App, m tea.KeyMsg) App {
+		a, _, _ = a.resumePickerKey(m)
+		return a
+	}
+	a := openPicker(twoRows(), false)
+	a = press(press(a, tea.KeyMsg{Type: tea.KeyBackspace}), tea.KeyMsg{Type: tea.KeySpace})
+	if a.resumePicker.Query != "" {
+		t.Errorf("⌫ on nothing and a leading space left %q, want an empty query", a.resumePicker.Query)
+	}
+	a = press(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("fix \t\n the\x07  parser")})
+	if a.resumePicker.Query != "fix the parser" {
+		t.Errorf("a pasted line came out as %q, want %q", a.resumePicker.Query, "fix the parser")
+	}
+	a = press(openPicker(twoRows(), false), tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("x", 3*queryMax))})
+	if got := utf8.RuneCountInString(a.resumePicker.Query); got != queryMax {
+		t.Errorf("a long paste left %d runes, want the %d the filters share", got, queryMax)
 	}
 }
 

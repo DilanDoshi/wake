@@ -8,6 +8,50 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-20 — ⌃F and `/jump`: find an agent by a few letters of its name; fork is `/fork`
+
+The owner runs 40-50 agents, and walking the sidebar with ⇧↑↓ is too slow. `wake-orch` briefed mockups of four
+shapes (the throwaway take is outside the repo); the owner picked **A, the compact box over the composer**, with
+a rule between the filter line and the results, and the sidebar search bar (D1) as a second PR.
+
+- **The key is ⌃F, and fork moves to `/fork`** (the owner's ruling, on seeing the key analysis). ⌘F reaches no
+  macOS terminal (`keyprobe_test.go`: ⌘ belongs to the terminal's menus, and bubbletea v1.3.10 has no Kitty
+  keyboard protocol); ⌃K would have cost the composer's delete-to-end-of-line, which Claude Code binds too; ⌃P is
+  the text area's line-up and the completion menu's walk key; ⌃G/⌃L/⌃S are Claude Code's editor, redraw and stash.
+  ⌃F is the "find" letter, and Claude Code binds no ⌃F, so `keymap_test.go` needs no `acknowledged` row (it still
+  shadows the text area's character-forward, as fork did). **⌃K stays unbound by Wake.** A key cannot move without
+  the thing it was moving off, since `legendEntries` is a bijection with `App.key`.
+- **`/fork [@who]` is the old ⌃F, one path.** Bare it is `dmTarget`'s (the conversation on screen, else the roster's
+  pick, else the first agent in attention order), `/fork @who` is that agent as `/status @who` names one, `@who /fork`
+  aims it from the room, a team is refused like every target-command but park and quit, and the daemon's refusals
+  are untouched. It is in the closed set because no recorded `slash_commands` carries `fork` (checked against 2.1.322).
+  `forkOf` writes the one `FrameFork`. Bare `/fork` joins bare `/status` and `/mcp` in refusing a selection the wheel
+  scrolled out of view; ⌃F leaves that list, since it reads no selection.
+- **The list is what the sidebar lists, in attention order, not its section order.** The sidebar is the loose agents,
+  then each team's section, ranked inside each - a blocked agent in a team is first only in its own box. The picker
+  takes `Fleet.OnRoster()`: sessions parked in this run are there, as in the sidebar; the park book is `/resume`'s.
+- **A better match comes before attention.** Within a match quality, blocked agents first, then the order
+  `OnRoster` gives. The first draft put blocked ahead of everything, and typing `db` then `↵` opened a blocked
+  `docs-bulk-upload` (found only by its letters in order) over `db-migrate`. With nothing typed every agent is
+  the same quality, so the box is attention order, blocked first, as the owner asked.
+- **A box nobody can see takes no key.** The pane's rows for a menu are what `menuRoom` leaves under a card; with
+  none, `⌃F` says the pane is too short, and a resize that leaves none closes the box on the next key (handled,
+  not declined: a declined key's App is thrown away). A card's page the wheel scrolled off the composer has the box
+  off too: `⌃F` brings it home, and a key that arrives with it away only brings it back, as a send does.
+  The cursor is pinned to an agent's id from the first look.
+- **`↵` is a click.** It calls `openInNewPane` (an agent already on screen is only focused) and ends in the
+  helper the click's drop ends in (`selectOpened`), so the two cannot drift - in a window that carries one column
+  that is the click's rule too: it replaces the pane on screen (`jumppickernarrow_test.go`). Any open key on an agent already drawn only focuses it (a refused ⌃B there would close the box with the keys still elsewhere). `⌃B` and `⌃D` are the open keys'
+  placements; a refused `⌃B` keeps the box and the typed filter.
+- **One query editor.** `/wake-help`, the jump picker and `/resume` edit their filter with `typedQuery` and
+  `backspacedQuery` (help.go): no leading space, one between words, nothing unprintable, `queryMax` runes. The
+  resume picker's own older copy is gone, so it now strips a pasted newline and bounds a paste too
+  (`TestResumePickerQueryEdgesAreTheSharedNormalisers`).
+- **Matching is on the name as drawn**, case and spaces ignored: its start, a run inside it, its letters in order.
+  Not team names, not directories (deferred).
+- **Not everywhere.** A `/workflows` or `/wake-help` view takes every key in its pane, so ⌃F is not read there
+  until it is closed; the board closes on the key and goes on to open the box.
+
 ## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
 
 The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again

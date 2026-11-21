@@ -111,6 +111,10 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.resumePickerKey(m); handled {
 		return next, cmd, true
 	}
+	// The jump picker is a search box for the same reason, and hands ⌃C back the same way.
+	if next, cmd, handled := a.jumpKey(m); handled {
+		return next, cmd, true
+	}
 	// The /mcp menu is modal for the same reason, and hands ⌃C back the same way.
 	if next, cmd, handled := a.mcpMenuKey(m); handled {
 		return next, cmd, true
@@ -276,8 +280,8 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.walkPrompts(-1)
 	case tea.KeyCtrlD:
 		return a.openDM(), nil, true
-	case tea.KeyCtrlF:
-		return a.fork()
+	case tea.KeyCtrlF: // the jump picker; fork is /fork (decisions.md, 2026-11-20)
+		return a.openJump(""), nil, true
 	// Letters rather than the ⌃⇧→/⌃⇧↓ these shipped as: macOS takes every
 	// ctrl+shift+arrow for spaces and Mission Control before a terminal sees
 	// one. TestNoKeyIsACtrlArrow holds the class.

@@ -568,6 +568,9 @@ func (a App) withFocus(f string) App {
 		// would read ↓ and ↵ in the next pane undrawn - a team's quit among them.
 		a = a.closePicker()
 	}
+	if a.jumpPicker.Open() && a.jumpPicker.Pane != f {
+		a = a.closeJump() // drawn over its pane only: left open it would read keys undrawn
+	}
 	if a.rewind.Session != "" && a.rewind.Session != f {
 		// Hygiene rather than a second gate - rewindKey already refuses to
 		// act on a picker whose Session is not a.focus. Without this, tabbing
