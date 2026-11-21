@@ -15,8 +15,9 @@ const (
 	// FrameRewindTargets asks a session's active-branch user prompts, uuid
 	// and text oldest first, and FrameRewindTargetsReply answers. FrameRewind
 	// itself takes a message uuid core.Event never carries, so this is the
-	// UI's only source for one; the last entry is the last_seen tip
-	// RewindLastSeen wants.
+	// UI's only source for one; the reply's RewindLastSeen is the tip a rewind
+	// declares (the newest turn claude knows of, which may be one it started itself
+	// and no target), and an older daemon's reply leaves it empty: the last entry.
 	FrameRewindTargets      = "rewind_targets"       // client → daemon: what could this session be rewound to
 	FrameRewindTargetsReply = "rewind_targets_reply" // daemon → client: its active-branch user prompts, uuid+text, oldest first
 

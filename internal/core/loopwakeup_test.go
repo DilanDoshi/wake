@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 const loopWakeupFixture = "../../testdata/transcript/loop-wakeup-turn.jsonl"
@@ -20,9 +21,14 @@ func TestALoopWakeupOnDiskIsClaudesOwnTurnNotTheOperators(t *testing.T) {
 		t.Fatalf("the fixture holds %d records, want the one wakeup record", len(lines))
 	}
 	var rec struct {
-		UUID string `json:"uuid"`
+		UUID      string `json:"uuid"`
+		Timestamp string `json:"timestamp"`
 	}
 	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatal(err)
+	}
+	at, err := time.Parse(time.RFC3339, rec.Timestamp)
+	if err != nil {
 		t.Fatal(err)
 	}
 	evs, err := DecodeTranscriptLine([]byte(lines[0]))
@@ -30,7 +36,11 @@ func TestALoopWakeupOnDiskIsClaudesOwnTurnNotTheOperators(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(evs) != 1 || operatorTurn(evs[0]) || !evs[0].LoopWakeup || !evs[0].MessageStarted() || evs[0].MessageID != rec.UUID {
-		t.Errorf("the wakeup record decoded to %+v, want one loop wakeup started turn named by the record's uuid %s", evs, rec.UUID)
+		t.Fatalf("the wakeup record decoded to %+v, want one loop wakeup started turn named by the record's uuid %s", evs, rec.UUID)
+	}
+	// The room's restore drops a line with no time, which would restore the turn it closes.
+	if !evs[0].At.Equal(at) {
+		t.Errorf("the started turn is stamped %v, want the record's %v", evs[0].At, at)
 	}
 }
 
@@ -50,6 +60,7 @@ func TestWhichUserRecordsAreATurnClaudeStartedItself(t *testing.T) {
 		"a loop's wakeup":                      {`"wakeupSource":"loop_wakeup","turnOrigin":"scheduled"`, "", "loop"},
 		"a loop wakeup's source alone":         {`"wakeupSource":"loop_wakeup"`, "", "loop"},
 		"a wakeup prompt in two text blocks":   {`"wakeupSource":"loop_wakeup"`, twoBlocks, "loop"},
+		"another wakeup's source alone":        {`"wakeupSource":"schedule_wakeup"`, "", "started"},
 		"another wakeup's source":              {`"wakeupSource":"schedule_wakeup","turnOrigin":"scheduled"`, "", "started"},
 		"a scheduled turn":                     {`"turnOrigin":"scheduled"`, "", "started"},
 		"an isMeta record carrying the key":    {`"isMeta":true,"wakeupSource":"loop_wakeup"`, "", "nothing"},
@@ -73,12 +84,12 @@ func TestWhichUserRecordsAreATurnClaudeStartedItself(t *testing.T) {
 				switch ev := evs[0]; {
 				case operatorTurn(ev):
 					got = "operator"
-				case ev.Notice != "":
-					got = "notice"
 				case ev.MessageStarted() && ev.LoopWakeup:
 					got = "loop"
 				case ev.MessageStarted():
 					got = "started"
+				case ev.Notice != "":
+					got = "notice"
 				default:
 					got = "something else: " + string(ev.Kind)
 				}

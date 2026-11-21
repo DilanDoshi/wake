@@ -346,6 +346,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 **Rewind**
 - `esc esc` idle sends `rewind_conversation` (a `control_request`) with `target_message_uuid` and
   the mandatory `last_seen_user_message_uuid`. `session_id` never changes.
+- **The tip a rewind declares is claude's newest turn, one it started itself included** (a loop's wakeup):
+  declared as the prompt before it, a rewind is refused as an `unseen later turn` (2.1.329, live).
+  `RewindTargets` returns the tip beside the prompts (`RewindLastSeen` on the reply) and the picker sends it.
 - The on-disk transcript is an append-only tree; `core.ActiveBranch` walks `parentUuid` from the live
   leaf. History, room restore and `RewindTargets` share that one reconstruction. On `rewound:true`
   the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused every rewind frame.

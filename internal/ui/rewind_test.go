@@ -739,3 +739,28 @@ func TestChooseRewindRefusesARunningAgent(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 }
+
+// The tip a rewind declares is the newest turn claude knows of, which may be one it
+// started itself and nobody offers as a target (a loop's wakeup, 2.1.329): declared
+// as the prompt before it, the rewind is refused as an "unseen later turn". The
+// reply names the tip; one from a daemon that does not stands the newest target in.
+func TestTheRewindTipIsTheRepliesWhenItNamesOne(t *testing.T) {
+	for name, tc := range map[string]struct{ tip, want string }{
+		"a reply that names the tip":     {"u3", "u3"},
+		"an older daemon's, which can't": {"", "u2"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fresh(t)
+			conn, _ := pipeClient(t)
+			a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
+			got := a.applyFrame(rpc.Frame{Kind: rpc.FrameRewindTargetsReply, SessionID: "s1", RewindLastSeen: tc.tip,
+				RewindTargets: []rpc.RewindTarget{{UUID: "u1", Text: "first prompt"}, {UUID: "u2", Text: "second prompt"}}})
+			if !got.rewind.Open() {
+				t.Fatal("the reply did not open the rewind picker")
+			}
+			if got.rewind.LastSeen != tc.want {
+				t.Errorf("LastSeen = %q, want %q", got.rewind.LastSeen, tc.want)
+			}
+		})
+	}
+}

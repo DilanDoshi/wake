@@ -25,6 +25,9 @@ var injectedFixtures = map[string]string{
 
 const typedTurn = "the only turn the operator typed"
 
+// loopWakeupUUID is the uuid of loop-wakeup-turn.jsonl's one record.
+const loopWakeupUUID = "80322a09-aa16-4fd6-bedc-58ba48a1db79"
+
 func injectedTranscript(t *testing.T, fixture, root string) []string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", fixture))
@@ -84,6 +87,15 @@ func TestRewindTargetsOfferNoInjectedTurn(t *testing.T) {
 		})
 		if len(f.RewindTargets) != 1 || f.RewindTargets[0].UUID != root {
 			t.Errorf("%s: rewind targets = %+v, want only the typed turn %s", fixture, f.RewindTargets, root)
+		}
+		// Claude's tip is its newest turn, and a turn it started itself counts: a rewind
+		// declaring the prompt before a loop's wakeup is refused as an "unseen later turn".
+		tip := root
+		if fixture == "loop-wakeup-turn.jsonl" {
+			tip = loopWakeupUUID
+		}
+		if f.RewindLastSeen != tip {
+			t.Errorf("%s: the tip a rewind declares = %q, want %q", fixture, f.RewindLastSeen, tip)
 		}
 	}
 }
