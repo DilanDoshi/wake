@@ -38,6 +38,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 		return a
 	}
 	prev := a.fleet
+	a = a.settleGone(st)
 	a.fleet = a.fleet.WithStatus(st)
 	a.daemon = a.daemon.with(st)
 	a = a.withFleetName(st).withUsageRows()

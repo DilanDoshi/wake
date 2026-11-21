@@ -167,7 +167,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		a = a.withDM(sessionID, dm.Append(a.fleet.named(sessionID, ev)))
 	}
 	a = a.foldBoard(sessionID, ev)
-	return a
+	return a.settleHeld(sessionID, ev)
 }
 
 // withSend draws an agent's SendMessage to a session outside the fleet, the one
