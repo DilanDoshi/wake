@@ -17,9 +17,13 @@ same thing in both.
 - **In place, not re-ranked.** The filter keeps the roster's order (top block, then each team, attention within) and
   drops the rest; a team with no match drops out. The jump box ranks by match quality because it is a list of one
   kind; the sidebar's order is its own and a second opinion here would make the two disagree about who is first.
-- **Click to focus; `⌃F` never does.** Every other press lets go (`App.press`), so the bar holds the keys only
-  while a press landed on it. Not a modal (settled with the owner's defaults): a key it does not read lets go and
-  goes on to do its own job, because a search field in a sidebar is not worth swallowing `⌃C` or `⌃X` for.
+- **Click to focus; `⌃F` never does.** Every other left press lets go (`App.press`), so the bar holds the keys
+  only while a press landed on it, and that click closes whatever else read the keys (the jump box, a picker, a view:
+  `closeModalsExcept`, the list `withFocus` shares), so nothing is lit and dead under it. Not a modal (settled with the
+  owner's defaults): a key it does not read lets go and goes on to do its own job, because a search field in a sidebar
+  is not worth swallowing `⌃X` for. **`⌃C` is the exception: it lets go and parks nothing** - a review found that
+  typing homes the cursor on the first match, so a `⌃C` to cancel the search would have parked it; the next one parks
+  as ever. A dispatch row opened from the bar shows its dispatch, as a click on the row does.
 - **The filter stands.** After a click elsewhere it stays, the glyph and `N/M` in the accent, until `esc` clears it
   (`esc` is clear-and-return, one key). A sidebar too short for the bar and a list draws neither the bar nor the
   filter (`activeQuery`); the query is kept and applies again when the room is back.

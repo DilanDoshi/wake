@@ -109,7 +109,8 @@ At the top of the sidebar is a **search bar** (three rows). Click it and type a 
 the sidebar narrows to the agents that match, in the order it already had, and a team with no match drops
 out. The count beside what you typed says how many matched (`5/41`). `↑↓` or `⇧↑↓` move the cursor over
 the matches, `↵` opens the one it is on exactly as clicking its row does (`⌃B` below, `⌃D` in the focused
-pane), and `esc` clears the filter and gives the keys back to the composer. A click anywhere else or any
+pane), and `esc` clears the filter and gives the keys back to the composer, and `⌃C` only lets go of it without
+parking anything. A click anywhere else or any
 key the bar does not read lets go of it and leaves the filter standing, lit, until you clear it. `⌃F` is the
 same search as a box over the composer; it never focuses the bar.
 
