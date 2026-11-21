@@ -6218,8 +6218,13 @@ a bang typed while that agent is busy - and none sends anything twice.
   differs. *Closes with:* two records, the command's held by `shouldQuery:false`, as Claude Code's own `!`
   writes two - at the cost of a zero-turn result between them that the room and the done line would have to
   learn to ignore.
-- **The room's own bang line is still gone after a room restore.** It is echoed, and the room restores only
-  typed turns; that was true before this change. *Closes with:* room provenance for a bang aimed from the room.
+- ~~**The room's own bang line is still gone after a room restore.**~~ **FIXED** (`fix/room-shows-a-sent-commands-output`,
+  2026-11-18): a room-aimed bang is drawn again on a reopen, folded as it was live, from the stamp the room
+  provenance already reads (`decisions.md`, 2026-11-18). A bare room `!cmd` is in no transcript and stays gone.
+- **A `!cmd` of several rows folds its later rows with the output in the room.** The room's line is
+  `@who !cmd` + the output, split at its first row, and the command/output boundary is not kept past
+  `core.Unfence`. *Closes with:* carrying the command's row count to the room line (a retained `core.Event`
+  may not grow, so it needs a field that fits its padding).
 - **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):
   no turn, $0, read with the next prompt - one field in `EncodeShellRun` and the daemon not marking a turn
   owed. Its live facts are in the findings note and want fixtures before it is ever written.

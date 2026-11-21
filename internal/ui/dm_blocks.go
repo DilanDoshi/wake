@@ -493,7 +493,12 @@ func sentBlock(from string, s *core.PeerSend, width int, expanded bool) string {
 // aligns it under the head, the way thinkingBlock draws its own muted body one
 // indent in.
 func crossSessionBody(text string, width int) string {
-	body := strings.TrimSpace(text)
+	return mutedBody(strings.TrimSpace(text), width)
+}
+
+// mutedBody is body drawn as crossSessionBody draws it, its whitespace kept: a room
+// bang's output keeps the indent its first row opens with (roombang.go).
+func mutedBody(body string, width int) string {
 	if body == "" {
 		return ""
 	}

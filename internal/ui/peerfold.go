@@ -42,10 +42,15 @@ func peerFolds(text string, width int) bool {
 	return renderedRows(crossSessionBody(text, width)) > peerFoldRows
 }
 
-// peerBody is a peer's message as drawn: whole when it fits peerFoldRows or is
-// expanded, else its first peerFoldRows rows and a pointer saying how to open it.
+// peerBody is a peer's message as drawn: foldRows of its body.
 func peerBody(text string, width int, expanded bool) string {
-	body := crossSessionBody(text, width)
+	return foldRows(crossSessionBody(text, width), width, expanded)
+}
+
+// foldRows is a drawn body whole when it fits peerFoldRows or is expanded, else its
+// first peerFoldRows rows under the pointer - a peer's message, and what a room
+// bang printed (roombang.go).
+func foldRows(body string, width int, expanded bool) string {
 	rows := renderedRows(body)
 	if expanded || rows <= peerFoldRows {
 		return body
