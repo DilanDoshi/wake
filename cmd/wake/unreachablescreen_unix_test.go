@@ -31,5 +31,9 @@ func TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough(t *testing.T) {
 	s.send("\x17") // ⌃W, so the draft reaches the room
 	s.await("group chat")
 	s.send("/new robin\r")
+	// The draft /new leaves narrows the room to robin, which hides the stopped
+	// agent's line: esc widens it, and the line comes back.
+	s.await("> @robin")
+	s.send("\x1b")
 	s.await("resumed after the connection came back")
 }

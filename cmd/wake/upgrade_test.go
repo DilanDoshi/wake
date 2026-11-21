@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -256,4 +257,38 @@ func TestAnUnkeepableCacheStillAsksAboutOnceADay(t *testing.T) {
 			t.Errorf("latest %s: a day on, asked %d times in all, want 2", latest, rel.asked)
 		}
 	}
+}
+
+// The cache mirrors GitHub's latest answer, even an older one: a release that was
+// pulled or rolled back is named only until the next daily ask. A cache that
+// only moved forward would pin `↑ wake X` and its notice to a release `wake
+// upgrade` says is not the latest, until something numerically higher ships.
+func TestThePulledReleaseIsForgottenAtTheNextDailyAsk(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), updateCacheFile)
+	now := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	if err := keepUpdateCache(cache, updateCache{Checked: now, Latest: "v99.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	rel := &fakeReleases{latest: "v99.0.0"}
+
+	newer, _, err := dueUpdateNotice(context.Background(), rel, cache, &updateCache{}, now.Add(updateCheckEvery+time.Minute), version.Version)
+	if err != nil || newer != "99.0.0" {
+		t.Errorf("after the pulled release: newer %q, %v, want GitHub's 99.0.0", newer, err)
+	}
+	if got := readUpdateCache(t, cache); got.Latest != "v99.0.0" {
+		t.Errorf("the cache reads %q, want GitHub's v99.0.0", got.Latest)
+	}
+}
+
+func readUpdateCache(t *testing.T, path string) updateCache {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c updateCache
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatal(err)
+	}
+	return c
 }

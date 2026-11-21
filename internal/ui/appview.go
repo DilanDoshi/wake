@@ -445,7 +445,9 @@ func (a App) resumeView(id string, width, height int, over string) string {
 	if over != "" {
 		room -= lipgloss.Height(over)
 	}
-	return a.resumePicker.View(width, room)
+	p := a.resumePicker
+	p.windowBlurred = a.windowBlurred
+	return p.View(width, room)
 }
 
 // pickerView is the menu if it belongs to this pane, and "" otherwise.

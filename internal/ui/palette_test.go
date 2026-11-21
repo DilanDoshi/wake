@@ -53,6 +53,7 @@ func paletteBinding() map[string]struct {
 		"Own":           {Own, "userMessageBackground"},
 		"Selection":     {Selection, "selectionBg"},
 		"Mention":       {Mention, "suggestion"},
+		"Skill":         {Skill, "skill"},
 		"Subtle":        {Subtle, "subtle"},
 		"Success":       {Success, "success"},
 		"Error":         {Error, "error"},

@@ -570,12 +570,19 @@ func (a App) withFocus(f string) App {
 		a.statusUI = StatusView{} // and so does /status's
 	}
 	a.focus = f
-	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
+	return a.composersFocused()
+}
+
+// composersFocused tells every composer whether it holds the keys and whether
+// the window does - the two halves of "where do I type". See windowfocus.go.
+func (a App) composersFocused() App {
+	lit := !a.windowBlurred
+	a.room = a.room.WithComposer(a.room.Composer().Focused(a.focus == "").WindowFocused(lit))
 	for _, id := range a.grid.Panes() {
 		if id == "" {
 			continue
 		}
-		a = a.withDM(id, a.dms[id].WithComposer(a.dms[id].Composer().Focused(id == f)))
+		a = a.withDM(id, a.dms[id].WithComposer(a.dms[id].Composer().Focused(id == a.focus).WindowFocused(lit)))
 	}
 	return a
 }

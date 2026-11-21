@@ -227,6 +227,12 @@ func (t transcript) restyle(line, width int, s string) transcript {
 	if !isTool && !isRun {
 		return t
 	}
+	return t.rewritten(line, width, s)
+}
+
+// rewritten replaces one rendered line, cut to width: restyle's write, without
+// its tool or run gate.
+func (t transcript) rewritten(line, width int, s string) transcript {
 	t.lines = t.lines.replace(line, ansi.Truncate(s, width, ""))
 	return t
 }

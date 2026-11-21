@@ -18,9 +18,10 @@ import (
 type rejoin int
 
 const (
-	rowsAsDrawn  rejoin = iota // every row break is kept
-	markdownRows               // render.Markdown drew them
-	typedRows                  // shadedOwn or localReplyBlock drew a known text
+	rowsAsDrawn   rejoin = iota // every row break is kept
+	markdownRows                // render.Markdown drew them
+	typedRows                   // shadedOwn or localReplyBlock drew a known text
+	typedLeadRows               // typedRows, the rows past the text a fold cut kept as drawn
 )
 
 // textRows is one block in transcript.texts: where it ends, how it rejoins, and
@@ -91,6 +92,8 @@ func rejoinsOf(spans []copySpan, first, n int) []render.Rejoin {
 			js = render.Rejoins(span.rows, span.src)
 		case typedRows:
 			js = typedRejoins(span.rows, span.src)
+		case typedLeadRows:
+			js, _ = typedLeadRejoins(span.rows, span.src)
 		}
 		for k, j := range js {
 			if i := span.from + k - first; i >= 0 && i < n {
@@ -123,8 +126,19 @@ const ownTabWidth = 4
 // kept as drawn. nil when the rows do not match - the copy then keeps every row
 // break, which is never worse than what was drawn.
 func typedRejoins(rows []string, typed string) []render.Rejoin {
+	out, whole := typedLeadRejoins(rows, typed)
+	if !whole {
+		return nil
+	}
+	return out
+}
+
+// typedLeadRejoins is typedRejoins as far as the rows match: the rows before the
+// first that does not (a fold's pointer) are rejoined, and whole says there was
+// none.
+func typedLeadRejoins(rows []string, typed string) (out []render.Rejoin, whole bool) {
 	src := strings.TrimSpace(strings.ReplaceAll(typed, "\t", strings.Repeat(" ", ownTabWidth)))
-	out := make([]render.Rejoin, len(rows))
+	out = make([]render.Rejoin, len(rows))
 	pos := -1 // where in src the rows have reached; -1 before the body
 	for i, row := range rows {
 		plain := strings.TrimRight(ansi.Strip(row), " ")
@@ -139,12 +153,12 @@ func typedRejoins(rows []string, typed string) []render.Rejoin {
 		}
 		sep, ok := consumed(src[pos:], text)
 		if !ok {
-			return nil
+			return out[:i], false
 		}
 		out[i] = render.Rejoin{Sep: sep, Lead: lead}
 		pos += len(sep) + len(text)
 	}
-	return out
+	return out, true
 }
 
 // consumed is the whitespace at the head of rest that a wrap took before a row
