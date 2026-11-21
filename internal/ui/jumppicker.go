@@ -191,12 +191,17 @@ func (a App) moveJump(by int) App {
 }
 
 // openJumped opens the cursored agent where place says, closes the box and selects
-// the agent as a click does. A placement that refused (⌃B from a lower pane says why
-// itself) opens nothing and leaves the box up, so the keystroke costs nothing.
+// the agent as a click does. An agent already on screen is only focused, whichever
+// key it was, so "refused" below means an agent that was not drawn and still is not:
+// a placement that refused (⌃B from a lower pane says why itself) leaves the box up,
+// so the keystroke costs nothing.
 func (a App) openJumped(place func(App, string, string) App) App {
 	ag, ok := a.jumpCursorAgent()
 	if !ok {
 		return a
+	}
+	if a.grid.Has(ag.ID) {
+		place = App.openInNewPane
 	}
 	next := place(a, ag.ID, ag.Name)
 	if !next.grid.Has(ag.ID) {

@@ -413,6 +413,9 @@ func TestTheBoxFitsEverySizeAndAlwaysDrawsTheCursorsRow(t *testing.T) {
 				if rowHaving(rows[top:], jumpCursorName(t, a)) < 0 {
 					t.Fatalf("%dx%d at row %d: the cursor's row %q is not drawn:\n%s", w, h, step, jumpCursorName(t, a), strings.Join(rows, "\n"))
 				}
+				if base.jumpRoom() >= jumpChrome+1 && rowHaving(rows[top:], "↑↓") < 0 {
+					t.Fatalf("%dx%d at row %d: the box's foot is clipped:\n%s", w, h, step, strings.Join(rows, "\n"))
+				}
 				a, _ = pressKey(a, kmsg(tea.KeyDown))
 			}
 		}

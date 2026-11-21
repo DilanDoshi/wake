@@ -139,7 +139,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   agent found only by scattered letters does not outrank the name typed. `↵` opens the cursored agent through
   `openInNewPane`, as a click on its row does, and both finish in `selectOpened`; `⌃B` opens it below
   (`openBelow`, which refuses from a lower pane and leaves the box up), `⌃D` in the focused pane
-  (`openDMWith`); `esc`/`⌃F` close it and `⌃C` closes it and parks the agent in front of you. It is a modal
+  (`openDMWith`); an agent already drawn is only focused, whichever key it was; `esc`/`⌃F` close it and `⌃C` closes it and parks the agent in front of you. It is a modal
   search box in the resume picker's shape: read above the card, it owns every key, it is drawn over the pane it
   was opened in and closes on a focus change (`withFocus`), and a pane with no row for it (a card counts)
   refuses to open it and closes it on the next key, since a box nobody can see must not take `↵`; a card's page

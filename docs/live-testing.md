@@ -473,7 +473,7 @@ component that logs corrupts the frame it is drawing.
 
 ## 9a. `/fork` — the pane moves under you, and only a human can say whether that is right
 
-The confirming report arrives asynchronously, seconds after the keypress, and `forkArrived` opens
+The confirming report arrives asynchronously, seconds after the command, and `forkArrived` opens
 the fork's DM and gives it the keyboard. **That is the feature's payoff rather than a defect** —
 "branch this" that leaves you to go and find the branch is not what the words mean — but it is a
 focus change nobody asked for at the moment it happens, and no test has a human typing across it.

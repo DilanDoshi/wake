@@ -28,7 +28,7 @@ func (a App) deleteSelectedDraft(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if m.Type != tea.KeyBackspace && m.Type != tea.KeyDelete {
 		return a, nil, false
 	}
-	if a.sel.empty() || !a.sel.inComposer {
+	if a.sel.empty() || !a.sel.inComposer || a.jumpPicker.Open() { // the box's ⌫ edits its filter
 		return a, nil, false
 	}
 	c, ok := a.composerFor(a.sel.pane)
