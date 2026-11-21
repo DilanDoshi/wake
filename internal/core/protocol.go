@@ -653,7 +653,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 	if !isJSONArray(m.Content) {
 		// Compaction summaries, <local-command-stdout>, a peer's
 		// <cross-session-message> and bash mode's records all land here as string content.
-		text := jsonString(m.Content)
+		text := unwrapSkillCall(jsonString(m.Content))
 		if body, name, ok := crossSession(f.Type, text); ok {
 			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
 			return one(base)

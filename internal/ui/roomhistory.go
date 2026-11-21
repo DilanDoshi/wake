@@ -291,7 +291,7 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 	for _, ev := range kept {
 		if ev.Shell {
 			// A bang's record, which fold drops as echoed: kept as the turn claude
-			// answers it with (collapseBroadcasts), and never drawn.
+			// answers it with, and drawn when the room aimed it (collapseBroadcasts).
 			lines = append(lines, roomLine{ev: ev, by: agentOf(ev.SessionID)})
 			continue
 		}
@@ -410,9 +410,12 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 		if l.ev.Shell {
 			// A bang opens the turn claude answers: the room's only when its stamp
 			// says the room aimed it, never by text - two runs of one command in
-			// two conversations are not a broadcast.
+			// two conversations are not a broadcast. One the room aimed is drawn.
 			_, _, aimed := roomSendOf(l.ev.MessageID)
 			open[l.ev.SessionID] = aimed
+			if _, fork := copied[i]; aimed && !fork {
+				out = append(out, restoredBang(l))
+			}
 			continue
 		}
 		if keeper, ok := copied[i]; ok {

@@ -8,6 +8,27 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-18 — the update cue follows newer releases; only the strip's marker moves forward, the cache mirrors GitHub
+
+A room left open named the first newer release it heard of for as long as it ran (`deferred.md`'s gap, now
+built): the hourly keystroke ask continues after a release is known, and a strictly newer answer replaces the
+strip's marker. A failed, equal or older answer leaves it (`ui.dueUpdateCheck`). The marker never clears
+in-process: the build's version is compiled in, and `wake upgrade` replaces the binary on disk, not the window.
+
+- **The cache does not move forward only** (wake-orch, 2026-11-18, after two reviews). A guard that never wrote an
+  older release over a newer one was built and dropped: a release pulled or rolled back (cache v0.1.17, GitHub's
+  latest back to v0.1.16) stayed named by every window and its daily notice, while `wake upgrade`, which asks
+  GitHub live, said v0.1.16 was the latest; only deleting `~/.wake/update-check.json` ended it, and a mistagged
+  v1.0.0 would hide every real release under it. Probed over 30 days: 30 notices with the guard, 0 without, where
+  the cache reset at the first daily ask. The guard's gain was a stale edge's older answer hiding the marker from a
+  new window for at most a day, and an open room already keeps its marker. `TestThePulledReleaseIsForgottenAtTheNextDailyAsk`
+  pins it.
+- **Accepted:** a window left open and typed in repeats the once-a-day notice (the shared `Notified`), where it was
+  once per process; and a failing release host (offline, a 5xx) is retried on the hourly key by a room that knows a
+  release too, as one that knew none always did (10 s timeout, off the draw goroutine).
+
+---
+
 ## 2026-11-12 — the completion menu walks every offer: a window over the matches, sized to its pane, moved the least distance
 
 The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant
@@ -5507,7 +5528,7 @@ still runs in the UI, where the operator is, and only its result now travels.
   written, so a lost `started` costs nothing. A room restore reads it
   the same way: a bang's record (`Event.Shell`) opens the turn claude answers it with, the room's only when the
   stamp is a room send - never by text, since two conversations running one command print one block at one
-  moment - and is never drawn. Without it, a DM bang after a broadcast left the broadcast's turn open and
+  moment - and is drawn only when the room aimed it (2026-11-18 below). Without it, a DM bang after a broadcast left the broadcast's turn open and
   restored the private answer into the room.
 - **A turn, as Claude Code's is - the owner's pick (2026-10-25) of two.** 2.1.310's interactive `!` starts a
   model turn every time, in auto and default mode alike, which older builds did not. The alternative
@@ -5549,7 +5570,7 @@ still runs in the UI, where the operator is, and only its result now travels.
   each way, open=1 22.2→21.5ms, open=30 24.9→24.1ms, glamour 72.7→73.2ms - noise.
 - **Left out** (`deferred.md`): a bang behind a busy turn is not in the window's queue, so `↑` cannot take it
   back, a `⌃]` behind one ends the turn instead of backgrounding its work, and an `esc` leaves it for claude to
-  run after; the room's own bang line is still not restored after a room restore.
+  run after; the room's own bang line is still not restored after a room restore (closed by 2026-11-18, below).
 - **Held by** core's `shellrun_test.go` (the recorded records, Wake's stamped line against
   `testdata/input/shell-run.stdin.jsonl`, the round trip with the tags quoted in either half, pasted tags, and
   `shell-run.jsonl` started, answered with a turn and not replayed), the daemon's `shellrun_test.go` (the line
@@ -6313,6 +6334,78 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
   than 2.1.319 killed that work and may have sent no ending, leaving its row until the agent ends.
 - Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
   `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).
+
+## 2026-11-18 — a room bang's output folds under its message (the owner, via wake-orch)
+
+The owner's words: when you run a command in the main room, "it should print the output (by default
+minimized) in the main room as well under the message that sent it like it does in the dms." The room
+already drew `@who !cmd` and what it printed, but as one shaded line: the command and its output ran
+together, whatever the length (up to `bangMaxBytes`), and a reopened room drew nothing of a bang.
+
+- **Two parts, one line of text.** The message is the operator's own shaded row (`youSaid`); what it
+  printed is the peer fold's Muted body (`foldRows`, `peerFoldRows` = 3 rows, then `⤷ +N lines · ⌃E or
+  click to expand`). `⌃E` opens every fold, a click one, through the room's existing line-id set; no
+  second fold. A bang's room line stays `@who !cmd\noutput` (`bangLine`), so the split is its first row -
+  a command of several rows folds its later rows with the output. `internal/ui/roombang.go`.
+- **How it ended is never folded away.** Every row Wake appends under an output opens with
+  `bangNoteLead` (`… exited 1`, `… timed out`, `… truncated`), and the trailing run of them is drawn under
+  the pointer. Read off the text, so a reopened room keeps it; a command whose last row begins `… ` gets
+  that row shown too, which costs nothing.
+- **A reopened room draws a room-aimed bang** (it used to read the record only to open the turn its answer
+  belongs to). `core.Unfence` undoes the block `Fenced` made, so a live line and a restored one are the same
+  text and draw alike; a fork's copy of the record is drawn once (`forkCopies`), and a window that already
+  drew the bang live never asks for that session's history (`askRoomHistory`). **Restore cannot show**: a
+  bare room `!cmd` (it reaches no agent, so no transcript holds it), a bang whose agent had ended or was
+  parked (nothing was written), and a bang typed in a conversation, which stays that conversation's.
+- **A copy rejoins what the pane wrapped**, as the old one-line block did (`typedLeadRows`: `typedRows`' match,
+  kept as far as the text goes, so a fold's pointer ends it and the message above it still pastes back as the
+  one line it was). The output keeps its first row's indent (`bangBody`), which `crossSessionBody`'s trim lost.
+  At most `bangNoteMax` rows (what `bangRun` can leave: the cut, how it ended, the group reclaim) count as
+  notes, so output that opens its rows with `… ` still folds.
+- **No live echo to other windows**, as for any room send: a second window of the fleet sees the bang when
+  it reopens, as it sees a typed message. The conversation draws the block whole, as before.
+- **`@team` and `@all` stay refused** (a bang has one directory), the draft kept, before anything runs.
+- Held by `internal/ui/roombang_test.go`, `bangprivacy_test.go` and `cmd/wake/roombangscreen_unix_test.go`.
+
+## 2026-11-14 — a message that opens with a /command is your own turn, the word in Claude's skill colour (the owner, via wake-orch)
+
+The owner's report, with a screenshot: a message opening `/init-orch you are responsible for …` was drawn as one
+orange `⌘` row cut with "…". "When I use a skill in a message it should just be purple / the skill colour and the
+message should send normally." It always did send normally (a skill is claude's, and passes to the agent byte for
+byte); only the drawing was wrong, and it lost the argument.
+
+- **Every `/name` turn is an ordinary turn.** The conversation's `› you` head and shaded body, the room's shaded
+  line, wrapped as prose is and never cut. Only the command word is tinted, in `Skill` (`skill` in
+  `claude-palette.json`, held by `palette_test`), by `colourLead` in `chat_blocks.go` - the place the room already
+  tinted a leading `@handle`, extended rather than paralleled. A name must be a command's (`commandWord`): a path,
+  `/foo.md`, `//x` and `/123go` are words.
+- **The tint changes the foreground only.** A span carrying a background reads to lipgloss's wrap as a visible
+  blank, so it will not break at the spaces inside it and the first line split mid-word (`/init-` over
+  `orch you are …`); the turn's own style supplies the ground. `TestATintedTurnWrapsExactlyAsPlainTextDoes` holds the
+  turn to plain `shadedOwn`'s wrap at every width, which a comparison with the whitespace squashed cannot see.
+  The room's `@handle` line had the same split before this and no longer does.
+- **What a leading `@word` means is the surface's** (`leadMention`). The room tints a handle and the word behind it
+  (`@who /skill args`). A conversation's own turn routes nothing, so its `@word` is text: only a `/command`
+  opening the message is a skill call. A message the room routed there had its handle taken off before it was
+  sent, so the word behind the handle is the call, and the handle stays plain. A word is looked for behind a
+  handle only past whitespace: `@internal/ui` is one path. A handle is a name or a team as the router reads it
+  (`@deploy_bot`, `@2026q4`), the `/` the one character it never takes. The room tints by shape, as it tints the handle: an
+  `@x /foo` naming no live agent goes to the manager as typed and is still tinted (deferred).
+- **A reopened conversation draws a skill call as the live one.** Claude records it as its name twice and then the
+  arguments, `<command-message>…<command-name>/name</command-name>…<command-args>…`, which drew as raw tags; the
+  airlock reads it back as `/name args` (`unwrapSkillCall`, `localreply.go`; `testdata/stream/loop-self-paced-end.jsonl`,
+  `workflow-saved-command.jsonl`), only a whole record of string content: a record's tags inside an array block are
+  text. A built-in's record is still dropped whole on restore (`deferred.md`).
+- **The orange `⌘` row is gone, not kept for Wake's commands.** A typed Wake command is claimed before anything is
+  sent (`slash`, `roomCommand`, `mentionCommand`, asked by `submit` for both surfaces), so `/board`, `/wake-help`,
+  `/status` open their view and leave nothing in a transcript: there was nothing for the row to draw.
+  `/effort` and `/model` with an argument, `/compact`, `/context` and a conversation's `/clear` are claude's and read
+  as the turn they are. The one turn a Wake menu writes is the effort and model picker's `/effort high`, claude's
+  command with its argument, sent and drawn as a typed one is. `TestEveryWakeCommandIsClaimedBeforeAnythingIsSent`
+  holds the premise (that `slash` claims every one, and that a conversation's transcript gains no turn). Whether
+  Wake's commands should leave an orange line is new behaviour, left to the owner.
+- Rendering and decoding only. What reaches claude (2.1.322) is unchanged; no routing file is touched.
+- Held by `internal/ui/skillecho_test.go` and `internal/core/skillcall_test.go`.
 
 ## 2026-11-18 — a blurred window draws no caret and no focus colour (the owner, via wake-orch)
 
