@@ -827,13 +827,11 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226â
 - **2.1.322 prints `system/ui_invalidate` before every session's `init`** (after `session_title_changed`,
   which `--name` brings), its `event` a string where `stream_event`'s is an object, so
   `wireFrame.StreamEvent` stays raw and a stream event it cannot read is nothing (`ui-invalidate.jsonl:2`).
-- The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id, and **the task tools are model-gated, not
-  retired**: Claude Code offers them (and `TodoWrite`, by `CLAUDE_CODE_ENABLE_TASKS=0`) by default only on Opus
-  4.7, Sonnet 4.6, Haiku 4.5 and earlier (since 2.1.268), so a Sonnet 5.5, Opus 5.5, Haiku 5.5 or Fable 5 agent
-  never calls them. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the operator's environment brings them back; Wake passes
-  it through and does not set it (owner's 2026-11-20 ruling, `decisions.md`). `activeForm` is optional (2.1.69), so
-  the working label falls back to the item's subject (`activeForm`). Public docs: code.claude.com/docs/en/tools-reference,
-  "Task tool availability".
+- The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id. Claude Code offers those tools by default only on
+  older models (its docs: "Task tool availability"), so a current-model agent keeps no list and its working label is a
+  pool word; `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the operator's environment brings them back, which Wake passes through
+  and never sets (owner's 2026-11-20 ruling, `decisions.md`). An item in flight is labelled by its `activeForm`, else its
+  subject (the `activeForm` function).
 - **A self-paced `/loop` ends when its own wakeup turn finishes without a `ScheduleWakeup`** (2.1.319+;
   `CLAUDE_CODE_LOOP_KEEPALIVE=1` keeps the old fallback). No frame says so: the wakeup turn's
   `command_lifecycle` names `wakeup_source:"loop_wakeup"`, and its `completed` with nothing rescheduled is

@@ -180,9 +180,8 @@ type Agent struct {
 	// goal's reason; the ↻ marker and its detail read it. See loop.go.
 	loop LoopState
 
-	// Doing is the label of whatever task the agent last marked in progress -
-	// claude's activeForm, the word it puts on its own working line, or the
-	// item's subject when it sent none (see activeForm). Empty for an agent that
+	// Doing is the label of whatever task the agent last marked in progress:
+	// its activeForm, else its subject (see activeForm). Empty for an agent that
 	// keeps no task list, which is most of them; the heartbeat falls back to
 	// its word pool there.
 	Doing string
@@ -502,12 +501,11 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	return f, out
 }
 
-// activeForm is the label of the item a task list marks in progress, and "" for
-// a list with none: its present-tense activeForm, else its subject, as claude's
-// own spinner does - activeForm has been optional since claude 2.1.69. The first
-// one wins: claude's own tool description says at least one task is in progress
-// at all times, and two would be the model contradicting itself rather than a
-// case to render.
+// activeForm is the label of the first item a task list marks in progress, and
+// "" for a list with none: its activeForm, else its subject, since claude's
+// CHANGELOG makes activeForm optional (2.1.69). The first wins: claude's own
+// tool description says at least one task is in progress at all times, and two
+// would be the model contradicting itself rather than a case to render.
 func activeForm(todos []core.Todo) string {
 	for _, t := range todos {
 		if t.Status == core.TodoActive {

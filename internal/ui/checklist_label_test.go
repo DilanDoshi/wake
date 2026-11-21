@@ -8,12 +8,10 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// The label of the item in flight reaches every surface that names what an agent
-// is doing: the conversation's working line, the room's, and the /board row. It
-// is the item's activeForm, and its subject when claude sent none - activeForm
-// is optional since claude 2.1.69, whose own spinner falls back the same way, and
-// a live haiku-5-5 run (tools on) sent none on any item.
-func TestAnInProgressItemNamesItselfOnEverySurface(t *testing.T) {
+// The label of the item in flight reaches the conversation's working line, the
+// room's and the /board row: its activeForm, else its subject (activeForm is
+// optional, see activeForm).
+func TestAnInProgressItemsLabelReachesEachRenderer(t *testing.T) {
 	for _, c := range []struct {
 		name, subject, active, want string
 	}{

@@ -256,8 +256,8 @@ var claudeWireVocabulary = wordSet([]string{
 	// TaskCreate/TaskUpdate calls (task-checklist.jsonl). "subject" and
 	// "taskId" are policed for "patch" and "content"'s reason - wire keys with
 	// one meaning here, and Wake's own words are ChecklistOp.Text and .ID.
-	// "deleted" is the fourth status the 2.1.240 bundle lists beside the three
-	// drawn ones.
+	// "deleted" is the fourth status, matched against Claude Code by hand, beside
+	// the three drawn ones.
 	"TaskCreate", "TaskUpdate", "subject", "taskId", "deleted",
 	"total_tokens", "tool_uses", "duration_ms",
 
@@ -1178,9 +1178,9 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// TodoWrite and its whole-list envelope. Never called in the corpus (Claude
-	// Code offers it only beside the model-gated task tools), so its `todos`
-	// key is matched against Claude Code and maintained by hand, not recorded
+	// TodoWrite and its whole-list envelope. Never called in the corpus, so its
+	// `todos` key is matched against Claude Code and maintained by hand, not
+	// recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.

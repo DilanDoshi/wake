@@ -2,10 +2,8 @@
 
 Recorded 2026-08-22 against claude 2.1.240. Fixture: `testdata/stream/task-checklist.jsonl`.
 
-> **Update 2026-11-20.** "Retired" below is what 2.1.240 showed on one model. The task tools are
-> **model-gated**: Claude Code offers them by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier
-> (2.1.268+), and `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` brings them back on any model (public docs, "Task tool
-> availability"). Every `init` in the corpus that lists them is on such a model. See `decisions.md`, 2026-11-20.
+> **Update 2026-11-20.** The task tools are **model-gated**, which this recording (one model) could not show:
+> see `decisions.md`, 2026-11-20, and the section below.
 
 ## What was wrong
 
@@ -16,13 +14,13 @@ Recorded 2026-08-22 against claude 2.1.240. Fixture: `testdata/stream/task-check
 the screen showed the symptom: an agent's working line fell back to the heartbeat word pool
 (`✻ Lathing…`) where its own `activeForm` label should have been.
 
-## Why: TodoWrite is retired
+## Why: the Task family, not TodoWrite
 
-In Claude Code 2.1.240 the tool is gated off by default: `TodoWrite` is enabled only when the
-`CLAUDE_CODE_ENABLE_TASKS` environment variable is not explicitly `false`, so it is disabled by
-default. Its replacement is the `Task*` family, on by default. A
-live `init` frame advertises `Task, TaskCreate, TaskGet, TaskList, TaskOutput, TaskStop, TaskUpdate`
-and **not** `TodoWrite` (fixture line 7 lists the Task family; TodoWrite is absent).
+The recording's `init` (model `claude-sonnet-4-5`) advertises `Task, TaskCreate, TaskGet, TaskList,
+TaskOutput, TaskStop, TaskUpdate` and **not** `TodoWrite` (fixture line 7 lists the Task family; TodoWrite is
+absent), and no `init` in the corpus lists `TodoWrite`. That the Task family is on by default was true of this
+model only: Claude Code's public docs ("Task tool availability") offer it by default on older models alone, and
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` opts in anywhere.
 
 The Task family is a *different subsystem* from the subagent dispatch Wake already draws
 (`task_started`/`task_updated` **system** frames, `internal/core/task.go`). These are ordinary
@@ -51,8 +49,8 @@ Its `tool_result` is the only place the id appears:
 
 - The id is a **sequential integer assigned in creation order** ("1", "2", "3"), reported in the
   create's result text and named back by `taskId` in the update.
-- `status` is `pending` (implicit at create) | `in_progress` | `completed`. The 2.1.240 bundle's
-  schema lists a fourth, `deleted`, which this recording never exercises.
+- `status` is `pending` (implicit at create) | `in_progress` | `completed`. A fourth, `deleted`, is matched
+  against Claude Code and maintained by hand: this recording never exercises it.
 - `activeForm` is set at create and carried onto the item; a status-only update omits it.
 
 ## How Wake decodes it
@@ -79,6 +77,6 @@ Its `tool_result` is the only place the id appears:
 The `taskId`→item mapping is the one inference: the id is authoritative only in the create's
 *result text*, and Wake reconstructs it from a create counter rather than reading that text. This is
 correct as long as claude assigns ids as a monotonic per-session counter — which every recorded call
-here does, and which the delete/reorder handling is written against. The `deleted` status is decoded
-from the 2.1.240 bundle schema and is **unrecorded**; a session that deletes or reorders items gets a
+here does, and which the delete/reorder handling is written against. The `deleted` status is matched
+against Claude Code by hand and is **unrecorded**; a session that deletes or reorders items gets a
 fixture and moves it out of that caveat.
