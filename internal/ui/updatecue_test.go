@@ -2,8 +2,8 @@ package ui
 
 // A room left open for days still learns that a newer wake is out: the check
 // runs on the first frame and again on a keystroke once an hour has passed - never
-// on a timer, so a room nobody touches does nothing - and once a newer release is
-// known the strip says so until the process ends.
+// on a timer, so a room nobody touches does nothing - and the strip names the
+// newest release any answer has brought, until the process ends.
 
 import (
 	"strings"
@@ -131,18 +131,97 @@ func TestTheStripNamesTheNewerRelease(t *testing.T) {
 	}
 }
 
-// Once a newer release is known there is nothing a later check could add that
-// changes what to do - `wake upgrade` installs the newest - so the room stops
-// asking, and an unwritable cache cannot turn every hour into a GitHub call.
-func TestAKnownNewerReleaseEndsTheAsking(t *testing.T) {
-	start := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+// A room that learned of 0.1.15 keeps asking on the hourly keystroke, so the
+// 0.1.16 that went out after it opened replaces the marker (the strip too).
+func TestARoomThatKnowsOfOneReleaseLearnsOfANewerOneAnHourOn(t *testing.T) {
+	start := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
 	pinClock(t, start)
-	f := &fakeCheck{newer: "0.1.9"}
+	f := &fakeCheck{newer: "0.1.15"}
+	// Sized before it has a check, so the first frame's ask is still to come.
+	a := newRoomApp(t).withSize(120, 40)
+	a = a.applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}})
+	a, _ = asks(a.WithUpdateCheck(f.check), tea.WindowSizeMsg{Width: 120, Height: 40})
+	if strip := lastRows(a, 3); !strings.Contains(strip, upgradeGlyph+" wake 0.1.15") {
+		t.Fatalf("baseline: the strip does not name 0.1.15:\n%s", strip)
+	}
+
+	f.newer = "0.1.16"
+	pinClock(t, start.Add(updateRecheckEvery))
+	a, ok := asks(a, anyKey)
+	if !ok {
+		t.Fatal("a key an hour on did not ask a room that already knows of a newer release")
+	}
+	if strip := lastRows(a, 3); !strings.Contains(strip, upgradeGlyph+" wake 0.1.16") || strings.Contains(strip, "0.1.15") {
+		t.Errorf("the strip still names the older release:\n%s", strip)
+	}
+}
+
+// Only a strictly newer answer moves the marker: a failed check ("" - the
+// answer for an offline one too), an equal answer and an older one (a release
+// pulled, a stale cache) leave what the room already knows.
+func TestALaterAnswerOnlyEverMovesTheMarkerForward(t *testing.T) {
+	for _, tc := range []struct{ name, known, answer, want string }{
+		{"a failed check", "0.1.15", "", "0.1.15"},
+		{"the same release", "0.1.15", "0.1.15", "0.1.15"},
+		{"an older release", "0.1.15", "0.1.14", "0.1.15"},
+		{"a newer release", "0.1.15", "0.1.16", "0.1.16"},
+		{"a newer minor release", "0.1.15", "0.2.0", "0.2.0"},
+		// Numbers, not strings: "0.1.10" sorts before "0.1.9" as text.
+		{"a patch past nine", "0.1.9", "0.1.10", "0.1.10"},
+		{"nine after ten", "0.1.10", "0.1.9", "0.1.10"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+			pinClock(t, start)
+			f := &fakeCheck{newer: tc.known}
+			a, _ := asks(newRoomApp(t).WithUpdateCheck(f.check), tea.WindowSizeMsg{Width: 120, Height: 40})
+
+			f.newer = tc.answer
+			pinClock(t, start.Add(updateRecheckEvery))
+			a, ok := asks(a, anyKey)
+			if !ok {
+				t.Fatal("a key an hour on did not ask")
+			}
+			if got := a.upgrade.newer; got != tc.want {
+				t.Errorf("after %s the marker names %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// Knowing a release changes what the room does with an answer, not when it
+// asks: still only on a key, still at most once an hour - a room nobody types in
+// does nothing, however long it has been.
+func TestAKnownReleaseKeepsTheHourlyKeystrokeCadence(t *testing.T) {
+	start := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	pinClock(t, start)
+	f := &fakeCheck{newer: "0.1.15"}
 	a, _ := asks(newRoomApp(t).WithUpdateCheck(f.check), tea.WindowSizeMsg{Width: 120, Height: 40})
 
-	pinClock(t, start.Add(3*updateRecheckEvery))
+	pinClock(t, start.Add(48*time.Hour))
+	for _, msg := range []tea.Msg{
+		tea.WindowSizeMsg{Width: 100, Height: 30},
+		tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown},
+		updateCheckedMsg{newer: "0.1.15"},
+	} {
+		if _, ok := asks(a, msg); ok {
+			t.Errorf("%T asked with nobody typing", msg)
+		}
+	}
+	pinClock(t, start.Add(updateRecheckEvery-time.Minute))
 	if _, ok := asks(a, anyKey); ok {
-		t.Errorf("a room that knows of 0.1.9 asked again (asked %d)", f.asked)
+		t.Error("a key inside the hour asked a room that knows of a release")
+	}
+	pinClock(t, start.Add(updateRecheckEvery))
+	a, ok := asks(a, anyKey)
+	if !ok {
+		t.Fatal("a key an hour on did not ask a room that knows of a release")
+	}
+	if _, ok := asks(a, anyKey); ok {
+		t.Error("a key straight after that answer asked again")
+	}
+	if f.asked != 2 {
+		t.Errorf("asked %d times, want the first frame's and the hour's", f.asked)
 	}
 }
 

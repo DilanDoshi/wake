@@ -67,24 +67,6 @@ selection over the row. The conversation draws each one too and would want the s
 
 ---
 
-## KNOWN GAP, 2026-11-18 — a room left open names the first newer release it heard of, for as long as it runs
-
-The strip's `↑ wake X` (`internal/ui/updatecue.go`) is the newest release the check knew when it first found one
-newer than this build. `dueUpdateCheck` never asks again once `newer` is set - "no later answer changes what to do"
-- so a room opened before v0.1.16 went out kept saying `↑ wake 0.1.15` for days after, while the on-disk cache
-(`~/.wake/update-check.json`, `cmd/wake/updatecheck.go`) already read v0.1.16 and `wake` on the machine's `PATH` was
-0.1.16. Found 2026-11-18 from a screenshot of such a room; the marker is not a stale cache, and the window's own
-build was older than 0.1.15 (the cue only draws for a release newer than the build). **Restarting that window runs
-0.1.16 and draws no cue.**
-
-**Not built:** keep asking on the hourly keystroke after a newer release is known, and let a newer answer replace
-the marker - a failed or older answer never clearing it. One condition in `dueUpdateCheck` and its test; the
-network stays at one request a day because the ask is a cache read.
-
-*Revisit if:* the owner asks for it; a second report of a stale name on the strip would make it one.
-
----
-
 ## FOLLOW-UP, 2026-11-12 — a click on a completion offer, the wheel over the menu, and bigger steps
 
 The completion menu now walks every offer with ↑↓, ⌃N/⌃P, ⇥ and ↵ (`decisions.md`, 2026-11-12). The mouse does
@@ -155,7 +137,7 @@ live. Older than the window. *Closes with:* `completionUp` declining when no men
 ## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
 
 The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
-`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+`field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
 question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
 can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
 
@@ -6235,8 +6217,13 @@ a bang typed while that agent is busy - and none sends anything twice.
   differs. *Closes with:* two records, the command's held by `shouldQuery:false`, as Claude Code's own `!`
   writes two - at the cost of a zero-turn result between them that the room and the done line would have to
   learn to ignore.
-- **The room's own bang line is still gone after a room restore.** It is echoed, and the room restores only
-  typed turns; that was true before this change. *Closes with:* room provenance for a bang aimed from the room.
+- ~~**The room's own bang line is still gone after a room restore.**~~ **FIXED** (`fix/room-shows-a-sent-commands-output`,
+  2026-11-18): a room-aimed bang is drawn again on a reopen, folded as it was live, from the stamp the room
+  provenance already reads (`decisions.md`, 2026-11-18). A bare room `!cmd` is in no transcript and stays gone.
+- **A `!cmd` of several rows folds its later rows with the output in the room.** The room's line is
+  `@who !cmd` + the output, split at its first row, and the command/output boundary is not kept past
+  `core.Unfence`. *Closes with:* carrying the command's row count to the room line (a retained `core.Event`
+  may not grow, so it needs a field that fits its padding).
 - **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):
   no turn, $0, read with the next prompt - one field in `EncodeShellRun` and the daemon not marking a turn
   owed. Its live facts are in the findings note and want fixtures before it is ever written.
@@ -6578,3 +6565,24 @@ Left out:
   starting shells at once cost thirty. *Closes with:* one shared listing with a short cache, if it is ever felt.
 - **Only a shell is known to hold claude open.** A Monitor's, or any other unrecorded, `task_type` reads as
   `TaskKindUnknown` and neither notes nor ends. *Closes with:* a recording of one.
+
+---
+
+## FOLLOW-UP, 2026-11-14 — what the skill-call echo left alone
+
+- **A built-in's invocation is dropped whole on restore.** `<command-name>/compact</command-name>…` is plumbing
+  (`isLocalCommandPlumbing`), so a reopened conversation does not show the `/compact keep the plan` the operator
+  typed, though the live one does. A skill's record is read back as typed now; a built-in's would be the same
+  unwrap, but its output is a separate frame and the choice to show the invocation is the owner's.
+- **A command word followed by a newline is not Wake's.** `/board`⌥↵`show me the tiles` is not claimed (`slash` splits
+  on a space), so it is sent to the agent as a message and drawn as an ordinary turn with `/board` tinted.
+- **The room tints a `/word` behind any `@handle` by shape.** `@x /foo` with no live `x` goes to the manager as
+  typed and is tinted as the handle always was; telling it apart needs the fleet at draw time.
+- **A second-line `/word` is not tinted.** `@john`⌥↵`/init-orch args` routes as a real call (the handle and break
+  are stripped), but the tint reads the first line only.
+- **A self-paced `/loop`'s scheduled wakeup turns restore as a typed call.** Each wakeup is written to disk as the
+  loop's own skill-call record, carrying `turnOrigin:"scheduled"` and `wakeupSource:"loop_wakeup"` where a typed one
+  carries `turnOrigin:"sdk"`, so a reopened conversation draws `› you /loop …` once per wakeup, as the raw tags
+  were drawn under `› you` before (one such record on the machine it was found on). Telling them apart means decoding
+  the disk's `turnOrigin`, which wants a recorded transcript of a scheduled wakeup (`testdata/transcript` has none)
+  and room in `protocol.go`, which is at the 800-line limit.
