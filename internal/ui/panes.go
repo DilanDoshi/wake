@@ -179,7 +179,7 @@ func (a App) cursorAgent() (Agent, bool) {
 			return agent, true
 		}
 	}
-	agents := a.fleet.OnRoster()
+	agents := a.rosterAgents()
 	if len(agents) == 0 {
 		return Agent{}, false
 	}
@@ -199,8 +199,7 @@ func (a App) cursorAgent() (Agent, bool) {
 // operator never chose - the selection was left behind by the last conversation
 // they had open, on a sidebar that was not on screen.
 func (a App) pickAgent(delta int) App {
-	agents := a.fleet.OnRoster()
-	if len(agents) == 0 {
+	if len(a.fleet.OnRoster()) == 0 {
 		notice.Report("%s", noPaneAdvice)
 		return a
 	}
@@ -208,7 +207,7 @@ func (a App) pickAgent(delta int) App {
 		a.layout.ShowRoster = true
 		a = a.resizePanes()
 	}
-	a.roster = a.roster.Move(a.fleet.sectioned(agents), a.fleet.RunningTasks, delta)
+	a.roster = a.roster.Move(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, delta)
 	return a
 }
 
@@ -234,7 +233,11 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	return a.rosterDrawn().Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
+	bar := a.barRows()
+	if y < bar {
+		return rosterSpot{}, false // the search bar is no row of the roster's
+	}
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-bar)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the

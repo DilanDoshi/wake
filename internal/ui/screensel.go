@@ -82,6 +82,10 @@ type rosterHit struct {
 // report, so a report between press and release would otherwise open whatever
 // agent slid onto the row. See screenClick.
 func (a App) pressRoster(x, y int) App {
+	if y < a.barRows() { // the search bar: focus it; there is nothing to copy or open
+		a.sideSearch.Focus = true
+		return a.cleared()
+	}
 	if d, ok := a.dragSource(y); ok {
 		a.dragged = d
 		a.dragged.x0, a.dragged.y0 = x, y

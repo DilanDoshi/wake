@@ -133,6 +133,7 @@ func helpSurfaces() []helpSurface {
 		{"resumePickerKey", resumeVerb + " also", helpParkKey},
 		{"jumpKey", jumpVerb + " and ⌃F", jumpKeys},
 		{"jumpKey", jumpVerb + " also", jumpClose + " · " + helpParkKey},
+		{"barKey", sidebarSearchVerb + " (click it)", barKeys},
 		{"mcpMenuKey", mcpVerb + " servers", MCPMenu{Level: mcpList}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " one server", MCPMenu{Level: mcpDetail}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " tools", MCPMenu{Level: mcpTools}.keyHint()},
