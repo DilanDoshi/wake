@@ -6582,3 +6582,18 @@ A loop wakeup's non-meta record restores as a started turn (`core.claudeOwnMarks
 - **A rewind after another turn claude started is unrecorded.** A background task's ending (a dropped
   `task-notification` record) may be a later turn claude counts, as a wakeup is; the tip names only a started
   turn. *Closes with:* a recording of a rewind after one.
+
+## FROM `fix/subagent-early-handback-ends-once`, 2026-11-20
+
+An agent's `completed` ending is held while a task it owns runs, and drawn if no restart comes
+(`internal/ui/taskhold.go`). Left out:
+
+- **A held ending has no time bound.** It is released by the session's next turn ending with nothing the agent
+  owns running, the agent ended or parked, or a reattach - never a timer. So an owned task that never ends (a dev
+  server a subagent handed back over), or an idle session whose owned task ends with no restart, draws no
+  ending line until one of those. The sidebar is right meanwhile. *Closes with:* a recording of claude's
+  behaviour for an owned task that never ends, and an idle-edge release if the wait is felt.
+- **The shape rests on one recording.** The restart is told by the agent's task id and a `task_started`; one under
+  another id, or seen only as `task_progress`, draws two lines as before. A turn ending between the shell's
+  ending and the restart (a `/context` reply is one) draws the early ending, and the restart a second line.
+  *Closes with:* a recording of either.

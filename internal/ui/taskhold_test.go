@@ -202,6 +202,9 @@ func TestAHeldEndingDrawsWhenNoRestartIsComing(t *testing.T) {
 	for name, step := range map[string]func(App) App{
 		"the session's next turn ends":         func(a App) App { return a.applyFrame(taskFrame("s1", turnEnd)) },
 		"a report no longer lists the session": func(a App) App { return a.applyStatus(&rpc.Status{}) },
+		"a report says it was parked": func(a App) App {
+			return a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateParked}}})
+		},
 		"a report says it ended": func(a App) App {
 			return a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateEnded}}})
 		},
@@ -243,8 +246,7 @@ func TestAHeldEndingIsDroppedByAClear(t *testing.T) {
 	}
 }
 
-// Held endings come back in the order they were held, whatever else the map of
-// agents does.
+// Held endings come back in the order they were held, whichever trigger draws them.
 func TestHeldEndingsAreDrawnInTheOrderTheyWereHeld(t *testing.T) {
 	evs := []core.Event{
 		started("a1", "toolu_a1", "first", "general-purpose", core.TaskAgent),
@@ -253,22 +255,87 @@ func TestHeldEndingsAreDrawnInTheOrderTheyWereHeld(t *testing.T) {
 		ending("a2", core.TaskDone, 2*time.Second),
 		ending("a1", core.TaskDone, 1*time.Second),
 		ending("c1", core.TaskDone, 0), ending("c2", core.TaskDone, 0),
-		turnEnd,
 	}
-	_, out := replayTasks(t, evs...)
-	lines := agentEndings(out)
-	if len(lines) != 2 || !strings.Contains(lines[0], `"second"`) || !strings.Contains(lines[1], `"first"`) {
-		t.Errorf("endings drawn %q, want second then first, the order they were held", lines)
+	for name, step := range map[string]func(App) App{
+		"a turn ending":  func(a App) App { return a.applyFrame(taskFrame("s1", turnEnd)) },
+		"a report":       func(a App) App { return a.applyStatus(&rpc.Status{}) },
+		"a reattachment": func(a App) App { m, _ := a.reattached(reattachedMsg{}); return m.(App) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, _ := replayTasks(t, evs...)
+			lines := agentEndings(conversationRegion(t, *step(a).dms["s1"], 120, 60))
+			if len(lines) != 2 || !strings.Contains(lines[0], `"second"`) || !strings.Contains(lines[1], `"first"`) {
+				t.Errorf("endings drawn %q, want second then first, the order they were held", lines)
+			}
+		})
 	}
 }
 
-// An ending that is not `completed` is never held and ends the hold, so what draws is
-// the stop - once, and not the `finished` it follows.
-func TestAStoppedEndingAfterAHeldOneIsTheOneDrawn(t *testing.T) {
-	_, out := replayTasks(t, append(agentWithShell("Count", 3*time.Second),
-		ending("a1", core.TaskStopped, 5*time.Second), ending("c1", core.TaskDone, 0), turnEnd)...)
-	lines := agentEndings(out)
-	if len(lines) != 1 || !strings.Contains(lines[0], taskLineHalted+metaSep+elapsedText(5*time.Second)) {
-		t.Errorf("%d ending lines %q, want the stop once", len(lines), lines)
+// The line stands after the text of the turn that released it, and the board's tile
+// holds and draws it as the conversation does.
+func TestAReleasedEndingStandsAfterTheTurnAndOnTheBoardTile(t *testing.T) {
+	fresh(t)
+	a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+	board := tiledBoardApp().ensureBoardDMs()
+	tile := func() string {
+		_, w := board.boardDMs["s1"].transcriptWindow(120, 60)
+		return stripANSI(w)
+	}
+	feed := func(evs ...core.Event) {
+		for _, ev := range evs {
+			a = a.applyFrame(taskFrame("s1", ev))
+			board = board.applyFrame(taskFrame("s1", ev))
+		}
+	}
+	feed(append(agentWithShell("Count", 3*time.Second), ending("c1", core.TaskDone, 0),
+		core.Event{Kind: core.KindAssistantText, Text: "wrapping up the shell"})...)
+	if n := strings.Count(tile(), taskLineGlyph+" "+taskLineAgent); n != 0 {
+		t.Fatalf("the tile draws %d ending lines while the ending is held", n)
+	}
+	feed(turnEnd)
+	out := conversationRegion(t, *a.dms["s1"], 120, 60)
+	if n := strings.Count(tile(), taskLineGlyph+" "+taskLineAgent); n != 1 {
+		t.Errorf("the tile draws %d ending lines after the release, want 1:\n%s", n, tile())
+	}
+	if text, line := lineIndex(out, "wrapping up the shell"), lineIndex(out, taskLineGlyph+" "+taskLineAgent); text < 0 || line < text {
+		t.Errorf("the released line (row %d) is not after the turn's text (row %d):\n%s", line, text, out)
+	}
+}
+
+// What is held: an agent the session dispatched itself, by a frame that names its
+// dispatch. A nested agent's ending is never drawn, a shell owns nothing, and a
+// dispatch-less task_updated after the notification must not replace the hold.
+func TestOnlyAnAgentTheSessionDispatchedItselfIsHeld(t *testing.T) {
+	fold := func(evs ...core.Event) Tasks {
+		var tasks Tasks
+		for _, ev := range evs {
+			tasks = tasks.Observe(ev)
+		}
+		return tasks
+	}
+	nested := started("a2", "toolu_a2", "inner", "general-purpose", core.TaskAgent)
+	nested.Task.Parent = "a1"
+	for name, tc := range map[string]struct {
+		evs  []core.Event
+		held int
+	}{
+		"an agent of its own": {agentWithShell("Count", 3*time.Second), 1},
+		"a nested agent": {[]core.Event{
+			started("a1", "toolu_a1", "outer", "general-purpose", core.TaskAgent), nested, owned("c2", "a2"),
+			ending("a2", core.TaskDone, time.Second)}, 0},
+		"a shell with a shell of its own": {[]core.Event{
+			owned("c1", ""), owned("c2", "c1"), ending("c1", core.TaskDone, time.Second)}, 0},
+		"a dispatch-less update after the notification": {append(agentWithShell("Count", 3*time.Second),
+			core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{ID: "a1", Kind: core.TaskKindUnknown, Phase: core.TaskEnded, Status: core.TaskDone}}), 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tasks := fold(tc.evs...)
+			if len(tasks.held) != tc.held {
+				t.Errorf("%d endings held, want %d", len(tasks.held), tc.held)
+			}
+			if name == "a dispatch-less update after the notification" && len(tasks.held) == 1 && tasks.held[0].Task.Dispatch != "toolu_a1" {
+				t.Errorf("the held ending names dispatch %q, want the notification's: a line is drawn only from one that names it", tasks.held[0].Task.Dispatch)
+			}
+		})
 	}
 }

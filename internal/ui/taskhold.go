@@ -65,7 +65,7 @@ func without(held []core.Event, id string) []core.Event {
 // released is the held endings this event settles - the session's own turn ending, with
 // nothing the agent owns still running - and the Tasks without them, in the order held.
 func (t Tasks) released(ev core.Event) (Tasks, []core.Event) {
-	if len(t.held) == 0 || ev.Kind != core.KindTurnEnd || ev.Subagent != nil {
+	if len(t.held) == 0 || ev.Kind != core.KindTurnEnd {
 		return t, nil
 	}
 	var kept, out []core.Event
@@ -118,13 +118,19 @@ func (a App) settleHeld(sessionID string, ev core.Event) App {
 }
 
 // settleGone draws the held endings of each session a report no longer shows running:
-// ended, or parked, which leaves Sessions. A report is read before the fleet folds it.
+// ended, or parked (a ⌃C park stays in Sessions as StateParked, and WithStatus then drops
+// the session's tasks, so a report is read before the fleet folds it).
 func (a App) settleGone(st *rpc.Status) App {
-	live := map[string]bool{}
-	for _, s := range st.Sessions {
-		live[s.ID] = s.State != rpc.StateEnded
-	}
-	return a.drainHeldWhere(func(id string) bool { return !live[id] })
+	var live map[string]bool
+	return a.drainHeldWhere(func(id string) bool {
+		if live == nil {
+			live = make(map[string]bool, len(st.Sessions))
+			for _, s := range st.Sessions {
+				live[s.ID] = s.State != rpc.StateEnded && s.State != rpc.StateParked
+			}
+		}
+		return !live[id]
+	})
 }
 
 // settleAll draws every held ending: what a returning client missed cannot be told.

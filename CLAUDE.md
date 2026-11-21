@@ -938,7 +938,8 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226‚
   progress). `subagent-waits-background.jsonl`. **One that hands back before its own shell ends** (2.1.329)
   is told `completed` as well, starts again when the shell ends and is told once more; the fold holds the
   first ending while a task the agent owns runs, and draws it only if no restart comes (a turn ending, the
-  agent ended or parked, a gap), so one line is drawn (`taskhold.go`, `subagent-handback-then-rewoken.jsonl`).
+  agent ended or parked, a gap), so one line is drawn; there is no timer, so an idle session whose shell ends
+  with no restart draws it at its next turn (`taskhold.go`, `subagent-handback-then-rewoken.jsonl`).
 - **A headless claude does not exit on stdin EOF while a background shell runs** (2.1.322, live): it stays,
   idle, and its shell with it, so a stop or a park that only closes stdin never completes. An interrupt first
   frees it (`‚åÉQ`'s order); a bare interrupt kills no shell. Only a shell was probed - a background subagent
