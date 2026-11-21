@@ -493,7 +493,12 @@ func sentBlock(from string, s *core.PeerSend, width int, expanded bool) string {
 // aligns it under the head, the way thinkingBlock draws its own muted body one
 // indent in.
 func crossSessionBody(text string, width int) string {
-	body := strings.TrimSpace(text)
+	return mutedBody(strings.TrimSpace(text), width)
+}
+
+// mutedBody is body drawn as crossSessionBody draws it, its whitespace kept: a room
+// bang's output keeps the indent its first row opens with (roombang.go).
+func mutedBody(body string, width int) string {
 	if body == "" {
 		return ""
 	}
@@ -535,19 +540,6 @@ func userBlock(ev core.Event, width int) string {
 	if strings.TrimSpace(ev.Text) == "" {
 		return ""
 	}
-	// A slash command the operator typed reads as a called command, not a turn
-	// of prose - a compact invocation line, the way Claude Code shows one.
-	// Compact-ness follows the text, so a command routed from the room compacts
-	// too and stays consistent with its own disk readback; a mention-bearing
-	// turn opens with '@', never matches, and keeps its prose "from the room"
-	// head - the only place that head has a mention to explain. Excluded is what
-	// is not the operator's own composed turn - a replay, a subagent's prompt -
-	// which opens with a slash only by coincidence. See commandecho.go.
-	if ev.Subagent == nil && !ev.Echoed {
-		if _, ok := commandInvocation(ev.Text); ok {
-			return commandLine(ev.Text, width)
-		}
-	}
 	switch {
 	case ev.Subagent != nil:
 		return joinBlock(mutedLine(promptLabel, width), renderMarkdown(ev.Text, width))
@@ -558,9 +550,9 @@ func userBlock(ev core.Event, width int) string {
 		// than being muted like a replay. Only the head moves - the mention it
 		// carries is the *message*, and the label is what says the mention did
 		// the routing instead of being text you typed at this composer.
-		return joinBlock(accentLine(roomTurnLabel, width), shadedOwn(ev.Text, width))
+		return joinBlock(accentLine(roomTurnLabel, width), shadedOwn(colourLead(ev.Text, mentionRouted), width))
 	default:
-		return joinBlock(accentLine(userLabel, width), shadedOwn(ev.Text, width))
+		return joinBlock(accentLine(userLabel, width), shadedOwn(colourLead(ev.Text, mentionIsText), width))
 	}
 }
 

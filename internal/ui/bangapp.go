@@ -150,16 +150,13 @@ func (a App) shellStarted(id, msgID string) App {
 func (a App) bangResult(m bangResultMsg) (App, tea.Cmd) {
 	ev := bangEvent(m)
 	if m.ID == "" {
-		// Typed into the room: back there as what was said - `@who !cmd`, in
-		// who's thread, then what it printed - drawn as the operator's own line,
-		// whose lines the room keeps as they are. Unfenced: the room draws no
-		// markdown there, so a fence would show as backticks.
-		line := ev
-		line.Text = strings.TrimRight(bangPrefix+m.Cmd+"\n"+m.Text, "\n")
+		// Typed into the room: back there as what was said - `@who !cmd`, in who's
+		// thread, then what it printed folded under it (roombang.go).
+		name := ""
 		if m.To != "" {
-			line.Text = agentPrefix + a.agentName(m.To) + " " + line.Text
+			name = a.agentName(m.To)
 		}
-		a = a.withRoom(a.room.appendUser(line, m.To, m.Channel))
+		a = a.withRoom(a.room.appendUser(bangLine(ev, name), m.To, m.Channel))
 	}
 	// The conversation it was typed in, or the one a room mention aimed at.
 	if dm, ok := a.dms[ev.SessionID]; ok && ev.SessionID != "" {

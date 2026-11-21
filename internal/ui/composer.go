@@ -226,6 +226,10 @@ type Composer struct {
 	// wrongly half the time. See App.withFocus.
 	blurred bool
 
+	// windowBlurred is the whole window lacking the keyboard: the same plain
+	// border and no caret, whichever pane would have the keys. See windowfocus.go.
+	windowBlurred bool
+
 	// attachments are images dropped into this draft, each drawn in the box as
 	// an `[Image #id]` chip. The chip is the only tie between the draft text and
 	// the bytes: an attachment sends only while its chip survives in the draft
@@ -288,6 +292,9 @@ func NewComposer() Composer {
 // The command is computed before the return so the mutated text area is what is
 // copied back: `return c, c.ta.Focus()` would copy c first and blink a stale one.
 func (c Composer) Refocus() (Composer, tea.Cmd) {
+	if c.windowBlurred {
+		return c, nil // the window's own FocusMsg lights it; see windowfocus.go
+	}
 	cmd := c.ta.Focus()
 	return c, cmd
 }
@@ -660,7 +667,7 @@ func (c Composer) Focused(yes bool) Composer {
 // the border's whole job is answering "where do I type", and a blurred box is
 // not the answer whatever its colour.
 func (c Composer) boxStyle() lipgloss.Style {
-	if c.blurred {
+	if c.blurred || c.windowBlurred {
 		return BoxStyle
 	}
 	if hue, ok := identityColor(c.color); ok {

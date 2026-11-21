@@ -313,7 +313,7 @@ func TestYourOwnRoomTurnAlignsWithAnAgentsReply(t *testing.T) {
 // how many rows the block occupies: the plain shaded block (the DM's own path,
 // shadedOwn on raw text) is the reference for the same words.
 //
-// The spill was colourMention running OwnStyle.Render over the whole multi-line
+// The spill was the old mention tint running OwnStyle.Render over the whole multi-line
 // remainder, which padded every inner line out to the widest line's width; once
 // one line is wide enough to wrap, that padding pads every short line past the
 // wrap width too, so each spills into a run of shaded-blank rows. Every one of

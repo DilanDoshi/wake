@@ -99,22 +99,30 @@ const (
 	bangShell     = "/bin/sh"
 	bangShellFlag = "-c"
 
+	// bangNoteLead opens every line Wake appends under a command's output, so the
+	// room's fold can keep them in sight (roombang.go).
+	bangNoteLead = "… "
+
+	// bangNoteMax is the most such rows one command leaves: the cut, how it ended, and
+	// the group reclaim. Held by TestABangLeavesNoMoreNoteRowsThanTheRoomKeeps.
+	bangNoteMax = 3
+
 	// The three things that can be true of a finished command besides its
 	// output. Each is a line appended under that output, because a bound that
 	// silently cut something is a wrong transcript rather than a short one.
-	bangTruncated = "… truncated at %d bytes"
-	bangTimedOut  = "… timed out after %s"
-	bangExited    = "… exited %d"
+	bangTruncated = bangNoteLead + "truncated at %d bytes"
+	bangTimedOut  = bangNoteLead + "timed out after %s"
+	bangExited    = bangNoteLead + "exited %d"
 
 	// bangAbandoned is the command that ended while something it started did
 	// not, and still holds the pipe its output was arriving on. Reported
 	// because what is above it may be incomplete, which is exactly the thing a
 	// reader cannot tell by looking.
-	bangAbandoned = "… ended, but something it started held its output open past %s"
+	bangAbandoned = bangNoteLead + "ended, but something it started held its output open past %s"
 
 	// bangFailed is anything else: a shell that could not be started at all,
 	// or an exit that carries no status because a signal ended it.
-	bangFailed = "… %v"
+	bangFailed = bangNoteLead + "%v"
 
 	// bangReclaimed is the group kill after Run finding something still in the
 	// command's process group. Said for bangAbandoned's reason - a bound that
@@ -126,11 +134,11 @@ const (
 	// So this claims no more than that something was there and is gone, and
 	// deliberately fires on every backgrounded command - `!npm run dev &` really
 	// is killed when the bang returns, and that is the thing to say out loud.
-	bangReclaimed = "… killed what was still in the command's process group"
+	bangReclaimed = bangNoteLead + "killed what was still in the command's process group"
 
 	// bangCleanupFailed is the reclaim that could not be done at all, which is
 	// the one outcome that leaves something running with nobody holding it.
-	bangCleanupFailed = "… failed to reclaim what the command started: %v"
+	bangCleanupFailed = bangNoteLead + "failed to reclaim what the command started: %v"
 )
 
 // isBang reports whether text is a local command, and returns the command.
