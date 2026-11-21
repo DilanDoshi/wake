@@ -317,7 +317,7 @@ func TestEscapeInterruptsATurn(t *testing.T) {
 	s.await("turn interrupted")
 }
 
-// ⌃F branches the conversation, and the fork says what it inherited.
+// /fork branches the conversation, and the fork says what it inherited.
 func TestForkOpensTheForkAndSaysWhatItIs(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
@@ -326,7 +326,7 @@ func TestForkOpensTheForkAndSaysWhatItIs(t *testing.T) {
 	s.await("ready")
 	name := s.agentName()
 
-	s.send("\x06") // ⌃F
+	s.send("/fork\r")
 	s.await("is a fork of @" + name)
 }
 

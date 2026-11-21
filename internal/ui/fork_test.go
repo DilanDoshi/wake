@@ -1,6 +1,6 @@
 package ui
 
-// ⌃F: branching the conversation you are reading.
+// /fork: branching the conversation you are reading.
 //
 // The key writes a frame and nothing else - the daemon spawns, this view never
 // touches a process - so what these tests hold is the frame, the wait for a
@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -28,15 +27,15 @@ func TestCtrlFAsksTheDaemonToForkTheOpenConversation(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(120, 30)
 
-	_, cmd, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	_, cmd, handled := forkAsk(a)
 	if !handled {
-		t.Fatal("⌃F fell through to the composer")
+		t.Fatal("/fork fell through to the composer")
 	}
 	go func() { _ = runCmdQuietly(cmd) }()
 
 	f := awaitFrame(t, sent)
 	if f.Kind != rpc.FrameFork {
-		t.Fatalf("⌃F wrote a %q frame, want %q", f.Kind, rpc.FrameFork)
+		t.Fatalf("/fork wrote a %q frame, want %q", f.Kind, rpc.FrameFork)
 	}
 	if f.ParentID != "s1" {
 		t.Errorf("the frame's ParentID is %q, want the conversation that had the keys", f.ParentID)
@@ -50,7 +49,7 @@ func TestCtrlFAsksTheDaemonToForkTheOpenConversation(t *testing.T) {
 	}
 }
 
-// The payoff for ⌃F: after the daemon confirms, the operator is *in* the fork.
+// The payoff for /fork: after the daemon confirms, the operator is *in* the fork.
 // Without this the key produces a new roster row and a conversation they then
 // have to go and find, which is not what "branch this" means.
 //
@@ -66,7 +65,7 @@ func TestTheForkOpensItsOwnConversationWhenTheDaemonConfirmsIt(t *testing.T) {
 	// The model the key hands back, not the one it was given: fork records the
 	// id it minted on the App it returns, and a test that discarded it would be
 	// asserting about a client that never pressed anything.
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -101,7 +100,7 @@ func TestARefusedForkStopsTheClientWaitingForIt(t *testing.T) {
 	// The model the key hands back, not the one it was given: fork records the
 	// id it minted on the App it returns, and a test that discarded it would be
 	// asserting about a client that never pressed anything.
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -125,7 +124,7 @@ func TestARefusedForkStopsTheClientWaitingForIt(t *testing.T) {
 
 // Two presses are two forks, and neither is lost. This is the feature's own
 // stated purpose - v1_goals.md calls fork "the natural way to explore two
-// approaches from one context", and two approaches is ⌃F ⌃F across a `claude`
+// approaches from one context", and two approaches is `/fork` twice across a `claude`
 // spawn that takes seconds - so a one-slot wait would drop the first fork on
 // precisely the input the feature exists for.
 //
@@ -138,12 +137,12 @@ func TestASecondForkAskedForBeforeTheFirstArrivesIsNotLost(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	first := awaitFrame(t, sent).SessionID
 
-	m, cmd, _ = a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ = forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	second := awaitFrame(t, sent).SessionID
@@ -194,7 +193,7 @@ func TestTheSnapshotSentenceDoesNotNameAParentWhoseNameWentBackToThePool(t *test
 	seed := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}}
 	a := NewRoomApp(conn, Stream{}, &seed).withSize(160, 30).openDMWith("s1", "alex")
 
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID
@@ -228,7 +227,7 @@ func TestAnErrorAboutAnotherAgentLeavesAPendingForkAlone(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd, _ := forkAsk(a)
 	a = m.(App)
 	go func() { _ = runCmdQuietly(cmd) }()
 	forkID := awaitFrame(t, sent).SessionID

@@ -1,4 +1,4 @@
-// The ⌃F guards held from the side an example cannot reach: which reported
+// The /fork guards held from the side an example cannot reach: which reported
 // states the fork's own conversation opens in, over the whole domain a running
 // daemon can produce rather than the one state a fixture happens to carry, and
 // what the decision is allowed to read, proved about the function rather than
@@ -28,12 +28,10 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// forkArrivalStates is what ⌃F does when the report that first names the fork
+// forkArrivalStates is what /fork does when the report that first names the fork
 // carries each state a running daemon can report: true is "the fork's own
 // conversation opens", false is "it does not".
 //
@@ -46,7 +44,7 @@ import (
 //
 // A hand-written decision checked against a derived set rather than the derived
 // set itself, so a sixth reachable state is a build failure until somebody says
-// what ⌃F does with it.
+// what /fork does with it.
 var forkArrivalStates = map[string]bool{
 	rpc.StateIdle:    true,
 	rpc.StateWorking: true,
@@ -63,7 +61,7 @@ var forkArrivalStates = map[string]bool{
 	// into one brings the session back. What did not change is what the pane
 	// holds - a fork the first report already calls parked has emitted no
 	// events, so opening it is an empty transcript under a live-looking header,
-	// and the operator pressed ⌃F for a conversation rather than for one they
+	// and the operator pressed /fork for a conversation rather than for one they
 	// have to revive. isTheAwaitedStart's header carries the full argument.
 	rpc.StateParked: false,
 }
@@ -99,7 +97,7 @@ func TestTheStatesAForkCanArriveInAreTheOnesARunningDaemonProduces(t *testing.T)
 			t.Errorf("rpc.%s = %q is both decided here and excused as unreachable (%s): one of the two is wrong", name, state, why)
 		case !decided && !excused:
 			t.Errorf("rpc.%s = %q is a state a session can be reported in, and nothing here says whether "+
-				"⌃F opens the fork's conversation on it or why it cannot arrive", name, state)
+				"/fork opens the fork's conversation on it or why it cannot arrive", name, state)
 		case decided && !reachable[state]:
 			t.Errorf("rpc.%s = %q has a verdict here, but agent.stateLocked never returns it - so the cell "+
 				"asserts something about an input no daemon can produce, which reads as coverage", name, state)
@@ -110,7 +108,7 @@ func TestTheStatesAForkCanArriveInAreTheOnesARunningDaemonProduces(t *testing.T)
 	}
 	for state := range reachable {
 		if _, decided := forkArrivalStates[state]; !decided {
-			t.Errorf("agent.stateLocked can report %q and nothing here says what ⌃F does with it", state)
+			t.Errorf("agent.stateLocked can report %q and nothing here says what /fork does with it", state)
 		}
 	}
 }
@@ -130,7 +128,7 @@ func TestTheForkOpensInEveryStateItsFirstReportCanCarry(t *testing.T) {
 			conn, sent := pipeClient(t)
 			a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 
-			m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+			m, cmd, _ := forkAsk(a)
 			a = m.(App)
 			go func() { _ = runCmdQuietly(cmd) }()
 			forkID := awaitFrame(t, sent).SessionID
@@ -223,7 +221,7 @@ func TestTheDecisionThatAStartHasArrivedReadsNothingButTheIdAndTheState(t *testi
 	}
 }
 
-// The id ⌃F waits on is the id it minted, proved about the function rather than
+// The id /fork waits on is the id it minted, proved about the function rather than
 // about one run of it.
 //
 // Rung 3 again, on the other half. The behavioural tests read the id **off the
@@ -232,17 +230,17 @@ func TestTheDecisionThatAStartHasArrivedReadsNothingButTheIdAndTheState(t *testi
 // subset - mint into a local, send the local, and wait on the *parent's* id for
 // some class of parents - because every fixture supplies a parent outside that
 // class and keeps the good behaviour. `cmd/wake`'s `mintedOnce` was written for
-// exactly this mutant one commit before ⌃F existed; this is that guard, ported.
+// exactly this mutant one commit before /fork existed; this is that guard, ported.
 //
 // What a mismatch costs is why it is worth a static assertion: the wait has no
 // deadline by design, so waiting on the wrong id is not a failure. It is a fork
 // that runs, and a pane that never opens, forever.
 func TestTheIdCtrlFWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
-	fn := funcDeclIn(t, "fork.go", "fork")
+	fn := funcDeclIn(t, "fork.go", "forkOf")
 	minted := mintedOnceIn(t, fn, "uuid.NewString")
 
 	if waited := soleArgumentTo(t, fn, "a.awaitingStart", 0); exprName(waited) != minted {
-		t.Errorf("⌃F waits on %s rather than on %s. startArrived matches the daemon's report against "+
+		t.Errorf("/fork waits on %s rather than on %s. startArrived matches the daemon's report against "+
 			"that set and nothing times out, so a mismatch here is a fork that runs and a pane that "+
 			"never opens", exprName(waited), minted)
 	}
@@ -258,7 +256,7 @@ func TestTheIdCtrlFWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
 	}
 }
 
-// writersOfPendingStarts is every function allowed to change the set ⌃F waits
+// writersOfPendingStarts is every function allowed to change the set /fork waits
 // on, with what it does. Checked against an AST scan of the whole package in
 // both directions.
 //
@@ -268,7 +266,7 @@ func TestTheIdCtrlFWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
 // `isTheAwaitedStart` satisfies every one of them - and three defects sat outside
 // all four, because none of them is about what the decision *reads*:
 //
-//   - a second ⌃F **overwrote** the slot, losing the first fork;
+//   - a second /fork **overwrote** the slot, losing the first fork;
 //   - a mutant could write the slot a **value** the frame does not carry;
 //   - the refusal arm could **clear** it without keying on the id.
 //
@@ -277,7 +275,7 @@ func TestTheIdCtrlFWaitsOnIsTheOneItMintedAndNeverTheParents(t *testing.T) {
 // verdict required per writer, so a third writer is a build failure until
 // somebody says what it means.
 var writersOfPendingStarts = map[string]string{
-	"awaitingStart": "adds the id the verb just minted - ⌃F's fork or `/new`'s agent. The only place the set grows, so a second press is a second member rather than a replacement",
+	"awaitingStart": "adds the id the verb just minted - /fork's fork or `/new`'s agent. The only place the set grows, so a second press is a second member rather than a replacement",
 	"startSettled":  "removes one id, because it arrived or the daemon refused it. Keyed on the id in both callers, so an error about another agent leaves the rest alone",
 }
 
@@ -441,7 +439,7 @@ func soleCompositeLit(t *testing.T, fn *ast.FuncDecl, typeName string) *ast.Comp
 		return true
 	})
 	if len(found) != 1 {
-		t.Fatalf("%s builds %d %s literals, and this guard is written for the one frame ⌃F writes",
+		t.Fatalf("%s builds %d %s literals, and this guard is written for the one frame /fork writes",
 			fn.Name.Name, len(found), typeName)
 	}
 	return found[0]

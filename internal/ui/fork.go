@@ -4,7 +4,7 @@ package ui
 //
 // # Why a key writes a frame and the daemon does the rest
 //
-// The same reason ⎋ does: this view never touches a process. ⌃F mints the
+// The same reason ⎋ does: this view never touches a process. /fork mints the
 // fork's own id - Wake originates identity, and maySpawn refuses anything that
 // is not a UUID because the reaper's only proof of a process group is that id
 // in an argv - and hands the daemon a FrameFork. Everything after that is the
@@ -27,6 +27,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
@@ -40,9 +41,12 @@ const (
 	// which key was pressed rather than only what the socket said about it.
 	forkFailed = "forking that conversation"
 
-	// noForkTarget is ⌃F with no agent in front of it. A fork is taken *from*
+	// noForkTarget is /fork with no agent in front of it. A fork is taken *from*
 	// one conversation; the room is not one conversation.
-	noForkTarget = "⌃F branches one conversation. " + noPaneAdvice
+	noForkTarget = forkVerb + " branches one conversation. " + noPaneAdvice
+
+	// forkUsage is what a /fork argument that is not one @who is told.
+	forkUsage = forkVerb + " takes one " + agentPrefix + "who, or none to branch the conversation you are in"
 
 	// forkAsked is said on the keypress rather than on the confirmation,
 	// because the daemon may refuse and the operator should know the key was
@@ -76,7 +80,7 @@ const (
 // confirmed.
 //
 // Exported because there are two fork surfaces and this promise is about both:
-// ⌃F says it through startArrived, and `wake fork <who>` says it from cmd/wake
+// /fork says it through startArrived, and `wake fork <who>` says it from cmd/wake
 // once the daemon has confirmed the spawn. One spelling with two callers rather
 // than two spellings - the claim has already been written five times in
 // artefacts and implemented once, and a second copy of the words is how that
@@ -93,22 +97,33 @@ func SnapshotNotice(fork, parent string) string {
 	return fmt.Sprintf(forkOpened, agentPrefix, fork, agentPrefix, parent, agentPrefix, parent)
 }
 
-// fork asks the daemon to branch the conversation that has the keys.
-//
-// The target is dmTarget's, which is the same rule ⌃D uses: the roster's
-// selection, and otherwise the first agent in attention order. Opening a
-// conversation sets that selection, so with a DM open this is the conversation
-// on screen - one target rule, stated in one place.
+// forkAgent is `/fork [@who]`, which took ⌃F's fork when ⌃F became the jump picker.
+// Bare is the conversation with the keys, by dmTarget's rule (the roster's pick, and
+// otherwise the first agent in attention order; with a DM open that is the
+// conversation on screen); @who is that agent, as /status @who names one.
 //
 // An ended agent is deliberately **not** refused here. Its transcript is on
 // disk and the recordings forked exited parents throughout; the daemon decides,
 // and it says yes.
-func (a App) fork() (tea.Model, tea.Cmd, bool) {
+func (a App) forkAgent(arg string) (App, tea.Cmd) {
+	a = a.clearDraft()
+	if fields := strings.Fields(arg); len(fields) > 0 {
+		agent, ok := a.namedTarget(fields, forkUsage)
+		if !ok {
+			return a, nil
+		}
+		return a.forkOf(agent)
+	}
 	agent, ok := a.dmTarget()
 	if !ok {
 		notice.Report("%s", a.unseenOr(noForkTarget))
-		return a, nil, true
+		return a, nil
 	}
+	return a.forkOf(agent)
+}
+
+// forkOf asks the daemon to branch one agent's conversation, and waits on the id it minted.
+func (a App) forkOf(agent Agent) (App, tea.Cmd) {
 	forkID := uuid.NewString()
 	a = a.awaitingStart(forkID)
 	notice.Report("%s", forkAskedOf(agent.Name))
@@ -116,7 +131,7 @@ func (a App) fork() (tea.Model, tea.Cmd, bool) {
 		Kind:      rpc.FrameFork,
 		SessionID: forkID,
 		ParentID:  agent.ID,
-	}), true
+	})
 }
 
 // forkAskedOf is the keypress line for one target, named or not.

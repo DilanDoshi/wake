@@ -63,7 +63,7 @@ typed into the room, mention and all.
 | `⇥` | Move the keys between the room and the conversations open beside it — except while you are typing a `/` or `@` word, where it completes it (see below) |
 | `⇧⇥` | Cycle the permission mode of the agent the roster has selected: `default` → `acceptEdits` → `plan` → `auto`, the same four Claude Code walks |
 | `⌃X` | Jump to the next blocked agent |
-| `⌃K` | **Jump to any agent by name** — a box over the composer, a few letters narrow the fleet, `↵` opens the agent in a new column, `⌃B` below, `⌃D` in the focused pane, `⎋` closes it. Also `/jump [<filter>]` (see [chapter 6](06-commands.md#jump--find-an-agent-by-name)) |
+| `⌃F` | **Jump to any agent by name** — a box over the composer, a few letters narrow the fleet, `↵` opens the agent in a new column, `⌃B` below, `⌃D` in the focused pane, `⎋` closes it. Also `/jump [<filter>]` (see [chapter 6](06-commands.md#jump--find-an-agent-by-name)) |
 | `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. It stops on the channel headers too, `all` and each team's, where `↵` picks that channel for the room. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
 | `⌃D` | Open the selected agent **into the focused pane** |
 | `⌃Y` | Open the selected agent in a **new column** |
@@ -119,7 +119,6 @@ and `⌃P` are how you move between the lines of a multi-line draft.
 
 | Key | Does |
 |---|---|
-| `⌃F` | Fork the conversation with the keys — see [chapter 5](05-forking.md) |
 | `⌃T` | Flip the mention mode — whether `@name …` routes to that agent or is read as text |
 | `PgUp` `PgDn` `Home` `End` | In `/board`: scroll a fleet bigger than the screen by a page, or jump to the first and last stop. The wheel scrolls it freely; the arrows move the selection and scroll the least that keeps it on screen |
 
@@ -182,10 +181,6 @@ of the shipped `claude` binary — one nobody has ruled on is a build failure ra
 | `⌃N` `⌃P` | Walk its own footer list | Walk the dispatch list, or the completion menu while one is open — **the same job on both sides.** Claude Code binds `up`/`⌃P` and `down`/`⌃N` for it; Wake can have the second pair and not the first, because `↑↓` are prompt history — recall on an empty draft, the query cursor in a multi-line one — and `⇧↑↓` are the roster's |
 
 ## Shadowed keys
-
-`⌃K` shadows the text input's "delete to end of line", which Claude Code binds too. It is Slack's, Discord's and
-Linear's "jump to" key (their `⌘K`, which a terminal never sends), so the habit is already in the fingers;
-`⌃U` still deletes to the start of the line, and `⌘` cannot be had at all.
 
 `⌃D`, `⌃W`, `⌃F`, `⌃B` and `⌃E` shadow bindings the text input would otherwise have (`⌃F` is "forward
 one character" and `⌃B` "back one character", each of which is `→` or `←` by another name; `⌃E` is

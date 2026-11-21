@@ -168,7 +168,7 @@ SHOTS = [
         "juno",
         "fork of maya",
         "Branch a conversation. Keep both.",
-        "<code>⌃F</code> forks an agent: a new session that carries the conversation "
+        "<code>/fork</code> forks an agent: a new session that carries the conversation "
         "so far and works beside the original — a second approach without losing "
         "the first, and Wake says so as it opens: nothing the original does next "
         "reaches it. A fork is a snapshot made with Claude's own fork, the one way "

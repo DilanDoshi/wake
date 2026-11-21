@@ -131,7 +131,7 @@ func helpSurfaces() []helpSurface {
 		{"resumePickerKey", resumeVerb + " in the room", ResumePicker{Multi: true}.keyHint()},
 		{"resumePickerKey", resumeVerb + " in a conversation", ResumePicker{}.keyHint()},
 		{"resumePickerKey", resumeVerb + " also", helpParkKey},
-		{"jumpKey", jumpVerb + " and ⌃K", jumpKeys},
+		{"jumpKey", jumpVerb + " and ⌃F", jumpKeys},
 		{"jumpKey", jumpVerb + " also", jumpClose + " · " + helpParkKey},
 		{"mcpMenuKey", mcpVerb + " servers", MCPMenu{Level: mcpList}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " one server", MCPMenu{Level: mcpDetail}.keyHint()},

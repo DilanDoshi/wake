@@ -1,6 +1,6 @@
 package ui
 
-// The jump picker: ⌃K or `/jump [filter]` opens a box over the composer; a few
+// The jump picker: ⌃F or `/jump [filter]` opens a box over the composer; a few
 // letters of a name narrow the fleet (agentfind.go) and ↵ opens the cursored agent
 // as a click on its sidebar row does. A modal search box in the resume picker's
 // shape, read above App.key's switch. Its cursor is an agent's id, never a row.
@@ -32,7 +32,7 @@ const (
 	// jumpKeys is the key line the box draws in its lower edge, and the help carries;
 	// jumpClose is the key it does not have room for.
 	jumpKeys  = "↑↓ move · ↵ new pane · ⌃B below · ⌃D here · esc"
-	jumpClose = "⌃K again closes it"
+	jumpClose = "⌃F again closes it"
 
 	noJumpTarget = "no agent to jump to yet. " + newVerb + " starts one"
 	jumpTooShort = "this pane is too short for the jump box. Make the window taller, or ⇧↑↓ walks the sidebar"
@@ -102,7 +102,7 @@ func (a App) openJump(query string) App {
 		notice.Report("%s", jumpTooShort)
 		return a
 	}
-	a = a.closePicker().closeRewind()
+	a = a.closePicker().closeRewind().pageHome(a.focus) // a card's page the wheel moved has the box off screen
 	a.statusUI = StatusView{}
 	a.jumpPicker = JumpPicker{up: true, Pane: a.focus, Query: query}
 	return a.jumpHomed()
@@ -129,7 +129,7 @@ func (a App) jump(arg string) (App, tea.Cmd) {
 }
 
 // jumpKey drives the box: typing and ⌫ edit the filter, ↑↓ walk the matches, ↵ ⌃B
-// and ⌃D open the cursored agent, esc and ⌃K close it. ⌃C closes it and parks the
+// and ⌃D open the cursored agent, esc and ⌃F close it. ⌃C closes it and parks the
 // agent in front of you - above every guard, so its first press stays visible for the
 // ⌃C⌃C kill switch (resumePickerKey's reasoning). Every other key is swallowed.
 func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
@@ -145,8 +145,13 @@ func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		// because a key a surface declines is one whose App its caller throws away.
 		return a.closeJump(), nil, true
 	}
+	if a.boxAway(a.focus) {
+		// The wheel moved a card's page off the box: this key only brings it back, as a
+		// send does, so ↵ opens what the operator can see.
+		return a.pageHome(a.focus), nil, true
+	}
 	switch m.Type {
-	case tea.KeyEsc, tea.KeyCtrlK: // alt+esc, two fast escapes, is one close
+	case tea.KeyEsc, tea.KeyCtrlF: // alt+esc, two fast escapes, is one close
 		return a.closeJump(), nil, true
 	case tea.KeyUp:
 		return a.moveJump(-1), nil, true

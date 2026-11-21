@@ -149,7 +149,7 @@ func (p ResumePicker) filtered() []resumeRow {
 func (a App) openResume(rows []resumeRow, more int, multi bool) App {
 	a.resumePicker = ResumePicker{Rows: rows, More: more, Multi: multi, Selected: map[string]bool{}}
 	a.statusUI = StatusView{}         // one menu at a time: a disk walk can land after /status opened
-	return a.closeJump().clearDraft() // or after ⌃K
+	return a.closeJump().clearDraft() // or after ⌃F
 }
 
 // closeResume takes it down with nothing sent, and ends the reads behind it.

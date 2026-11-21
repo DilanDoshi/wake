@@ -340,11 +340,11 @@ func refuseFork(t *testing.T, d *fakeDaemon, args []string, why string) {
 // `wake fork` says a fork is a snapshot, because there are two fork surfaces and
 // the promise is about both.
 //
-// It was true for ⌃F and false here, while `forkRefusal`'s comment, `v1_goals.md`
+// It was true for /fork and false here, while `forkRefusal`'s comment, `v1_goals.md`
 // and `deferred.md` all asserted it without qualification - the fifth appearance
 // of a claim that had been implemented once. This verb ends in `converse`, so
 // the notice row of the DM it opens is the only surface it has, and that is the
-// same row ⌃F uses.
+// same row /fork uses.
 func TestAConfirmedForkSaysItIsASnapshot(t *testing.T) {
 	notice.Reset()
 	t.Cleanup(notice.Reset)

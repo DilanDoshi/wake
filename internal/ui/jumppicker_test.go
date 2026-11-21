@@ -1,6 +1,6 @@
 package ui
 
-// The jump picker: ⌃K (or `/jump`) opens a box over the composer, a few letters of
+// The jump picker: ⌃F (or `/jump`) opens a box over the composer, a few letters of
 // a name narrow the fleet, and ↵ puts the cursored agent on screen the way a click
 // on its sidebar row does.
 
@@ -66,9 +66,9 @@ func jumpTyped(a App, s string) App {
 
 func jumpOpened(t testing.TB, a App) App {
 	t.Helper()
-	a, _ = pressKey(a, kmsg(tea.KeyCtrlK))
+	a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
 	if !a.jumpPicker.Open() {
-		t.Fatal("⌃K did not open the jump picker")
+		t.Fatal("⌃F did not open the jump picker")
 	}
 	return a
 }
@@ -84,7 +84,7 @@ func jumpCursorName(t testing.TB, a App) string {
 	return ag.Name
 }
 
-func TestCtrlKOpensThePickerWithEveryAgentBlockedFirst(t *testing.T) {
+func TestCtrlFOpensThePickerWithEveryAgentBlockedFirst(t *testing.T) {
 	a := jumpOpened(t, blueFleet(t, 140, 40))
 	got := jumpNames(a)
 	if len(got) != 8 || got[0] != "ui-blueprint" {
@@ -244,11 +244,11 @@ func TestEscClosesWithoutInterruptingAnything(t *testing.T) {
 	}
 }
 
-func TestCtrlKTogglesIt(t *testing.T) {
+func TestCtrlFTogglesIt(t *testing.T) {
 	a := jumpOpened(t, blueFleet(t, 140, 40))
-	a, _ = pressKey(a, kmsg(tea.KeyCtrlK))
+	a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
 	if a.jumpPicker.Open() {
-		t.Error("a second ⌃K left the picker up")
+		t.Error("a second ⌃F left the picker up")
 	}
 }
 
@@ -297,7 +297,7 @@ func TestTheSlashCommandOpensItWithTheFilterTyped(t *testing.T) {
 }
 
 func TestAnEmptyFleetSaysSoInsteadOfOpening(t *testing.T) {
-	a, _ := pressKey(jumpApp(t, 140, 40), kmsg(tea.KeyCtrlK))
+	a, _ := pressKey(jumpApp(t, 140, 40), kmsg(tea.KeyCtrlF))
 	if a.jumpPicker.Open() {
 		t.Error("the picker opened over nobody")
 	}
@@ -392,7 +392,7 @@ func TestTheBoxFitsEverySizeAndAlwaysDrawsTheCursorsRow(t *testing.T) {
 	for _, w := range []int{70, 100, 140, 200} {
 		for h := 6; h <= 46; h++ {
 			base := blueFleet(t, w, h)
-			a, _ := pressKey(base, kmsg(tea.KeyCtrlK))
+			a, _ := pressKey(base, kmsg(tea.KeyCtrlF))
 			if base.jumpRoom() < 1 {
 				refused++
 				if a.jumpPicker.Open() {
@@ -476,5 +476,21 @@ func TestTypingHomesTheCursorOnTheFirstMatch(t *testing.T) {
 	a = jumpTyped(a, "e") // infra-blue-green still matches blue, but is not first
 	if got := jumpCursorName(t, a); got != "ui-blueprint" {
 		t.Errorf("after typing, the cursor is on %q, want the first match, ui-blueprint", got)
+	}
+}
+
+// ⌃F opens it over whichever pane holds the keys, the room or a conversation, and
+// the box is that pane's: it is not drawn in another.
+func TestCtrlFOpensOverTheRoomAndOverAConversation(t *testing.T) {
+	room := jumpOpened(t, blueFleet(t, 200, 44))
+	if room.jumpPicker.Pane != "" {
+		t.Errorf("opened in the room, the box belongs to pane %q", room.jumpPicker.Pane)
+	}
+	dm := jumpOpened(t, clickAgent(t, blueFleet(t, 200, 44), "s2"))
+	if dm.jumpPicker.Pane != "s2" {
+		t.Errorf("opened in sydney's conversation, the box belongs to pane %q, want s2", dm.jumpPicker.Pane)
+	}
+	if rowHaving(jumpPanes(dm), "jump to agent") < 0 {
+		t.Error("the box is not drawn over the conversation that opened it")
 	}
 }

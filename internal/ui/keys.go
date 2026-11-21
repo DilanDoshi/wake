@@ -280,8 +280,8 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.walkPrompts(-1)
 	case tea.KeyCtrlD:
 		return a.openDM(), nil, true
-	case tea.KeyCtrlF:
-		return a.fork()
+	case tea.KeyCtrlF: // the jump picker; fork is /fork (decisions.md, 2026-11-20)
+		return a.openJump(""), nil, true
 	// Letters rather than the ⌃⇧→/⌃⇧↓ these shipped as: macOS takes every
 	// ctrl+shift+arrow for spaces and Mission Control before a terminal sees
 	// one. TestNoKeyIsACtrlArrow holds the class.
@@ -327,9 +327,6 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.cycleMode()
 	case tea.KeyCtrlX:
 		return a.nextBlocked(), nil, true
-	// ⌃K is Claude Code's delete-to-end-of-line too; here it jumps (decisions.md, 2026-11-20).
-	case tea.KeyCtrlK:
-		return a.openJump(""), nil, true
 	case tea.KeyCtrlT:
 		return a.flipMention()
 	case tea.KeyCtrlA:

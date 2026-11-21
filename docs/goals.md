@@ -66,7 +66,7 @@ Set when Phase 1's plan was written: *"Phase 2 covers the room; Phase 3 covers t
 |---|---|---|
 | **1** | Core, daemon, DM at Claude Code fidelity | **Done** — 11 tasks, merged |
 | **2** | The room: fold, lines, cards, both sidebars, routing, layout, split, MCP | **13 of 16 done.** Left: 14 (acting tools + digest + `wake mcp`), 15 (the manager as a real `claude` session scoped as a service), 16 (what the room costs at 30 agents) |
-| **3** | **The fleet:** pool, park/wake, session importing, fork | Fork is built — daemon verb, `wake fork <who> [name]`, and `⌃F`. **Park/wake is built** — `⌃C`, `⌃Q`, `/resume`, the park book, and bare `wake` reopening the room with a restore offer on it. Left: pool, session importing |
+| **3** | **The fleet:** pool, park/wake, session importing, fork | Fork is built — daemon verb, `wake fork <who> [name]`, and `/fork`. **Park/wake is built** — `⌃C`, `⌃Q`, `/resume`, the park book, and bare `wake` reopening the room with a restore offer on it. Left: pool, session importing |
 | **4** | Whatever §17 still names that phases 1–3 did not absorb | **Scoped**: `docs/superpowers/specs/2026-08-12-phase-4-scope.md` — six §17 items plus two that belong to no phase. A draft to argue with, not a plan |
 
 **Phase 4 is named deliberately.** §17's v1 list is bigger than three phases: profiles, undo,

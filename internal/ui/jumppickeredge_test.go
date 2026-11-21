@@ -4,6 +4,7 @@ package ui
 // pasted or over-long query, late menus, and a re-rank between a look and a ↵.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func TestACursorTypedOntoStaysOnItsAgentThroughAReRank(t *testing.T) {
 	}
 }
 
-// The same from the moment the box opens: ⌃K, a report that unblocks the first
+// The same from the moment the box opens: ⌃F, a report that unblocks the first
 // row and blocks another, ↵ opens who was first when it opened.
 func TestACursorOnOpeningStaysOnItsAgentThroughAReRank(t *testing.T) {
 	a := jumpOpened(t, blueFleet(t, 200, 40)) // ui-blueprint, blocked, is first
@@ -104,7 +105,7 @@ func TestTheBoxNeverTakesKeysUnderACardThatHidesIt(t *testing.T) {
 					Tool: &core.ToolCall{Name: "Bash", Display: "rm -rf build/"},
 				},
 			})
-			a, _ = pressKey(a, kmsg(tea.KeyCtrlK))
+			a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
 			if !a.jumpPicker.Open() {
 				refused++
 				continue
@@ -131,7 +132,7 @@ func TestANoMatchFilterFitsEverySize(t *testing.T) {
 	for _, w := range []int{70, 100, 200} {
 		for h := 6; h <= 46; h++ {
 			a := blueFleet(t, w, h)
-			a, _ = pressKey(a, kmsg(tea.KeyCtrlK))
+			a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
 			if !a.jumpPicker.Open() {
 				continue
 			}
@@ -189,12 +190,12 @@ func TestCtrlCStillParksWhenAResizeHidAllOfTheBox(t *testing.T) {
 	}
 }
 
-// One menu at a time, both ways: a /resume walk landing after ⌃K takes the box
+// One menu at a time, both ways: a /resume walk landing after ⌃F takes the box
 // down, and a rewind picker's late reply does not open under it.
 func TestALateMenuDoesNotLeaveTwoUp(t *testing.T) {
 	a := jumpOpened(t, blueFleet(t, 140, 40))
 	if a = a.openResume(twoRows(), 0, false); a.jumpPicker.Open() {
-		t.Error("a resume walk that landed after ⌃K left the box up under its picker")
+		t.Error("a resume walk that landed after ⌃F left the box up under its picker")
 	}
 
 	base := clickAgent(t, blueFleet(t, 200, 40), "s1") // pay-ledger, idle: a conversation a rewind can open on
@@ -232,5 +233,43 @@ func TestResultColumnsAlignAndALongNameIsCut(t *testing.T) {
 	}
 	if first := rows[rowHaving(rows, "tm1")]; lipgloss.Width(first[:strings.Index(first, "tm1")])-lipgloss.Width(first[:strings.Index(first, "alpha")]) < jumpNameCol-len("○ alpha") {
 		t.Errorf("the name column is narrower than %d cells: %q", jumpNameCol, first)
+	}
+}
+
+// A card's page the wheel scrolled up has the composer, and the box above it,
+// out of the window. The box opens with the page brought home, and a key that
+// arrives with the page away only brings it back: ↵ acts on what the operator
+// can see, as a send does.
+func TestAScrolledCardPageNeverLeavesTheBoxTakingKeysUnseen(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withAgents("john", "paul")
+	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
+	for i := range 40 {
+		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
+			Event: &core.Event{Kind: core.KindAssistantText, Text: fmt.Sprintf("history line %02d", i)}})
+	}
+	a = a.applyFrame(rpcEvent("s1", questionAsk(t)))
+	a = wheeled(a, tea.MouseButtonWheelUp, 3)
+	if !a.boxAway("s1") {
+		t.Fatal("setup: the wheel left the composer in view, so this asserts nothing")
+	}
+	a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
+	if !a.jumpPicker.Open() {
+		t.Skip("the box refused to open in this pane: nothing is taking keys unseen")
+	}
+	if rows := pageRows(a); !hasRow(rows, "⌕") {
+		t.Fatalf("the box opened and is not on screen:\n%s", strings.Join(rows, "\n"))
+	}
+	a = jumpTyped(a, "pa")
+	a = wheeled(a, tea.MouseButtonWheelUp, 3) // away again, with the box up
+	got, _ := pressKey(a, kmsg(tea.KeyEnter))
+	if got.grid.Has("s2") {
+		t.Fatal("↵ opened an agent while the box was scrolled out of the window")
+	}
+	if !got.jumpPicker.Open() || got.boxAway("s1") {
+		t.Fatalf("the key left the box %v and the page away %v: it should bring the page home and keep the box",
+			got.jumpPicker.Open(), got.boxAway("s1"))
+	}
+	if next, _ := pressKey(got, kmsg(tea.KeyEnter)); !next.grid.Has("s2") {
+		t.Error("the next ↵, with the box in view, did not open paul")
 	}
 }

@@ -302,6 +302,12 @@ const wakeNameVerb = SlashPrefix + wakeNameCommand // for resumeVerb's reason
 const wakeHelpCommand = "wake-help"
 const wakeHelpVerb = SlashPrefix + wakeHelpCommand // for resumeVerb's reason
 
+// forkCommand branches a conversation, which ⌃F did until it became the jump picker
+// (fork.go). No recorded slash_commands carries the word, so it is claimed on the
+// corpus rule; it takes an `@who`, so `@sydney /fork` aims it from the room.
+const forkCommand = "fork"
+const forkVerb = SlashPrefix + forkCommand // for resumeVerb's reason
+
 // jumpCommand finds an agent by a few letters of its name and opens it (jumppicker.go).
 // Wake's own word: no recorded slash_commands carries it.
 const jumpCommand = "jump"
@@ -360,6 +366,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	wakeNameCommand:        App.renameFleet,
 	wakeHelpCommand:        App.openHelp,
 	jumpCommand:            App.jump,
+	forkCommand:            App.forkAgent,
 }
 
 // clearCommand is the room's own /clear (roomclear.go). The word is claude's, so
@@ -405,6 +412,7 @@ var roomTargetCommands = map[string]struct{}{
 	mcpCommand:       {},
 	workflowsCommand: {},
 	statusCommand:    {},
+	forkCommand:      {},
 }
 
 // teamTargetCommands are the roomTargetCommands whose `@who` may be a team, so

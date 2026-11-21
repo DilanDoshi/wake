@@ -38,13 +38,13 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
-## FOLLOW-UP, 2026-11-20 — the jump picker finds live agents by name only
+## FOLLOW-UP, 2026-11-20 — the jump picker matches an agent's name only
 
-`⌃K` lists the agents on the roster and matches their names. It does not offer a **parked** agent (waking one is
-`/resume`'s, and a jump that woke a process would be a different verb), and it does not match a **team** or a
-**directory** - typing `payments` finds nobody unless a name says so. It is also not read in a `/workflows` or
-`/wake-help` view, which take every key in their pane until closed. *Closes with:* the owner asking for
-the first two, and a `⌃K` read above those views if the third bites.
+`⌃F` lists what the sidebar lists and matches their names. It does not match a **team** or a **directory** -
+typing `payments` finds nobody unless a name says so - and a session parked in an *earlier* run (the park book)
+is `/resume`'s, not offered. It is also not read in a `/workflows` or `/wake-help` view, which take every key in
+their pane until closed. *Closes with:* the owner asking for the first two, and a `⌃F` read above those views if
+the third bites.
 
 ## FOLLOW-UP, 2026-11-18 — the room draws one "↻ resumed" line per resume, and an agent can have many
 

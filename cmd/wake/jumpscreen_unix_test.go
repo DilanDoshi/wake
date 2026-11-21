@@ -2,7 +2,7 @@
 
 package main
 
-// ⌃K finds an agent by a few letters of its name and opens it, on a real screen:
+// ⌃F finds an agent by a few letters of its name and opens it, on a real screen:
 // the real binary, the kill switch's pump and Bubble Tea's decoder between the
 // keys and the box, and the new pane drawn where a click on the sidebar row puts it.
 
@@ -17,7 +17,7 @@ import (
 // agents' names on the same rows as the box.
 func jumpPaneRows(rows []string, cols int) []string { return leftOf(rows, cols) }
 
-func TestCtrlKFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
+func TestCtrlFFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
@@ -25,7 +25,7 @@ func TestCtrlKFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
 	s := startWakeInAConversation(t, cols, rows)
 	fleetOfNine(t, s) // the room alone; w1..w8 beside the agent bare wake started
 
-	s.send("\x0b") // ⌃K
+	s.send("\x06") // ⌃F
 	s.awaitFrame("the jump box", func(r []string) bool {
 		return strings.Contains(ansi.Strip(strings.Join(jumpPaneRows(r, cols), "\n")), "jump to agent")
 	})
@@ -60,7 +60,7 @@ func TestCtrlKFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
 	w3, _ := paneNamed(opened, cols, "w3")
 
 	// ⌃B: w4 opens below the pane that holds the keys, in the same column.
-	s.send("\x0b")
+	s.send("\x06")
 	s.await("jump to agent")
 	s.send("w4")
 	s.send("\x02") // ⌃B
@@ -72,7 +72,7 @@ func TestCtrlKFindsAnAgentAndOpensItOnARealScreen(t *testing.T) {
 
 	// esc closes it and nothing else: no pane opens and none closes.
 	before := len(panesLeftOfTheSidebar(below, cols))
-	s.send("\x0b")
+	s.send("\x06")
 	s.await("jump to agent")
 	s.send("\x1b")
 	s.awaitGone("jump to agent")

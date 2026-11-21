@@ -30,7 +30,7 @@ func paneHistory(c *testClient, id string) string {
 	return strings.Join(historyTexts(c, rpc.FrameHistory, rpc.FrameHistoryReply, id), "|")
 }
 
-// ⌃F and `wake fork` write the same FrameFork.
+// /fork and `wake fork` write the same FrameFork.
 func TestAForkWithNoTurnYetShowsTheConversationAsItWasForked(t *testing.T) {
 	fakeClaudeOnPath(t, "")
 	dir := projectsDir(t)

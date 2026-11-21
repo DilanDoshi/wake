@@ -5,14 +5,16 @@ Fork copies a **conversation**, not a process and not a directory.
 ## What it does
 
 You are talking to `alex`. You have spent forty minutes explaining the codebase, the constraints,
-and what you are actually trying to do. Press `⌃F` and you get a second agent — a new session that
+and what you are actually trying to do. Type `/fork` and you get a second agent — a new session that
 already knows everything `alex` knows, and from that instant onward independent. Both keep running.
 Nothing you say to one reaches the other.
 
 ```
 wake fork alex           # from the shell, a name from the pool
 wake fork alex backend   # a name you choose
-⌃F                       # in the conversation with the keys
+/fork                    # in the conversation with the keys
+/fork @alex              # from anywhere: that agent's conversation
+@alex /fork              # the same, aimed from the room
 ```
 
 The fork's own conversation opens when the daemon confirms it, and its header names where it came
@@ -30,13 +32,13 @@ losing one or re-explaining everything to a fresh agent and hoping you got the s
   untouched by anything the fork does.
 - **Fan out from one briefing** instead of briefing three agents separately.
 
-Two presses of `⌃F` is the normal case, not a mistake — that is what "explore two approaches"
+Two `/fork`s is the normal case, not a mistake — that is what "explore two approaches"
 means, and both forks open.
 
 ## What a fork is and is not
 
-**A fork is a snapshot, not a live subscription.** Its lineage is frozen the moment you press the
-key. Anything the parent says afterwards never reaches the fork, and vice versa.
+**A fork is a snapshot, not a live subscription.** Its lineage is frozen the moment you send
+`/fork`. Anything the parent says afterwards never reaches the fork, and vice versa.
 
 **You can fork a running agent.** The parent survives being forked and its next turn works normally;
 its transcript is not touched. You can also fork an agent that has already ended, and you can fork a
