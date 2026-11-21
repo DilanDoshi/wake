@@ -781,7 +781,7 @@ func TestWalkingOverNoMatchesSaysNothingAndAnEnterSaysWhy(t *testing.T) {
 		t.Errorf("↓ over no matches said %q", n.String())
 	}
 	notice.Reset()
-	a, _ = pressKey(a, kmsg(tea.KeyEnter))
+	_, _ = pressKey(a, kmsg(tea.KeyEnter))
 	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), searchNoMatch) {
 		t.Errorf("↵ on no match said %q, want %q", n.String(), searchNoMatch)
 	}
