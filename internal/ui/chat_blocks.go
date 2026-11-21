@@ -372,47 +372,87 @@ func youSaid(text string, width int) string {
 	if body == "" {
 		return ""
 	}
-	// A slash command the operator typed is a called command here too, not a
-	// line of the room's prose. See commandecho.go.
-	if _, ok := commandInvocation(body); ok {
-		return commandLine(body, width)
-	}
 	// Shaded through shadedOwn, the same primitive the DM's own turn uses, so the
 	// indent that lines the text up with the agents' replies, the width-cell
 	// rectangle and the width<=bodyIndent guard are one implementation rather than
-	// two. colourMention tints the leading @handle first; shadedOwn draws the
-	// ground under it and rides the tint in at the indent. It wraps to the pane
-	// and is never MaxWidth, which would *cut* an unbreakable token (a URL, a
-	// path) rather than wrap it - the behaviour this function exists to lose.
-	return shadedOwn(colourMention(body), width)
+	// two. colourLead tints the leading @handle and /command first. The turn wraps
+	// to the pane and is never MaxWidth, which would *cut* an unbreakable token (a
+	// URL, a path) rather than wrap it - the behaviour this function exists to lose.
+	return shadedOwn(colourLead(body, mentionTinted), width)
 }
 
 // leadingMention is the @handle a room message opens with, which is the whole
 // of what this colours: a mention anywhere else is a word, and finding those
 // means guessing at a fleet that changes between keystrokes.
-var leadingMention = regexp.MustCompile(`^@[A-Za-z][A-Za-z0-9-]*`)
+var leadingMention = regexp.MustCompile(`^@[A-Za-z0-9][A-Za-z0-9_-]*`)
 
-// colourMention draws the address in Claude's blue and leaves the rest alone.
+// commandWord is the /command a message opens with: a slash, a letter, then name
+// characters - letters, digits, '-', '_' and the ':' of a namespaced or plugin
+// command - ending at whitespace or the end of the line. A second slash is not a
+// name character, so a path and text that merely contains a slash are never
+// mistaken for one. Group 1 is the space before it, group 2 the word.
+var commandWord = regexp.MustCompile(`^(\s*)(/[A-Za-z][A-Za-z0-9_:-]*)(?:\s|$)`)
+
+// leadMention is how a message's leading @word reads, which decides what colourLead
+// tints. The room tints a handle and the command behind it. A conversation's own
+// turn routes nothing, so its @word is text and only a /command opening the
+// message is a skill call. A message the room routed there had its handle taken
+// off before it was sent, so the command behind the handle is the call.
+type leadMention int
+
+const (
+	mentionIsText leadMention = iota
+	mentionRouted
+	mentionTinted
+)
+
+// colourLead tints what a message you typed opens with: the @handle in Claude's
+// blue (mentionTinted, the room's way of reading as a record of who you
+// addressed) and the /command, alone or behind a handle and a space, in the
+// colour Claude draws a skill in. The rest of the message is left alone.
 //
-// OwnStyle re-establishes the shaded ground after MentionStyle's own reset, but
-// only on the first line: MentionStyle ends in a full reset, so without it the
-// rest of the opening line would lose its background. A *multi-line* remainder
-// run through OwnStyle.Render is a different thing - lipgloss pads every inner
-// line out to the widest one as a background rectangle, and feeding that to
-// shadedOwn's width-wrap defeats its trailing-space drop, spilling each line into
-// blank rows. So only the first line is re-grounded; the rest stay plain text and
-// shadedOwn shades them the way it shades any plain multi-line turn.
-func colourMention(line string) string {
-	m := leadingMention.FindString(line)
-	if m == "" {
+// The spans change the foreground only - no background, no full reset. A span
+// carrying a background reads to lipgloss's wrap as a visible blank, so it would
+// not break at the spaces inside it and the first line would split mid-word;
+// shadedOwn's own style supplies the ground.
+func colourLead(line string, mode leadMention) string {
+	first, rest, multiline := strings.Cut(line, "\n")
+	mention := ""
+	if mode != mentionIsText {
+		mention = leadingMention.FindString(first)
+	}
+	after := first[len(mention):]
+	cmd := commandWord.FindStringSubmatchIndex(after)
+	if mention != "" && cmd != nil && cmd[3] == 0 { // `@dir/sub` is one word, a path
+		cmd = nil
+	}
+	if cmd == nil && (mention == "" || mode != mentionTinted) {
 		return line
 	}
-	first, rest, multiline := strings.Cut(line[len(m):], "\n")
-	out := MentionStyle.Render(m) + OwnStyle.Render(first)
-	if multiline {
-		out += "\n" + rest
+	var out strings.Builder
+	if mention != "" && mode == mentionTinted {
+		out.WriteString(tinted(Mention, mention))
+	} else {
+		out.WriteString(mention)
 	}
-	return out
+	if cmd == nil {
+		out.WriteString(after)
+	} else {
+		out.WriteString(after[:cmd[3]] + tinted(Skill, after[cmd[4]:cmd[5]]) + after[cmd[5]:])
+	}
+	if multiline {
+		out.WriteString("\n" + rest)
+	}
+	return out.String()
+}
+
+// tinted is word in colour c and back to Text, the shaded turn's own foreground.
+func tinted(c lipgloss.TerminalColor, word string) string { return fgOnly(c) + word + fgOnly(Text) }
+
+// fgOnly is the escape that sets the foreground to c and nothing else.
+func fgOnly(c lipgloss.TerminalColor) string {
+	on, _, _ := strings.Cut(lipgloss.NewStyle().Foreground(c).Render("x"), "x")
+	return on
 }
 
 // collapseWhitespaceOneLine flattens a string to one row: oneLine's containment,

@@ -339,3 +339,38 @@ func shellStreams(s string) (string, bool) {
 	}
 	return out + errs, true
 }
+
+// unwrapSkillCall reads back a skill or custom command's record as the command
+// that was typed, `/name args`. Claude records its name as the message and as the
+// command, then the arguments if any (workflow-saved-command.jsonl:4,
+// loop-self-paced-end.jsonl:4); a built-in opens with <command-name> instead and
+// is plumbing, below. Whole records only: any other text is returned as it is.
+func unwrapSkillCall(s string) string {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(s), "<command-message>")
+	if !ok {
+		return s
+	}
+	if _, rest, ok = strings.Cut(rest, "</command-message>"); !ok {
+		return s
+	}
+	rest, ok = strings.CutPrefix(strings.TrimSpace(rest), "<command-name>")
+	if !ok {
+		return s
+	}
+	name, rest, ok := strings.Cut(rest, "</command-name>")
+	if !ok || len(name) < 2 || name[0] != '/' || strings.ContainsAny(name, " <") || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return s
+	}
+	if rest = strings.TrimSpace(rest); rest == "" {
+		return name
+	}
+	args, ok := strings.CutPrefix(rest, "<command-args>")
+	args, closed := strings.CutSuffix(args, "</command-args>")
+	if !ok || !closed {
+		return s
+	}
+	if args = strings.TrimSpace(args); args != "" {
+		return name + " " + args
+	}
+	return name
+}
