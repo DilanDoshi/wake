@@ -187,7 +187,11 @@ func (a App) openSearched(place func(App, string, string) App) App {
 	}
 	ag, ok := a.pickedAgent()
 	if !ok {
-		notice.Report("%s", a.unseenOr(noPaneAdvice))
+		advice := a.unseenOr(noPaneAdvice)
+		if len(a.rosterAgents()) == 0 && a.activeQuery() != "" {
+			advice = searchNoMatch
+		}
+		notice.Report("%s", advice)
 		return a
 	}
 	task := a.roster.SelectedTask
@@ -207,7 +211,7 @@ func (a App) openSearched(place func(App, string, string) App) App {
 // while it holds the keys, with how many of the roster's total it found once there is
 // a filter. The counts come from the frame, which ranks the roster once.
 func (a App) searchBar(width, found, total int) string {
-	focus, query := a.barFocused(), a.sideSearch.Query
+	focus, query := a.sideSearch.Focus, a.sideSearch.Query // it is drawn, so shown
 	edge, lit := HintStyle, query != "" || focus
 	if focus {
 		edge = AccentStyle

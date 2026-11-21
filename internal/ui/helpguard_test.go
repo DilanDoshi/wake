@@ -335,7 +335,7 @@ var teaKeyWords = map[string][]string{
 	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"}, "KeySpace": {"space"}, "KeyBackspace": {"⌫"},
 	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
 	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"}, "KeyCtrlN": {"⌃N"}, "KeyCtrlP": {"⌃P"},
-	"KeyCtrlC": {"⌃C"}, "KeyCtrlF": {"⌃F"}, "KeyShiftUp": {"⇧↑"}, "KeyShiftDown": {"⇧↓"},
+	"KeyCtrlC": {"⌃C"}, "KeyCtrlF": {"⌃F"}, "KeyShiftUp": {"⇧↑", "⇧↑↓"}, "KeyShiftDown": {"⇧↓", "⇧↑↓"},
 }
 
 // teaKeysNotRead are the keys no row writes a word for: a printable key is

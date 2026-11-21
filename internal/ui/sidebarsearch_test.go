@@ -5,6 +5,7 @@ package ui
 // gives the keys back, and the filter stands after a click elsewhere.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -111,6 +112,9 @@ func TestAFilterNothingMatchesSaysSoUnderAll(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(sideColumn(a), "\n"), "0/8") {
 		t.Error("the count is not 0/8")
+	}
+	if row := sideColumn(a)[searchBarRows]; strings.Contains(row, "╭") || !strings.Contains(row, "all") {
+		t.Errorf("with nothing found the all row is %q, want a rule over no box", row)
 	}
 }
 
@@ -578,5 +582,266 @@ func TestAWideQueryShowsItsEndWhole(t *testing.T) {
 	row := sideColumn(a)[1]
 	if !strings.Contains(row, "語"+jumpCaret) || !strings.Contains(row, "…") {
 		t.Errorf("the bar row is %q, want the last rune, the caret and an elided start", row)
+	}
+}
+
+// A workflow view open when the bar is clicked is closed by the click: left open it kept the
+// keys, and an x then ↵ typed "into the bar" stopped the run.
+func TestAClickOnTheBarClosesAnOpenWorkflowViewAndStopsNothing(t *testing.T) {
+	a := runOpen(t)
+	a.layout.ShowRoster = true
+	a = a.resizePanes()
+	a, _ = click(a, sidebarX(a), 1)
+	var cmds []tea.Cmd
+	for _, k := range []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune("x")}, {Type: tea.KeyEnter}} {
+		var cmd tea.Cmd
+		a, cmd = pressKey(a, k)
+		cmds = append(cmds, cmd)
+	}
+	if a.workflow.view.Open() {
+		t.Error("the workflow view stayed open under the bar")
+	}
+	if stops := kindsFor(writtenFrames(t, a, tea.Batch(cmds...)), rpc.FrameStopRun); len(stops) != 0 {
+		t.Errorf("typing into the bar stopped a workflow run: %v", stops)
+	}
+}
+
+// A hold the geometry hid is dropped there: a shrink and a grow with no key between must not
+// bring the bar back holding the keys.
+func TestAHoldIsNotRevivedByAShrinkThenAGrow(t *testing.T) {
+	a := barApp(t)
+	a = a.withSize(140, 8).resizePanes()
+	a = a.withSize(140, 40).resizePanes()
+	if a.barFocused() {
+		t.Error("the bar holds the keys again with no key and no click since it was hidden")
+	}
+}
+
+// The bar's rows are drawn exactly when the sidebar has the floor: the bar, the pinned all and
+// the rows under them, no fewer and no more.
+func TestTheBarAppearsAtTheFloorExactly(t *testing.T) {
+	first := -1
+	for h := 6; h <= 30 && first < 0; h++ {
+		if a := barFleet(t, 140, h); a.searchBarShown() {
+			first = h
+			// The bar's 3 rows, the pinned all, and 3 rows of agents: the spec's own sum, not the constants'.
+			if got := a.rosterHeight(); got != 7 {
+				t.Errorf("the bar first shows at a roster of %d rows, want 7", got)
+			}
+		}
+	}
+	if first < 0 {
+		t.Fatal("the bar never showed")
+	}
+	if a := barFleet(t, 140, first-1); a.searchBarShown() {
+		t.Errorf("the bar shows one row under its floor (height %d)", first-1)
+	}
+	b := barFleet(t, 140, 40)
+	b.board.Up = true
+	if b.searchBarShown() {
+		t.Error("the bar is drawn under the board")
+	}
+}
+
+// alt+esc is two fast escapes, one esc.
+func TestAltEscClearsTheFilterToo(t *testing.T) {
+	a := jumpTyped(barApp(t), "blu")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc, Alt: true})
+	if a.barFocused() || a.sideSearch.Query != "" {
+		t.Errorf("alt+esc left focus %v and %q", a.barFocused(), a.sideSearch.Query)
+	}
+}
+
+// ⌃B for an agent that has to be placed, from a lower pane, is refused and the bar stays as it was.
+func TestARefusedCtrlBLeavesTheBarFocusedWithItsFilter(t *testing.T) {
+	a := clickAgent(t, barFleet(t, 200, 40), "s2")
+	a, _ = click(a, sidebarX(a), 1)
+	a, _ = pressKey(jumpTyped(a, "scr"), kmsg(tea.KeyCtrlB)) // scratch under web-blur, with the keys
+	a, _ = click(a, sidebarX(a), 1)
+	a, _ = pressKey(a, kmsg(tea.KeyEsc))
+	a, _ = click(a, sidebarX(a), 1)
+	a = jumpTyped(a, "notes") // off screen, and the keys are in the lower pane
+	before := fmt.Sprint(a.grid.Cols)
+	notice.Reset()
+	got, _ := pressKey(a, kmsg(tea.KeyCtrlB))
+	if !got.barFocused() || got.sideSearch.Query != "notes" || fmt.Sprint(got.grid.Cols) != before {
+		t.Errorf("a refused ⌃B left focus %v, filter %q, columns %v; want it all as it was", got.barFocused(), got.sideSearch.Query, got.grid.Cols)
+	}
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), noRowBelow) {
+		t.Errorf("the refusal said %q, want %q", n.String(), noRowBelow)
+	}
+}
+
+// ↵ on a channel header picks the channel and lets go of the bar; a header the filter drops
+// takes the cursor to the first match, and the pinned all stays.
+func TestHeadersAreStopsOfTheWalkAndOfTheHoming(t *testing.T) {
+	a := jumpTyped(barApp(t), "blu")
+	for a.roster.Header == "" {
+		before := a.roster
+		a, _ = pressKey(a, kmsg(tea.KeyDown))
+		if a.roster == before {
+			t.Fatal("the walk never reached a header")
+		}
+	}
+	header := a.roster.Header
+	got, _ := pressKey(a, kmsg(tea.KeyEnter))
+	if want := header; got.barFocused() || (header != "all" && got.room.channel != want) {
+		t.Errorf("↵ on the %q header left focus %v and channel %q", header, got.barFocused(), got.room.channel)
+	}
+	// payments has no match for blu: a cursor on its header is homed to the first match.
+	b := barApp(t)
+	b.roster = Roster{Header: "payments"}
+	b = jumpTyped(b, "blu")
+	if b.roster.Selected == "" || b.roster.Header != "" {
+		t.Errorf("a cursor on a header the filter dropped is %+v, want the first match", b.roster)
+	}
+	// and all is never dropped.
+	c := barApp(t)
+	c.roster = Roster{Header: core.BroadcastName}
+	if c = jumpTyped(c, "blu"); c.roster.Header != core.BroadcastName {
+		t.Errorf("a cursor on the pinned all moved to %+v", c.roster)
+	}
+}
+
+// A header the filter drops is hidden, so a key on it is refused as a hidden agent's is; and the
+// conversation holding the keys is on screen as its own pane, whatever the filter says.
+func TestAHiddenHeaderIsRefusedAndAnAgentInThePaneIsNot(t *testing.T) {
+	a := jumpTyped(barApp(t), "blu")
+	a, _ = click(a, 5, 5)
+	a.roster = Roster{Header: "payments"}
+	if !a.rosterPickHidden() {
+		t.Error("a header the filter dropped counts as drawn")
+	}
+	b := clickAgent(t, barFleet(t, 140, 40), "s1") // pay-ledger, in its pane
+	b.sideSearch.Query = "blu"                     // which the filter hides
+	if b.rosterPickHidden() {
+		t.Error("the conversation on screen counts as hidden because the filter drops its row")
+	}
+}
+
+// The wheel over the bar's own rows scrolls the roster, like anywhere over the sidebar.
+func TestTheWheelOverTheBarScrollsTheRoster(t *testing.T) {
+	a := wheelAt(wheelFleet(t), tea.MouseButtonWheelDown, sidebarX(wheelFleet(t)), 1, 3)
+	if !a.rosterView.held {
+		t.Error("a wheel over the bar's rows moved nothing")
+	}
+}
+
+// What is typed or pasted goes through typedQuery: a pasted line is one line, and a long paste is bounded.
+func TestAPastedLineIsOneBoundedLine(t *testing.T) {
+	a, _ := pressKey(barApp(t), tea.KeyMsg{Type: tea.KeyRunes, Paste: true, Runes: []rune("a\x07\n\tb")})
+	if a.sideSearch.Query != "a b" {
+		t.Errorf("a pasted line made the filter %q, want %q", a.sideSearch.Query, "a b")
+	}
+	b, _ := pressKey(barApp(t), tea.KeyMsg{Type: tea.KeyRunes, Paste: true, Runes: []rune(strings.Repeat("z", 3*queryMax))})
+	if got := len([]rune(b.sideSearch.Query)); got != queryMax {
+		t.Errorf("a long paste made a filter of %d runes, want %d", got, queryMax)
+	}
+}
+
+// The filter narrows what the sidebar draws and nothing else: the roster the jump box lists, the strip counts
+// and the board draws, and the slice a caller handed in, stay whole.
+func TestTheFilterNarrowsOnlyTheSidebar(t *testing.T) {
+	a := jumpTyped(barApp(t), "blu")
+	a, _ = click(a, 5, 5)
+	ranked := a.fleet.OnRoster()
+	before := slices.Clone(ranked)
+	narrow := a.rosterOf(ranked)
+	if len(narrow) >= len(ranked) || !slices.Equal(ranked, before) {
+		t.Errorf("rosterOf returned %d of %d and left its input as %v, want fewer and untouched", len(narrow), len(ranked), namesOfAgents(ranked))
+	}
+	if got, want := len(jumpAgentsOf(a)), len(ranked); got != want {
+		t.Errorf("the jump box lists %d of %d agents under a standing filter", got, want)
+	}
+	if got := len(a.boardAgents()); got != len(ranked) {
+		t.Errorf("the board lists %d of %d agents under a standing filter", got, len(ranked))
+	}
+	if frame := stripANSI(a.View()); !strings.Contains(frame, "5 idle") || !strings.Contains(frame, "2 working") {
+		t.Errorf("the strip drawn under a filter does not count the whole fleet:\n%s", frame)
+	}
+}
+
+// The jump box lists every agent whatever the sidebar's filter says.
+func jumpAgentsOf(a App) []Agent {
+	a.sideSearch = SideSearch{Query: a.sideSearch.Query}
+	return jumpOpenedAgents(a)
+}
+
+func jumpOpenedAgents(a App) []Agent {
+	a, _ = pressKey(a, kmsg(tea.KeyCtrlF))
+	return a.jumpAgents()
+}
+
+// With no match ↑↓ walk nothing and say nothing: the fleet is not empty, the filter just found none.
+func TestWalkingOverNoMatchesSaysNothingAndAnEnterSaysWhy(t *testing.T) {
+	a := jumpTyped(barApp(t), "zzq")
+	notice.Reset()
+	a, _ = pressKey(a, kmsg(tea.KeyDown))
+	if n, ok := notice.Latest(); ok && strings.Contains(n.String(), noPaneAdvice) {
+		t.Errorf("↓ over no matches said %q", n.String())
+	}
+	notice.Reset()
+	a, _ = pressKey(a, kmsg(tea.KeyEnter))
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), searchNoMatch) {
+		t.Errorf("↵ on no match said %q, want %q", n.String(), searchNoMatch)
+	}
+}
+
+// An empty fleet draws no "no agent matches" - nothing was filtered out - and a team-only roster draws
+// its all as a rule over no box, filter or none.
+func TestAnEmptyFleetSaysNothingAndATeamOnlyRosterHasNoOpenBox(t *testing.T) {
+	a := newRoomApp(t).withSize(140, 40)
+	a.layout.ShowRoster = true
+	a = a.resizePanes()
+	if strings.Contains(strings.Join(sideColumn(a), "\n"), searchNoMatch) {
+		t.Error("an empty fleet says no agent matches")
+	}
+	st := rpc.Status{Running: true, Teams: []string{"web"}, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", Team: "web", State: rpc.StateIdle}}}
+	b := a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st}).resizePanes()
+	if row := sideColumn(b)[searchBarRows]; strings.Contains(row, "╭") || !strings.Contains(row, "all") {
+		t.Errorf("a roster of one team draws its all as %q, want a rule", row)
+	}
+}
+
+// ↵ is a click, selection and all: the sidebar's cursor ends on the agent opened.
+func TestEnterLeavesTheSidebarsCursorOnTheOpenedAgent(t *testing.T) {
+	for _, up := range []tea.KeyType{tea.KeyUp, tea.KeyShiftUp} { // and ⇧↑ walks as ⇧↓ does
+		a := jumpTyped(barApp(t), "blu")
+		a, _ = pressKey(a, kmsg(up))
+		for a.roster.Selected == "" {
+			a, _ = pressKey(a, kmsg(up))
+		}
+		if !a.barFocused() {
+			t.Fatalf("%v let go of the bar: it is the bar's to read", up)
+		}
+		id := a.roster.Selected
+		if !slices.ContainsFunc(a.rosterAgents(), func(ag Agent) bool { return ag.ID == id }) {
+			t.Fatalf("%v landed on %q, which the filter hides", up, id)
+		}
+		got, _ := pressKey(a, kmsg(tea.KeyEnter))
+		if got.roster != (Roster{Selected: id}) {
+			t.Errorf("↵ left the cursor on %+v, want %q", got.roster, id)
+		}
+	}
+}
+
+// ↵ on an agent's own row shows its own conversation, not the dispatch its pane was last viewing.
+func TestEnterOnAnAgentsOwnRowShowsItsOwnConversation(t *testing.T) {
+	base := viaUpdate(barFleet(t, 140, 40), taskFrame("s2", started("t1", "toolu_1", "Review the diff", "code-reviewer", core.TaskAgent)))
+	a, _ := click(base, sidebarX(base), 1)
+	a = jumpTyped(a, "web")
+	for a.roster.SelectedTask == "" {
+		a, _ = pressKey(a, kmsg(tea.KeyDown))
+	}
+	a, _ = pressKey(a, kmsg(tea.KeyEnter)) // s2 opens showing its dispatch
+	if a.dms["s2"].viewing != "toolu_1" {
+		t.Fatalf("setup: the pane views %q", a.dms["s2"].viewing)
+	}
+	a, _ = click(a, sidebarX(a), 1)
+	a = jumpTyped(a, "web-b") // the cursor is homed on web-blur's own row
+	a.roster = Roster{Selected: "s2"}
+	a, _ = pressKey(a, kmsg(tea.KeyEnter))
+	if got := a.dms["s2"].viewing; got != "" {
+		t.Errorf("↵ on the agent's own row left its pane viewing %q, want its own conversation", got)
 	}
 }

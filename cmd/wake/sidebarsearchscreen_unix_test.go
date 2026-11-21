@@ -9,6 +9,7 @@ package main
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,9 @@ import (
 // matchedOf is the bar's count, N of the five sessions the fleet holds (the manager and w1..w3
 // and the conversation's own agent).
 var matchedOf = regexp.MustCompile(`\d/5`)
+
+// agentPane is a conversation's own composer border, which a notice naming the agent is not.
+var agentPane = regexp.MustCompile(`@[\w-]+ ─╮`)
 
 func TestTheSearchBarFiltersTheSidebarOnARealScreen(t *testing.T) {
 	withScriptedAgent(t, "")
@@ -42,8 +46,11 @@ func TestTheSearchBarFiltersTheSidebarOnARealScreen(t *testing.T) {
 	}
 	t.Logf("SCREENSHOT the search bar filtering the sidebar:\n%s", s.dump())
 
-	s.send("\r") // opens the match, as a click on its row does
-	s.await("@w3")
+	s.send("\r") // opens the match, as a click on its row does: w3, or the manager when its random name matched too
+	s.settle()
+	if !slices.ContainsFunc(s.lines(), agentPane.MatchString) {
+		t.Fatalf("↵ opened no conversation:\n%s", s.dump())
+	}
 
 	s.click(boxDivider+8, 1)
 	s.settle()
