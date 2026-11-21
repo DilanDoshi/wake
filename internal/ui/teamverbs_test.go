@@ -314,7 +314,7 @@ func TestConfirmingATeamQuitStopsTheNamedTargetsStillLive(t *testing.T) {
 	a, _ = keyed(a, tea.KeyMsg{Type: tea.KeyDown})
 	next, cmd := keyed(a, tea.KeyMsg{Type: tea.KeyEnter})
 
-	if got := kindIDs(sentFrames(t, next, cmd), rpc.FrameStop); !slices.Equal(got, []string{"s1"}) {
+	if got := kindIDs(sentFrames(t, next, cmd), rpc.FrameEndSession); !slices.Equal(got, []string{"s1"}) {
 		t.Errorf("the confirm stopped %v, want only sydney: thea parked since, otto was never named", got)
 	}
 	if _, asked := next.quitting["s1"]; !asked {
@@ -417,7 +417,7 @@ func TestALiveAgentNamedLikeATeamIsQuitWithoutTheTeamConfirm(t *testing.T) {
 	if next.picker.Open() {
 		t.Fatal("/quit @backend opened the team confirm over a live agent of that name")
 	}
-	if f := sentFrame(t, next, cmd); f.Kind != rpc.FrameStop || f.SessionID != "s6" {
+	if f := sentFrame(t, next, cmd); f.Kind != rpc.FrameEndSession || f.SessionID != "s6" {
 		t.Errorf("/quit @backend wrote %q for %q, want the agent s6 stopped", f.Kind, f.SessionID)
 	}
 }

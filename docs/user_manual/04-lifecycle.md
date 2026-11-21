@@ -89,10 +89,12 @@ but you also leave 30 `claude` processes running, which is what park is for.
 
 ## Ending one agent
 
-`/quit` ends the conversation you are in for good — it stops the process, releases the name, and
-drops the row from your window. It is irreversible, which is the whole difference from `⌃C`: park
-pauses, `/quit` ends. Like `wake stop` it lets an in-flight turn finish first. `@who /quit` from the
-room ends that agent instead. The manager is refused and pointed at `/manager-stop`, its one ending.
+`/quit` ends the conversation you are in for good — it closes the process's input, gives the current
+turn up to 30 seconds to finish, then kills the session's process group if it is still running. When
+Claude exits, Wake also sweeps process groups it recorded the session starting. It releases the name
+and drops the row from your window. The transcript remains on disk and can be found later with
+`/resume`, but the old processes do not resume. `@who /quit` from the room ends that agent instead.
+The manager is refused and pointed at `/manager-stop`, its one ending.
 
 ## Ending the fleet
 

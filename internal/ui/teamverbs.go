@@ -280,7 +280,7 @@ func (a App) quitTeam(team string, targets []string) (App, tea.Cmd) {
 			continue
 		}
 		a = a.awaitingQuit(id)
-		frames = append(frames, rpc.Frame{Kind: rpc.FrameStop, SessionID: id})
+		frames = append(frames, rpc.Frame{Kind: rpc.FrameEndSession, SessionID: id})
 	}
 	if len(frames) == 0 {
 		notice.Report(teamQuitGone, agentPrefix, team)

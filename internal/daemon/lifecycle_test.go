@@ -180,6 +180,31 @@ func TestKillEndsTheTurnStopWouldHaveWaitedFor(t *testing.T) {
 	}
 }
 
+func TestEndSessionFinishesAnInFlightTurnWithinItsGrace(t *testing.T) {
+	oldGrace := quitGrace
+	quitGrace = 100 * time.Millisecond
+	t.Cleanup(func() { quitGrace = oldGrace })
+	fakeClaudeOnPath(t, "busy")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "ready")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: fakeBusyPrompt})
+	c.awaitEvent(idAlpha, "working")
+	c.send(rpc.Frame{Kind: rpc.FrameEndSession, SessionID: idAlpha})
+
+	ended := c.pollState(idAlpha, rpc.StateEnded)
+	if ended.Error == "" {
+		t.Fatal("an in-flight session forcibly ended by /quit had no ending error")
+	}
+	for _, f := range c.seen {
+		if f.Kind == rpc.FrameEvent && f.SessionID == idAlpha && strings.Contains(f.Event.Text, "finished") {
+			t.Fatal("the in-flight turn finished after /quit exceeded its grace")
+		}
+	}
+}
+
 // The agent this exists for: one whose process is already gone but whose
 // stdout a grandchild still holds. core's pump is parked in Scan, Err() is
 // nil and Events() is open, so nothing below the daemon can tell it from an
