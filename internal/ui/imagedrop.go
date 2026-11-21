@@ -187,7 +187,7 @@ func (a App) droppedImage(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if len(paths) == 0 {
 		return a, nil, false
 	}
-	return a.disarmed().closePicker().closeJump().closeBoard(), readDroppedImages(a.focus, paths), true
+	return a.disarmed().closePicker().closeJump().closeBoard().letGoOfBar(), readDroppedImages(a.focus, paths), true
 }
 
 // imageDropped folds a finished read into the draft it was dropped into. A

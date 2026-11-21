@@ -234,7 +234,7 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 		return rosterSpot{}, false
 	}
 	// A row above the roster's own - the search bar's - is a negative row, which Hit refuses.
-	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-a.barRows())
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-a.searchRows())
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the
@@ -563,6 +563,17 @@ func (a App) drawn() []string {
 // nothing binds. Every pane is accented, not just the two that used to exist:
 // with a grid the unfocused ones are the majority.
 func (a App) withFocus(f string) App {
+	a = a.closeModalsExcept(f)
+	a.focus = f
+	return a.composersFocused()
+}
+
+// onlyTheBar is the pane no menu is drawn over: moving the keys to the search bar closes every one.
+const onlyTheBar = "\x00"
+
+// closeModalsExcept closes every menu and view drawn over a pane other than keep: left open it
+// would read keys undrawn, or come back over whatever the slot drew next.
+func (a App) closeModalsExcept(f string) App {
 	if a.picker.Open() && a.focus != f {
 		// A picker is drawn over the keys' pane only (pickerView); left open it
 		// would read ↓ and ↵ in the next pane undrawn - a team's quit among them.
@@ -593,8 +604,7 @@ func (a App) withFocus(f string) App {
 	if a.statusUI.Open() && a.statusUI.Pane != f {
 		a.statusUI = StatusView{} // and so does /status's
 	}
-	a.focus = f
-	return a.composersFocused()
+	return a
 }
 
 // composersFocused tells every composer whether it holds the keys and whether

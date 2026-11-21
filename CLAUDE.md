@@ -147,12 +147,15 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   not a row**, pinned from the first look, so a report that re-ranks the fleet cannot move `↵` onto another
   agent. `internal/ui/jumppicker.go`, `agentfind.go`.
 - **The sidebar's search bar** (owner's 2026-11-20 pick, D1 of the mockups): three rows atop the roster, over the pinned
-  `all`, drawn only where the sidebar has room for it and a list under it (`searchBarShown`). A click focuses it (any
-  other press lets go: the one place that happens is `App.press`), typing, space and `⌫` edit the filter with the
+  `all`, drawn only where the sidebar has room for it and a list under it (`searchBarShown`). A click focuses it, closing
+  whatever else read the keys (`closeModalsExcept`, the one list `withFocus` shares); any other left press lets go
+  (`App.press`). Typing, space and `⌫` edit the filter with the
   jump picker's matcher and the sidebar narrows **in place** - the roster's own order, a team with no match gone, `all`
   drawn as a rule when no loose agent matches - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
   `⌃D` open the cursored agent through `openedBy`, the jump box's one opener (an agent already drawn is only
-  focused; a header picks its channel), and `esc` clears the filter and gives the keys back. **It is no modal:** a key
+  focused; a header picks its channel; a dispatch row opens its agent showing that dispatch), `esc` clears the
+  filter and gives the keys back, and **`⌃C` only lets go of it** - the habit that cancels a search must not park the
+  agent the cursor homed on; the next `⌃C` parks as ever. **It is no modal:** a key
   it does not read lets go of it and goes on to do its own job (`⌃F` opens the jump box, never focuses the bar), and
   the filter stands after, with its accent and count. One `rosterAgents` feeds the sidebar's draw, click, window
   and cursor, so none can disagree with what is drawn. **A selection the filter hides takes no key and says why**

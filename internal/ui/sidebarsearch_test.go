@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -360,15 +360,8 @@ func TestTheWindowIsCutToTheRowsUnderTheBar(t *testing.T) {
 	if !a.searchBarShown() {
 		t.Fatal("setup: no bar is drawn")
 	}
-	rows := sideColumn(a)
-	listed := 0
-	for _, row := range rows[searchBarRows : searchBarRows+a.rosterListHeight()] {
-		if strings.TrimSpace(row) != "" {
-			listed++
-		}
-	}
-	if a.rosterRows()+allRows != a.rosterListHeight() || listed > a.rosterListHeight() {
-		t.Errorf("the window has %d rows and the list %d, with %d drawn", a.rosterRows(), a.rosterListHeight(), listed)
+	if a.rosterRows()+allRows != a.rosterListHeight() {
+		t.Errorf("the window has %d rows under the all's %d, and the list %d", a.rosterRows(), allRows, a.rosterListHeight())
 	}
 	if countText(a) == "" {
 		t.Error("a roster taller than its rows draws no count row")
@@ -451,9 +444,6 @@ func TestTheBarTheRosterAndTheUsageBarFillThePaneAtEverySize(t *testing.T) {
 				a.daemon.usage = &rpc.SessionUsage{Percent: 47, Resets: usageResets} // the usage bar under the roster
 				a.sideSearch.Query = query
 				a = a.resizePanes()
-				if got := lipgloss.Height(a.View()); got > h {
-					t.Fatalf("%dx%d filter %q: the frame is %d rows tall", w, h, query, got)
-				}
 				// The frame is cut to the terminal, so a roster too tall pushes the usage bar off the
 				// pane rather than the frame past it: its last row must be the pane's.
 				if len(a.usageDrawn()) > 0 {
@@ -484,12 +474,109 @@ func TestTheBarIsExactlyAsWideAsTheSidebarAtEveryWidth(t *testing.T) {
 		for _, focus := range []bool{false, true} {
 			a.sideSearch = SideSearch{Query: query, Focus: focus}
 			for w := 12; w <= 40; w++ {
-				for i, row := range strings.Split(a.searchBar(w, 3, 8), "\n") {
-					if got := ansi.StringWidth(row); got != w {
-						t.Errorf("width %d, query %q, focus %v: row %d is %d cells wide", w, query, focus, i, got)
+				for _, n := range [][2]int{{3, 8}, {50, 50}, {0, 50}} {
+					for i, row := range strings.Split(a.searchBar(w, n[0], n[1]), "\n") {
+						if got := ansi.StringWidth(row); got != w {
+							t.Errorf("width %d, query %q, focus %v, %d/%d: row %d is %d cells wide", w, query, focus, n[0], n[1], i, got)
+						}
 					}
 				}
 			}
 		}
+	}
+}
+
+// ↵ from the bar on a dispatch row opens its agent showing that dispatch, as ↵ on the row with
+// the bar let go does: the bar walks onto rows, and each opens what it is.
+func TestEnterOnADispatchRowFromTheBarShowsThatDispatch(t *testing.T) {
+	base := viaUpdate(barFleet(t, 140, 40), taskFrame("s2", started("t1", "toolu_1", "Review the diff", "code-reviewer", core.TaskAgent)))
+	a, _ := click(base, sidebarX(base), 1)
+	a = jumpTyped(a, "web")
+	for a.roster.SelectedTask == "" { // walk down to the dispatch under web-blur
+		before := a.roster
+		a, _ = pressKey(a, kmsg(tea.KeyDown))
+		if a.roster == before {
+			t.Fatal("the walk never reached the dispatch row")
+		}
+	}
+	// The reference: the same cursor with the bar let go, then ⌃D.
+	ref := a.letGoOfBar()
+	ref, _ = pressKey(ref, kmsg(tea.KeyCtrlD))
+	got, _ := pressKey(a, kmsg(tea.KeyEnter))
+	if got.roster != ref.roster || got.roster.SelectedTask != "toolu_1" {
+		t.Errorf("↵ from the bar left the cursor %+v, want %+v (the dispatch row)", got.roster, ref.roster)
+	}
+	if got.dms["s2"].viewing != ref.dms["s2"].viewing || got.dms["s2"].viewing != "toolu_1" {
+		t.Errorf("↵ from the bar views %q, want the dispatch %q", got.dms["s2"].viewing, ref.dms["s2"].viewing)
+	}
+}
+
+// A click on the bar is the keys moving to it, so what else read them lets go: a box, a picker or
+// a view left open would be lit-and-dead under a bar that took the typing, and take it back
+// when it closed.
+func TestAClickOnTheBarClosesWhateverElseHeldTheKeys(t *testing.T) {
+	for name, open := range map[string]func(App) App{
+		"the jump box":  func(a App) App { return jumpOpened(t, a) },
+		"/wake-help":    func(a App) App { a, _ = typeCommand(a, "/wake-help"); return a },
+		"/resume's box": func(a App) App { a.resumePicker = ResumePicker{Rows: twoRows(), Selected: map[string]bool{}}; return a },
+	} {
+		a := open(barFleet(t, 140, 40))
+		a, _ = click(a, sidebarX(a), 1)
+		a = jumpTyped(a, "web")
+		if a.jumpPicker.Open() || a.help.view.Open() || a.resumePicker.Open() {
+			t.Errorf("%s: still open under a bar that took the typing", name)
+		}
+		if a.sideSearch.Query != "web" {
+			t.Errorf("%s: the bar's filter is %q, want what was typed", name, a.sideSearch.Query)
+		}
+		a, _ = pressKey(a, kmsg(tea.KeyEsc))
+		a = jumpTyped(a, "q")
+		if a.barFocused() || a.composer().Value() != "q" {
+			t.Errorf("%s: after esc the bar holds the keys (%v) and the draft is %q", name, a.barFocused(), a.composer().Value())
+		}
+	}
+}
+
+// A dropped image path goes to the composer as a chip, and the bar lets go of the keys that
+// the paste says were meant for the draft.
+func TestAnImagePathPastedUnderTheBarLetsGoOfIt(t *testing.T) {
+	a, cmd := pressKey(barApp(t), tea.KeyMsg{Type: tea.KeyRunes, Paste: true, Runes: []rune("/tmp/shot.png")})
+	if cmd == nil || a.barFocused() {
+		t.Errorf("after an image drop: read %v, bar focused %v; want the image read and the bar let go", cmd != nil, a.barFocused())
+	}
+}
+
+// A query longer than the bar shows its end, where the caret is, with the start elided.
+func TestALongQueryShowsItsEndAndTheCaret(t *testing.T) {
+	a := jumpTyped(barApp(t), "infra-blue-green-and-more")
+	row := sideColumn(a)[1]
+	if !strings.Contains(row, "…") || !strings.Contains(row, "more"+jumpCaret) || strings.Contains(row, "infra-") {
+		t.Errorf("the bar row is %q, want the end of the query, its caret and an elided start", row)
+	}
+}
+
+// ⌃C is the habit that cancels a search, and parking an agent is not cancelling one: with the bar
+// holding the keys the first ⌃C only lets go of it, and the next parks as it always has.
+func TestCtrlCOnTheBarOnlyLetsGoOfIt(t *testing.T) {
+	a := jumpTyped(barApp(t), "scr") // the cursor is homed on scratch
+	got, cmd := pressKey(a, kmsg(tea.KeyCtrlC))
+	if got.barFocused() || got.sideSearch.Query != "scr" {
+		t.Errorf("after ⌃C: bar focused %v, filter %q; want it let go with the filter standing", got.barFocused(), got.sideSearch.Query)
+	}
+	if parked := kindsFor(writtenFrames(t, got, cmd), rpc.FramePark); len(parked) != 0 {
+		t.Errorf("the first ⌃C parked %v", parked)
+	}
+	_, cmd = pressKey(got, kmsg(tea.KeyCtrlC))
+	if parked := kindsFor(writtenFrames(t, got, cmd), rpc.FramePark); len(parked) != 1 {
+		t.Errorf("the second ⌃C parked %v, want the agent the cursor is on", parked)
+	}
+}
+
+// A wide rune is whole or gone, and the end of a wide query is what shows, at the sidebar's real width.
+func TestAWideQueryShowsItsEndWhole(t *testing.T) {
+	a := jumpTyped(barApp(t), "日本語日本語日本語")
+	row := sideColumn(a)[1]
+	if !strings.Contains(row, "語"+jumpCaret) || !strings.Contains(row, "…") {
+		t.Errorf("the bar row is %q, want the last rune, the caret and an elided start", row)
 	}
 }

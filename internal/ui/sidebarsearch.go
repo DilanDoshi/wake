@@ -36,7 +36,7 @@ const (
 	// pickOutOfView for one the wheel scrolled away.
 	pickFilteredOut = "the agent selected in the sidebar is filtered out. esc in the search bar clears the filter, ⇧↑↓ moves on from it"
 
-	barKeys = "type to filter · ↑↓ ⇧↑↓ move · ↵ open · ⌃B below · ⌃D here · esc clear"
+	barKeys = "type to filter · ↑↓ ⇧↑↓ move · ↵ open · ⌃B below · ⌃D here · esc clear · ⌃C let go"
 )
 
 // SideSearch is the sidebar's filter: what is typed, and whether the bar holds the keys.
@@ -51,8 +51,8 @@ func (a App) searchBarShown() bool {
 		a.rosterHeight() >= searchBarRows+allRows+searchListFloor
 }
 
-// barRows is the rows the bar takes off the top of the sidebar: none when it is not drawn.
-func (a App) barRows() int {
+// searchRows is the rows the bar takes off the top of the sidebar: none when it is not drawn.
+func (a App) searchRows() int {
 	if a.searchBarShown() {
 		return searchBarRows
 	}
@@ -60,7 +60,7 @@ func (a App) barRows() int {
 }
 
 // rosterListHeight is the rows the roster itself has: under the bar, above the usage bar.
-func (a App) rosterListHeight() int { return a.rosterHeight() - a.barRows() }
+func (a App) rosterListHeight() int { return a.rosterHeight() - a.searchRows() }
 
 // barFocused is whether the bar holds the keys. It must be drawn to: a hold on a bar
 // nobody can see would take keys silently.
@@ -68,7 +68,7 @@ func (a App) barFocused() bool { return a.sideSearch.Focus && a.searchBarShown()
 
 // activeQuery is the filter the roster is drawn under: none while the bar is not drawn.
 func (a App) activeQuery() string {
-	if !a.searchBarShown() {
+	if a.sideSearch.Query == "" || !a.searchBarShown() {
 		return ""
 	}
 	return a.sideSearch.Query
@@ -120,7 +120,7 @@ func (a App) searchHomed() App {
 
 // cursorFilteredOut is whether the cursor is on an agent or a channel the filter hides.
 func (a App) cursorFilteredOut() bool {
-	if a.activeQuery() == "" {
+	if a.sideSearch.Query == "" || a.activeQuery() == "" { // asked on every key and every frame: the cheap test first
 		return false
 	}
 	r, shown := a.roster, a.fleet.sectioned(a.rosterAgents())
@@ -146,33 +146,35 @@ func (a App) letGoOfBar() App {
 // the jump box does, esc clears the filter and gives the keys back. Any other key
 // lets go of the bar and goes on to do its own job, so the bar never swallows one -
 // including ⌃F, which opens the jump box and never focuses this.
-func (a App) barKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
+func (a App) barKey(m tea.KeyMsg) (App, bool) {
 	if !a.barFocused() {
-		return a.letGoOfBar(), nil, false // a hold the sidebar's hiding left behind is no hold
+		return a.letGoOfBar(), false // a hold the sidebar's hiding left behind is no hold
 	}
 	switch m.Type {
 	case tea.KeyRunes:
-		return a.searchEdited(func(q string) string { return typedQuery(q, string(m.Runes)) }), nil, true
+		return a.searchEdited(func(q string) string { return typedQuery(q, string(m.Runes)) }), true
 	case tea.KeySpace:
-		return a.searchEdited(func(q string) string { return typedQuery(q, " ") }), nil, true
+		return a.searchEdited(func(q string) string { return typedQuery(q, " ") }), true
 	case tea.KeyBackspace:
-		return a.searchEdited(backspacedQuery), nil, true
+		return a.searchEdited(backspacedQuery), true
 	case tea.KeyUp, tea.KeyShiftUp:
-		return a.pickAgent(-1), nil, true
+		return a.pickAgent(-1), true
 	case tea.KeyDown, tea.KeyShiftDown:
-		return a.pickAgent(1), nil, true
+		return a.pickAgent(1), true
 	case tea.KeyEnter:
-		return a.openSearched(App.openInNewPane), nil, true
+		return a.openSearched(App.openInNewPane), true
 	case tea.KeyCtrlB:
-		return a.openSearched(App.openBelow), nil, true
+		return a.openSearched(App.openBelow), true
 	case tea.KeyCtrlD:
-		return a.openSearched(App.openDMWith), nil, true
+		return a.openSearched(App.openDMWith), true
 	case tea.KeyEsc: // alt+esc, two fast escapes, is one
 		a.sideSearch = SideSearch{}
 		a.rosterView = rosterView{}
-		return a, nil, true
+		return a, true
+	case tea.KeyCtrlC: // the habit that cancels a search must not park the agent the cursor homed on
+		return a.letGoOfBar(), true
 	}
-	return a.letGoOfBar(), nil, false
+	return a.letGoOfBar(), false
 }
 
 // openSearched opens what the cursor is on, as the jump box does and a click does:
@@ -188,11 +190,16 @@ func (a App) openSearched(place func(App, string, string) App) App {
 		notice.Report("%s", a.unseenOr(noPaneAdvice))
 		return a
 	}
+	task := a.roster.SelectedTask
 	next, opened := a.openedBy(place, ag)
 	if !opened {
 		return a
 	}
 	next.sideSearch.Focus = false
+	if task != "" { // a dispatch row opens its agent showing that dispatch, as a click on it does
+		next.roster = Roster{Selected: ag.ID, SelectedTask: task}
+		return next.viewingPicked(ag.ID)
+	}
 	return next.selectOpened(ag.ID)
 }
 
@@ -201,18 +208,13 @@ func (a App) openSearched(place func(App, string, string) App) App {
 // a filter. The counts come from the frame, which ranks the roster once.
 func (a App) searchBar(width, found, total int) string {
 	focus, query := a.barFocused(), a.sideSearch.Query
-	edge := HintStyle
+	edge, lit := HintStyle, query != "" || focus
 	if focus {
 		edge = AccentStyle
 	}
-	glyph, text := HintStyle.Render("⌕ "), HintStyle.Render(searchHint)
-	switch {
-	case focus && query == "":
-		glyph, text = AccentStyle.Render("⌕ "), AccentStyle.Render(jumpCaret)+HintStyle.Render(searchHint)
-	case focus:
-		glyph, text = AccentStyle.Render("⌕ "), TextStyle.Render(query)+AccentStyle.Render(jumpCaret)
-	case query != "":
-		glyph, text = AccentStyle.Render("⌕ "), TextStyle.Render(query)
+	glyph := HintStyle.Render("⌕ ")
+	if lit {
+		glyph = AccentStyle.Render("⌕ ")
 	}
 	count := ""
 	if query != "" {
@@ -222,9 +224,18 @@ func (a App) searchBar(width, found, total int) string {
 		}
 		count = style.Render(fmt.Sprintf("%d/%d", found, total))
 	}
-	inner := max(width-2*boxInset, 1)
-	room := max(inner-ansi.StringWidth(count)-ansi.StringWidth(glyph), 0)
-	text = ansi.Truncate(text, room, "…")
+	room := max(max(width-2*boxInset, 1)-ansi.StringWidth(count)-ansi.StringWidth(glyph), 0)
+	text := ansi.Truncate(HintStyle.Render(searchHint), room, "…")
+	switch {
+	case query != "":
+		text = TextStyle.Render(tailOf(query, room-ansi.StringWidth(jumpCaret)))
+		if focus {
+			text += AccentStyle.Render(jumpCaret)
+		}
+	case focus:
+		text = AccentStyle.Render(jumpCaret) + ansi.Truncate(HintStyle.Render(searchHint), max(room-ansi.StringWidth(jumpCaret), 0), "…")
+	}
+	text = ansi.Truncate(text, room, "") // a caret over a column too narrow for it
 	pad := strings.Repeat(" ", max(room-ansi.StringWidth(text), 0))
 	rule := strings.Repeat(boxBorder.Top, max(width-2, 0))
 	return strings.Join([]string{
@@ -232,4 +243,24 @@ func (a App) searchBar(width, found, total int) string {
 		edge.Render(boxBorder.Left) + " " + glyph + text + pad + count + " " + edge.Render(boxBorder.Right),
 		edge.Render(boxBorder.BottomLeft + rule + boxBorder.BottomRight),
 	}, "\n")
+}
+
+// tailOf is the end of s that fits room cells, the start elided: what was typed last is
+// where the caret is. A wide rune is whole or gone.
+func tailOf(s string, room int) string {
+	if ansi.StringWidth(s) <= room {
+		return s
+	}
+	if room < 1 {
+		return ""
+	}
+	rs, used, at := []rune(s), 1, len([]rune(s)) // the ellipsis takes a cell
+	for ; at > 0; at-- {
+		w := ansi.StringWidth(string(rs[at-1]))
+		if used+w > room {
+			break
+		}
+		used += w
+	}
+	return "…" + string(rs[at:])
 }

@@ -117,9 +117,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	// The sidebar's search bar, while a click has it. It is no modal: a key it does not
 	// read lets go of it and goes on, so the model is kept even when the key is not taken.
-	next, barCmd, barTook := a.barKey(m)
+	next, barTook := a.barKey(m)
 	if barTook {
-		return next, barCmd, true
+		return next, nil, true
 	}
 	a = next
 	// The /mcp menu is modal for the same reason, and hands ⌃C back the same way.
