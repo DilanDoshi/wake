@@ -429,7 +429,7 @@ func TestCtrlBOnAnAgentDrawnAboveOnlyFocusesIt(t *testing.T) {
 func TestAHiddenBarsHoldIsNotRevivedByTheSidebarReturning(t *testing.T) {
 	a := barFleet(t, 140, 40)
 	a, _ = click(a, sidebarX(a), 1)
-	a.layout.ShowRoster = false // hidden with no resize between: the key's own let-go is what drops the hold
+	a.layout.ShowRoster = false            // hidden with no resize between: the key's own let-go is what drops the hold
 	a, _ = pressKey(a, kmsg(tea.KeyCtrlF)) // a key App.key takes: its own App is kept
 	a.layout.ShowRoster = true
 	if a = a.resizePanes(); a.barFocused() {
