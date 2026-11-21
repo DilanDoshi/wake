@@ -29,23 +29,27 @@ func (t Tasks) owns(id string) bool {
 	return slices.ContainsFunc(t.rows, func(row Task) bool { return row.Parent == id && row.Status == core.TaskRunning })
 }
 
-// isAgent reports whether the row for id is a subagent's.
-func (t Tasks) isAgent(id string) bool {
+// isOwnAgent reports whether the row for id is a subagent the session dispatched itself.
+func (t Tasks) isOwnAgent(id string) bool {
 	row, ok := t.forID(id)
-	return ok && row.Kind == core.TaskAgent
+	return ok && row.Kind == core.TaskAgent && row.Parent == ""
 }
 
-// holding folds what an event, already in the rows, means for the held endings: a
-// restart ends the hold, and an agent's `completed` ending with a task of its own still
-// running begins one (the frame that names its dispatch, the one a line is drawn from).
+// holding folds what an event, already in the rows, means for the held endings: a restart
+// ends the hold; any later ending of the agent replaces it, and is itself held only when
+// it is a `completed` with a task of its own still running (the frame that names its
+// dispatch, the one a line is drawn from).
 func (t Tasks) holding(ev core.Event) Tasks {
 	u := ev.Task
 	switch {
 	case u.Phase == core.TaskStarted:
 		t.held = without(t.held, u.ID)
-	case u.Phase == core.TaskEnded && u.Status == core.TaskDone && u.Dispatch != "" && u.Parent == "" && t.isAgent(u.ID) && t.owns(u.ID):
-		ev.Task = t.named(u)
-		t.held = append(without(t.held, u.ID), ev)
+	case u.Phase == core.TaskEnded && u.Dispatch != "" && t.isOwnAgent(u.ID):
+		t.held = without(t.held, u.ID)
+		if u.Status == core.TaskDone && t.owns(u.ID) {
+			ev.Task = t.named(u)
+			t.held = append(t.held, ev)
+		}
 	}
 	return t
 }

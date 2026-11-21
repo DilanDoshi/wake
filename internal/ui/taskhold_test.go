@@ -168,6 +168,9 @@ func TestAnEarlyEndingIsHeldUntilTheAgentReallyEnds(t *testing.T) {
 			started("a1", "toolu_a1", "Count", "general-purpose", core.TaskAgent),
 			owned("c1", "a1"),
 			ending("a1", core.TaskStopped, 3*time.Second)}, 1},
+		"a later ending replaces the held one, no restart announced": {append(agentWithShell("Count", 3*time.Second),
+			ending("c1", core.TaskDone, 0),
+			ending("a1", core.TaskDone, 11*time.Second)), 1},
 		"a shell that ended first holds nothing": {[]core.Event{
 			started("a1", "toolu_a1", "Count", "general-purpose", core.TaskAgent),
 			owned("c1", "a1"),
@@ -256,5 +259,16 @@ func TestHeldEndingsAreDrawnInTheOrderTheyWereHeld(t *testing.T) {
 	lines := agentEndings(out)
 	if len(lines) != 2 || !strings.Contains(lines[0], `"second"`) || !strings.Contains(lines[1], `"first"`) {
 		t.Errorf("endings drawn %q, want second then first, the order they were held", lines)
+	}
+}
+
+// An ending that is not `completed` is never held and ends the hold, so what draws is
+// the stop - once, and not the `finished` it follows.
+func TestAStoppedEndingAfterAHeldOneIsTheOneDrawn(t *testing.T) {
+	_, out := replayTasks(t, append(agentWithShell("Count", 3*time.Second),
+		ending("a1", core.TaskStopped, 5*time.Second), ending("c1", core.TaskDone, 0), turnEnd)...)
+	lines := agentEndings(out)
+	if len(lines) != 1 || !strings.Contains(lines[0], taskLineHalted+metaSep+elapsedText(5*time.Second)) {
+		t.Errorf("%d ending lines %q, want the stop once", len(lines), lines)
 	}
 }
