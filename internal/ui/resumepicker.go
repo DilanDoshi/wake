@@ -200,11 +200,11 @@ func (a App) resumePickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		}
 		return a, nil, true
 	case tea.KeyBackspace:
-		return a.backspaceQuery(), nil, true
+		return a.editResume(backspacedQuery), nil, true
 	case tea.KeySpace:
-		return a.appendQuery(" "), nil, true
+		return a.editResume(func(q string) string { return typedQuery(q, " ") }), nil, true
 	case tea.KeyRunes:
-		return a.appendQuery(string(m.Runes)), nil, true
+		return a.editResume(func(q string) string { return typedQuery(q, string(m.Runes)) }), nil, true
 	}
 	// Every other key is swallowed while the picker is up, so it is a proper
 	// search box: an arrow or a chord does not dismiss it mid-query the way an
@@ -214,24 +214,12 @@ func (a App) resumePickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a, nil, true
 }
 
-// appendQuery adds to the search and re-homes the cursor, since the match set
-// has changed under it. A copied picker, App's immutability rule.
-func (a App) appendQuery(s string) App {
+// editResume edits the search with the query functions every filter shares
+// (help.go's typedQuery and backspacedQuery) and re-homes the cursor, since the
+// match set has changed under it. A copied picker, App's immutability rule.
+func (a App) editResume(edit func(string) string) App {
 	p := a.resumePicker
-	p.Query += s
-	p.Cursor = 0
-	a.resumePicker = p
-	return a
-}
-
-// backspaceQuery drops the query's last rune. Runes, not bytes, so a multi-byte
-// character deletes as one keypress.
-func (a App) backspaceQuery() App {
-	p := a.resumePicker
-	if r := []rune(p.Query); len(r) > 0 {
-		p.Query = string(r[:len(r)-1])
-	}
-	p.Cursor = 0
+	p.Query, p.Cursor = edit(p.Query), 0
 	a.resumePicker = p
 	return a
 }

@@ -31,7 +31,7 @@ const (
 	// save dialog is the one place it only closes the dialog; see workflowAliasKeys.
 	helpParkKey = "⌃C closes it and parks the agent in front of you"
 
-	// queryMax bounds what a paste can put in a filter: /wake-help's and the jump picker's.
+	// queryMax bounds what a paste can put in a filter: /wake-help's, the jump picker's and /resume's.
 	queryMax = 40
 
 	// helpBodyTop is the rows above the body: the pane's title and the filter.

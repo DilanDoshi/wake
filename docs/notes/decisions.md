@@ -43,6 +43,10 @@ a rule between the filter line and the results, and the sidebar search bar (D1) 
   helper the click's drop ends in (`selectOpened`), so the two cannot drift - in a window that carries one column
   that is the click's rule too: it replaces the pane on screen (`jumppickernarrow_test.go`). Any open key on an agent already drawn only focuses it (a refused ⌃B there would close the box with the keys still elsewhere). `⌃B` and `⌃D` are the open keys'
   placements; a refused `⌃B` keeps the box and the typed filter.
+- **One query editor.** `/wake-help`, the jump picker and `/resume` edit their filter with `typedQuery` and
+  `backspacedQuery` (help.go): no leading space, one between words, nothing unprintable, `queryMax` runes. The
+  resume picker's own older copy is gone, so it now strips a pasted newline and bounds a paste too
+  (`TestResumePickerQueryEdgesAreTheSharedNormalisers`).
 - **Matching is on the name as drawn**, case and spaces ignored: its start, a run inside it, its letters in order.
   Not team names, not directories (deferred).
 - **Not everywhere.** A `/workflows` or `/wake-help` view takes every key in its pane, so ⌃F is not read there
