@@ -418,8 +418,9 @@ ALSO = [
     ),
     (
         "The task board",
-        "An agent's own <code>TaskCreate</code> checklist, pinned above the "
-        "composer where Claude Code draws it, folded live from the ops.",
+        "When Claude Code's to-do tool is on (its opt-in), an agent's own checklist "
+        "is pinned above the composer where Claude Code draws it, folded live from "
+        "the ops.",
     ),
     (
         "Named fleets",
