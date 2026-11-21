@@ -394,10 +394,12 @@ func TestCapacityIsHowManyColumnsRegionsDraws(t *testing.T) {
 }
 
 // One column is what the takeover width means: below it a window carries a single
-// pane, and at it a second fits beside the first.
+// pane, and at it a second fits beside the first; above, the count is worked out by
+// hand here, not by the formula under test.
 func TestCapacityIsOneBelowTheTakeoverWidth(t *testing.T) {
 	for _, tc := range []struct{ window, want int }{
 		{sidebarsHideColumns - 1, 1}, {dmTakeoverColumns - 1, 1}, {dmTakeoverColumns, 3},
+		{140, 4}, {160, 5}, {200, 7}, {320, 11}, // by hand: (window - margins - roster + 1) / 25
 	} {
 		l := Layout{Width: tc.window - 2*SideMargin, Height: 40, ShowRoster: true}
 		if got := l.Capacity(); got != tc.want {

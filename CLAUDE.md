@@ -415,7 +415,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   header still picks the channel, and a workflow or dispatch row opens its agent here as before. A press
   arms a drag; motion past `dragSlop` (2 cells) makes it live, and release drops it: on the bottom half of a
   pane Grid.OpenBelow's rules allow (`CanOpenBelow`, one split per column, the room included) it opens below
-  that pane, anywhere else in a new column, and an agent already on screen is focused, never moved. Esc,
+  that pane, anywhere else in a new column (the pane shown, in a window that carries one column), and an agent
+  already on screen is focused, never moved. Esc,
   any other key, a resize, a button-less motion (what a terminal reports after a lost release) or letting go
   anywhere in the sidebar's column, the strip under it included, cancels, and esc is nothing else (it must
   not interrupt the pane holding the keys; an esc the pump hands over with the next mouse report reads as
