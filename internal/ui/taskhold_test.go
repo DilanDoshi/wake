@@ -339,3 +339,27 @@ func TestOnlyAnAgentTheSessionDispatchedItselfIsHeld(t *testing.T) {
 		})
 	}
 }
+
+// Another agent that is still running holds nothing back: the held ending waits on
+// what its own agent owns, not on the session being busy.
+func TestAnUnrelatedRunningTaskDoesNotHoldAnEndingBack(t *testing.T) {
+	evs := append([]core.Event{started("a2", "toolu_a2", "elsewhere", "general-purpose", core.TaskAgent)},
+		append(agentWithShell("Count", 3*time.Second), ending("c1", core.TaskDone, 0), turnEnd)...)
+	_, out := replayTasks(t, evs...)
+	if lines := agentEndings(out); len(lines) != 1 || !strings.Contains(lines[0], `"Count"`) {
+		t.Errorf("%d ending lines %q, want the held agent's, drawn at the turn ending", len(lines), lines)
+	}
+}
+
+// An agent that reports running again has restarted, whether or not claude said so with
+// a task_started: its next ending is the real one, and the held one is never drawn.
+func TestAProgressFrameForAHeldAgentIsItsRestart(t *testing.T) {
+	evs := append(agentWithShell("Count", 3*time.Second),
+		progressed("a1", "toolu_a1", "Count", "Bash", 100, 4*time.Second),
+		ending("c1", core.TaskDone, 0), turnEnd,
+		ending("a1", core.TaskDone, 11*time.Second))
+	_, out := replayTasks(t, evs...)
+	if lines := agentEndings(out); len(lines) != 1 || !strings.Contains(lines[0], taskLineFinished+metaSep+elapsedText(11*time.Second)) {
+		t.Errorf("%d ending lines %q, want the real ending once", len(lines), lines)
+	}
+}

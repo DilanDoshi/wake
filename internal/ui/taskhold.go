@@ -35,14 +35,15 @@ func (t Tasks) isOwnAgent(id string) bool {
 	return ok && row.Kind == core.TaskAgent && row.Parent == ""
 }
 
-// holding folds what an event, already in the rows, means for the held endings: a restart
-// ends the hold; any later ending of the agent replaces it, and is itself held only when
-// it is a `completed` with a task of its own still running (the frame that names its
-// dispatch, the one a line is drawn from).
+// holding folds what an event, already in the rows, means for the held endings: the agent
+// reporting running again, a task_started or a task_progress, is its restart and ends the
+// hold; any later ending replaces it, and is itself held only when it is a `completed` with
+// a task of its own still running (the frame that names its dispatch, the one a line is
+// drawn from).
 func (t Tasks) holding(ev core.Event) Tasks {
 	u := ev.Task
 	switch {
-	case u.Phase == core.TaskStarted:
+	case u.Phase != core.TaskEnded && u.Status == core.TaskRunning:
 		t.held = without(t.held, u.ID)
 	case u.Phase == core.TaskEnded && u.Dispatch != "" && t.isOwnAgent(u.ID):
 		t.held = without(t.held, u.ID)
