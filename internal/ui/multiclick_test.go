@@ -165,8 +165,10 @@ func TestMoreClicksSelectInTheRoster(t *testing.T) {
 		t.Fatal("no roster row on screen")
 	}
 	line := frameRow(a, y)
-	name := strings.Fields(line[strings.LastIndex(line, "│")+len("│"):])
-	x := len([]rune(line[:strings.Index(line, name[1])])) + 1
+	right := strings.LastIndex(line, "│")
+	left := strings.LastIndex(line[:right], "│") // the box's left wall, past the divider
+	name := strings.Fields(line[left+len("│") : right])
+	x := len([]rune(line[:left+strings.Index(line[left:], name[1])])) + 1
 
 	a, _ = click(a, x, y)
 	if a.focus == "" {
@@ -177,7 +179,7 @@ func TestMoreClicksSelectInTheRoster(t *testing.T) {
 		t.Errorf("a double-click on the roster selected %q, want the name %q", got, name[1])
 	}
 	a, _ = click(a, x, y)
-	if got := selectedNow(a); got != strings.Join(name, " ") {
+	if got := selectedNow(a); got != strings.Join(name, " ") { // the box's walls are chrome, never part of the row
 		t.Errorf("a triple-click on the roster selected %q, want the roster row %q", got, strings.Join(name, " "))
 	}
 }

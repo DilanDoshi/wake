@@ -94,7 +94,8 @@ teams reappear in resume order, not original creation order. Recorded in
 
 ## Header style (Q2)
 
-A centered rule, `──── backend ────`, drawn in both surfaces through the existing
+A centered rule, `──── backend ────` (the roster has drawn each team as a box since 2026-11-19,
+its header the top edge: `decisions.md`), drawn in both surfaces through the existing
 `titledEdge` (`titledbox.go`) — no second rule-drawer, which "no parallel
 implementations" refuses; `lastReadLine` is the other labelled-rule precedent. An
 optional member count rides on the right, **dropped whole** when the width is tight

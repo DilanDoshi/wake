@@ -42,21 +42,22 @@ func rowContaining(lines []string, sub string) int {
 
 func noSubsOf(string) []Task { return nil }
 
-// The top block's last row and the first team's header are a blank apart, and so
-// are one team's last row and the next team's header.
+// The top block's closing row and the first team's header are a blank apart, and so
+// are one team's closing row and the next team's header.
 func TestARosterTeamHeaderHasABlankRowAboveIt(t *testing.T) {
 	lines := rosterLines(gapSessionsAgents(t), "", noSubsOf, 30, 20)
 
 	for _, tc := range []struct{ header, above string }{{"backend", "alex"}, {"frontend", "john"}} {
 		h := rowContaining(lines, tc.header)
-		if h < 2 {
+		if h < 3 {
 			t.Fatalf("the %s header is on row %d:\n%s", tc.header, h, strings.Join(lines, "\n"))
 		}
 		if strings.TrimSpace(lines[h-1]) != "" {
 			t.Errorf("row %d above the %s header is %q, want a blank row", h-1, tc.header, lines[h-1])
 		}
-		if !strings.Contains(lines[h-2], tc.above) {
-			t.Errorf("row %d is %q, want %s's row just above the gap", h-2, lines[h-2], tc.above)
+		if !isFooter(strings.TrimRight(lines[h-2], " ")) || !strings.Contains(lines[h-3], tc.above) {
+			t.Errorf("rows %d and %d are %q and %q, want %s's row and the box's closing row above the gap",
+				h-3, h-2, lines[h-3], lines[h-2], tc.above)
 		}
 	}
 }
@@ -133,13 +134,16 @@ func TestEveryRosterRowResolvesToWhatIsDrawnThereAtEveryHeight(t *testing.T) {
 				if strings.TrimSpace(line) == "" && ok {
 					t.Errorf("height %d, cursor %s: the blank row %d selects %q", height, sel, y, a.Name)
 				}
-				if strings.Contains(line, "─") && (!ok || spot.header == "" || a.ID != "") {
+				if isFooter(strings.TrimRight(line, " ")) && ok {
+					t.Errorf("height %d, cursor %s: the closing row %d resolves to %+v, want no one", height, sel, y, spot)
+				}
+				if strings.Contains(line, "─") && !isFooter(strings.TrimRight(line, " ")) && (!ok || spot.header == "" || a.ID != "") {
 					t.Errorf("height %d, cursor %s: the header on row %d resolves to (%+v, %v), want its channel and no agent", height, sel, y, spot, ok)
 				}
 				// A gap or a header is never left over the count: whatever the window
 				// keeps of a section, it keeps with a member under what leads it.
 				if isCountRow(line) && y > 0 &&
-					(strings.TrimSpace(lines[y-1]) == "" || strings.Contains(lines[y-1], "─")) {
+					(strings.TrimSpace(lines[y-1]) == "" || isTopEdge(strings.TrimRight(lines[y-1], " "))) {
 					t.Errorf("height %d, cursor %s: the %q count has a gap or header just above it:\n%s",
 						height, sel, strings.TrimSpace(line), strings.Join(lines, "\n"))
 				}

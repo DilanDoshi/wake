@@ -6503,3 +6503,33 @@ colour around the query bar go away?" The terminal says so (DECSET 1004), Bubble
 - **Not done:** the real terminals. Only a pty and vt10x ran; cmux, Terminal.app, iTerm2, Ghostty and tmux
   (`focus-events on`) are `live-testing.md`'s checklist. Held by `windowfocus_test.go`,
   `cmd/wake/focusreport_unix_test.go` and `focusscreen_unix_test.go`.
+
+## 2026-11-19 — the sidebar's sections are boxes
+
+The owner picked variant C of wake-orch's mockups (a team drawn as a box, `│` walls and a closing row), for the
+right sidebar only; `/board`'s team dividers stay `──── name ────` (`teamHeaderLine`).
+
+- **A section is a box**: the header is its top edge (`╭── name ──╮`, one row, through `titledEdge`), members stand
+  between `│ ` and ` │`, and a `╰──╯` row closes under the last. The agents above the first team are a box too, under
+  the pinned `all`, whose row stays the one-row top edge (`allRows` is unchanged). The blank row between sections stays.
+- **The closing row rides on the section's last item**, as the header and the gap ride on its first
+  (`rosterItem.footer`, `trail`). The window still cuts between items, so `heights`, `grow`, `lastTop`, `window`, the
+  wheel and the seam read `rowsForRow` and needed no change; `At` skips the closing row (no one's, like the gap) and
+  counts the subagent rows above it. The last window ends on a closing row.
+- **A cut box runs on**: a window that starts or ends inside a team draws walls with no edge on that side, and the
+  count row stays one full-width row outside every box. The pinned `all` edge is sticky: scrolled over a team's
+  walls it still names the channel a click picks.
+- **Rows have the column less four** (`boxInset` each side), 19 at the default 23. `headLine` keeps its budget, now
+  at 19: a name is cut at the wall (a hard cut, no ellipsis, as before) and the unread badge is kept; the goal, loop
+  and token figures are dropped whole sooner (a working agent's `↓ 550` fits a name of eleven columns, not twelve),
+  and a nested subagent's figure goes first. **A workflow's done/started count** needs a name of nine columns or
+  fewer, a subagent type such as `code-reviewer` loses its token figure, and a tool argument has 17 columns after
+  its indent, so a long one is cut with an ellipsis sooner (`Read(internal…)`, `Grep(parseFra…)`). **The nesting cap `maxSubDepth` (2) was
+  derived from `general-purpose` fitting whole at depth 2 in 23 columns; in 19 only the top level fits it whole**,
+  so a nested one is cut at the wall (`general-purpo`); the cap is now a bound on the indent, pinned from below by
+  the recorded nest. A team name up to 15 columns shows whole in its edge (17 before).
+- **State is the channel's**: the edge, walls and closing row are the accent while the channel is picked and muted
+  otherwise (`channelStyles`); the cursor on a header brightens and bolds the name only.
+- **Accepted edge cases** (owner, via wake-orch): a roster that opens on a team has `all`'s top edge directly above
+  that team's; and a drag copies the walls it covers (a double- or triple-click does not: box-drawing runes are gaps).
+- Held by `internal/ui/rosterbox_test.go`, `cmd/wake/boxscreen_unix_test.go`.

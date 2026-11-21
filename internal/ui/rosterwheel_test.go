@@ -88,7 +88,7 @@ func wheelSidebar(a App, down bool, n int) App {
 	return wheelAt(a, button, sidebarX(a), 6, n)
 }
 
-var drawnAgentRow = regexp.MustCompile(`^\S+ (agent\d\d)\b`)
+var drawnAgentRow = regexp.MustCompile(`^│ \S+ (agent\d\d)\b`) // a member between its box's walls
 
 // drawnAgents is the agents the sidebar draws, top to bottom.
 func drawnAgents(a App) []string {
@@ -480,11 +480,15 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 							if ok {
 								t.Errorf("%s: row %d %q hits %+v", where, y, text, spot)
 							}
+						case isFooter(strings.TrimRight(line, " ")):
+							if ok {
+								t.Errorf("%s: the closing row %d hits %+v", where, y, spot)
+							}
 						case strings.Contains(line, "─"):
 							if !ok || spot.header == "" || !strings.Contains(line, " "+spot.header+" ") {
 								t.Errorf("%s: header row %d %q hits %+v (%v)", where, y, text, spot, ok)
 							}
-						case !ok || !strings.Contains(line, spot.agent.Name) && !strings.HasPrefix(line, "  "):
+						case !ok || !strings.Contains(line, spot.agent.Name) && !strings.HasPrefix(strings.TrimPrefix(line, "│ "), "  "):
 							t.Errorf("%s: row %d %q hits %+v (%v)", where, y, text, spot, ok)
 						}
 					}

@@ -43,19 +43,21 @@ func TestRosterDrawsTeamHeadersAndAHeaderClickSelectsNoAgent(t *testing.T) {
 		t.Errorf("the roster drew no `backend` team header:\n%s", out)
 	}
 
-	// Layout: row 0 alex (top block), row 1 a blank, row 2 the `backend` header,
-	// rows 3-4 thea, john.
-	if spot, ok := r.At(agents, noSubs, width, height, 1); ok {
-		t.Errorf("a click on row 1, the blank, resolved to %+v; it belongs to no one", spot)
+	// Layout: row 0 alex (top block), row 1 its box's closing row, row 2 a blank,
+	// row 3 the `backend` header, rows 4-5 thea, john, row 6 the closing row.
+	for _, y := range []int{1, 2, 6} {
+		if spot, ok := r.At(agents, noSubs, width, height, y); ok {
+			t.Errorf("a click on row %d, a blank or a closing row, resolved to %+v; it belongs to no one", y, spot)
+		}
 	}
-	if spot, ok := r.At(agents, noSubs, width, height, 2); !ok || spot.header != "backend" || spot.agent.ID != "" {
-		t.Errorf("a click on row 2, the team header, resolved to (%+v, %v); want the backend header and no agent", spot, ok)
+	if spot, ok := r.At(agents, noSubs, width, height, 3); !ok || spot.header != "backend" || spot.agent.ID != "" {
+		t.Errorf("a click on row 3, the team header, resolved to (%+v, %v); want the backend header and no agent", spot, ok)
 	}
 	if spot, ok := r.At(agents, noSubs, width, height, 0); !ok || spot.agent.ID != "s1" {
 		t.Errorf("row 0 = (%q, %v), want alex (s1) in the top block", spot.agent.ID, ok)
 	}
-	if spot, ok := r.At(agents, noSubs, width, height, 3); !ok || spot.agent.ID != "s2" {
-		t.Errorf("row 3 = (%q, %v), want thea (s2) under the backend header", spot.agent.ID, ok)
+	if spot, ok := r.At(agents, noSubs, width, height, 4); !ok || spot.agent.ID != "s2" {
+		t.Errorf("row 4 = (%q, %v), want thea (s2) under the backend header", spot.agent.ID, ok)
 	}
 }
 
@@ -63,7 +65,7 @@ func TestRosterDrawsTeamHeadersAndAHeaderClickSelectsNoAgent(t *testing.T) {
 // window never keeps a header while dropping the member under it (dangling), nor
 // keeps the member while dropping the header above it (dropped). This is the
 // HIGH the reviewers found - my first tests used a column taller than the fleet,
-// so the window never engaged. Here height 3 against 4 rows forces it.
+// so the window never engaged. Here height 4 against 7 rows forces it.
 func TestRosterHeaderIsAtomicWithItsMemberAtAScrollBoundary(t *testing.T) {
 	noSubs := func(string) []Task { return nil }
 	f := (Fleet{}).WithStatus(&rpc.Status{
@@ -79,20 +81,20 @@ func TestRosterHeaderIsAtomicWithItsMemberAtAScrollBoundary(t *testing.T) {
 	// Cursor on alex, height too small for thea's header+row: the header must not
 	// be drawn with no member under it. (The old separate-header window drew
 	// `alex` / `──── backend ────` / `+2 more` here.)
-	out := Roster{Selected: "s1"}.View(agents, noSubs, 30, 3)
+	out := Roster{Selected: "s1"}.View(agents, noSubs, 30, 4)
 	if strings.Contains(out, "backend") && !strings.Contains(out, "thea") {
 		t.Errorf("the backend header is drawn with no member under it (dangling):\n%s", out)
 	}
 	// Cursor on thea, same height: its header must come with it.
-	out = Roster{Selected: "s2"}.View(agents, noSubs, 30, 3)
+	out = Roster{Selected: "s2"}.View(agents, noSubs, 30, 4)
 	if strings.Contains(out, "thea") && !strings.Contains(out, "backend") {
 		t.Errorf("thea is drawn without its backend header (dropped):\n%s", out)
 	}
 }
 
 // A team tag that reached the header despite the daemon's fence (a hand-edited
-// park book) must not break the header's one-row geometry: teamHeaderLine flattens
-// it, so rowsForRow's count of one stays true and clicks below it do not shift.
+// park book) must not break the header's one-row geometry: the edge flattens it, so
+// rowsForRow's count of one stays true and clicks below it do not shift.
 func TestTeamHeaderLineIsAlwaysOneRow(t *testing.T) {
 	if got := teamHeaderLine("back\nend\rmore", 40, HintStyle, HintStyle); strings.ContainsAny(got, "\n\r") {
 		t.Errorf("teamHeaderLine kept a line break, so the header spans rows the count misses: %q", got)

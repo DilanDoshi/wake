@@ -132,7 +132,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   enters an agent's context. `internal/ui/help.go`, `helpcontent.go`, `helpdraw.go`, `slashhelp.go`, `decisions.md`
   (2026-10-27). A bare `/help` is not claimed (the option, in `decisions.md`).
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
-  (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
+  (`⎿ ◈ name done/started`, the count when the pair fits the row's 19 columns). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
   agent's) — draws Wake's own view in that pane, since headless claude cannot draw its `/workflows`
   menu: list → run (phases | agents) → agent (prompt, activity off the agent's disk transcript,
@@ -370,6 +370,16 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
   through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
   `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
+- **The sidebar's sections are boxes** (owner's 2026-11-19 pick; the board keeps its dividers): a team's header is
+  the top edge, `│ … │` walls stand around its members and a `╰──╯` row closes under the last; the agents above the
+  first team are a box under the pinned `all`. A row has the column less four (19 at the default 23): a name is cut
+  at the right wall and the unread badge stays, the token, goal, loop and workflow-count figures drop whole sooner
+  and a tool argument is cut sooner (`Read(internal…)`). The edge,
+  walls and closing row wear the channel's state (accent while picked, muted). The closing row rides on the
+  section's last item as the header does on its first (`rosterItem.footer`, `trail`), counted in `rowsForRow` and
+  skipped by `At`, so a window cuts between items and a cut box runs on as walls with no edge. A drag copies the
+  walls it covers; a double- or triple-click leaves them out. `internal/ui/rostersection.go`, `decisions.md`
+  (2026-11-19).
 - **Over the right sidebar the wheel scrolls the roster** (owner's 2026-11-06 ask), only one taller than
   its column; one that fits takes no wheel. An item a notch (an agent with its gap and team header, so a
   header never parts from its member), held where the wheel left it: the selection never moves, and one
@@ -519,7 +529,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   daemon's resume line (`core.NoticeAutoResumed`) has no addressee and is no broadcast**: it is its own agent's
   thread's, so a narrowed room or a channel draws only its members' (`focusAdmits`).
 - **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
-  room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
+  room's base, titled with the team, until the pinned `all` (at the sidebar's top, the default) or another
   team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
   members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
   narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working

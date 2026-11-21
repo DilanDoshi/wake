@@ -56,7 +56,7 @@ func TestThePickerDrawsAtTheQueryBarNotThePaneTop(t *testing.T) {
 	s.send("/effort\r")
 	s.await("ultracode")
 
-	lines := s.lines()
+	lines := paneRows(s)
 	banner, picker, composer := -1, -1, -1
 	for i, row := range lines {
 		if banner < 0 && strings.Contains(row, "v"+version.Version) {

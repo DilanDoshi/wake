@@ -69,7 +69,7 @@ func scriptedGridScreen(t *testing.T, script string, cols, rows int) (*screen, [
 // there are: every pane has one and nothing else draws that corner.
 func panesOnScreen(s *screen) int {
 	var n int
-	for _, line := range s.lines() {
+	for _, line := range paneRows(s) {
 		n += strings.Count(line, "╭")
 	}
 	return n
@@ -95,7 +95,7 @@ var titleSegment = regexp.MustCompile(`╭─*(.*?)─*╮`)
 // it", and only the text inside one box's own corners answers that.
 func paneTitles(s *screen) []string {
 	var out []string
-	for _, line := range s.lines() {
+	for _, line := range paneRows(s) {
 		for _, m := range titleSegment.FindAllStringSubmatch(line, -1) {
 			label := strings.TrimSpace(m[1])
 			switch {
@@ -309,7 +309,7 @@ func TestShiftArrowsMoveTheKeysBetweenPanesOnScreen(t *testing.T) {
 // bottom-most rows that carry a ╭, which between them hold every pane's left
 // edge, scanned by column so the result stays left to right.
 func paneEdges(s *screen) []int {
-	lines := s.lines()
+	lines := paneRows(s)
 	var rows []string
 	for i := len(lines) - 1; i >= 0 && len(rows) < 2; i-- {
 		if strings.ContainsRune(lines[i], '╭') {

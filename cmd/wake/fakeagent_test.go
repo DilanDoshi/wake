@@ -129,13 +129,13 @@ const scriptWorkflows = "workflows"
 // (ids, labels, snapshots) around a two-line script, so a test can find each
 // part on screen and on disk.
 const (
-	workflowName    = "count-lines"
+	workflowName    = "tally"
 	workflowSummary = "Count lines of a.txt and b.txt in parallel, then sum them"
 	workflowTaskID  = "w557669ss"
 	workflowToolUse = "toolu_01J9YBDeSNADj1bmeC3cgnRQ"
 	workflowRunID   = "wf_b0435426-65b"
 	workflowAgentA  = "adc8cb9f8b7dc021f" // count a.txt, the agent whose transcript is on disk
-	workflowScript  = "export const meta = { name: 'count-lines', description: '" + workflowSummary + "' }\n" +
+	workflowScript  = "export const meta = { name: 'tally', description: '" + workflowSummary + "' }\n" +
 		"return await agent('Count the lines in ./a.txt with wc -l. Return just the number.', { label: 'count a.txt' })\n"
 	// workflowAgentCommand is what count a.txt ran, and only its transcript says so.
 	workflowAgentCommand = "wc -l ./a.txt"
