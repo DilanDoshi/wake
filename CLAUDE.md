@@ -151,7 +151,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   whatever else read the keys (`closeModalsExcept`, the one list `withFocus` shares); any other left press lets go
   (`App.press`). Typing, space and `⌫` edit the filter with the
   jump picker's matcher and the sidebar narrows **in place** - the roster's own order, a team with no match gone, `all`
-  drawn as a rule when no loose agent matches - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
+  drawn as a rule over no box when no loose agent is under it (a filter's doing, and a roster of teams alone's) - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
   `⌃D` open the cursored agent through `openedBy`, the jump box's one opener (an agent already drawn is only
   focused; a header picks its channel; a dispatch row opens its agent showing that dispatch), `esc` clears the
   filter and gives the keys back, and **`⌃C` only lets go of it** - the habit that cancels a search must not park the

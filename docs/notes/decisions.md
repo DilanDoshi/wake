@@ -27,6 +27,8 @@ same thing in both.
 - **The filter stands.** After a click elsewhere it stays, the glyph and `N/M` in the accent, until `esc` clears it
   (`esc` is clear-and-return, one key). A sidebar too short for the bar and a list draws neither the bar nor the
   filter (`activeQuery`); the query is kept and applies again when the room is back.
+- **`all` is a rule when nothing loose is under it** (`Roster.Column`): a filter that matches no loose agent, or a
+  roster of teams alone (the manager stopped), no longer draws the top edge of an empty box.
 - **One source, five readers.** `rosterAgents` replaces the roster's own reads at the draw, the click, the window,
   `cursorAgent` and `pickAgent`; the strip, the board, the channel logic and the jump box keep `OnRoster`. A new reader
   of "the sidebar's agents" is `rosterAgents`, never `OnRoster`.
