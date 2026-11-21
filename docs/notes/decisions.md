@@ -40,7 +40,8 @@ a rule between the filter line and the results, and the sidebar search bar (D1) 
   off too: `⌃F` brings it home, and a key that arrives with it away only brings it back, as a send does.
   The cursor is pinned to an agent's id from the first look.
 - **`↵` is a click.** It calls `openInNewPane` (an agent already on screen is only focused) and ends in the
-  helper the click's drop ends in (`selectOpened`), so the two cannot drift. `⌃B` and `⌃D` are the open keys'
+  helper the click's drop ends in (`selectOpened`), so the two cannot drift - in a window that carries one column
+  that is the click's rule too: it replaces the pane on screen (`jumppickernarrow_test.go`). `⌃B` and `⌃D` are the open keys'
   placements; a refused `⌃B` keeps the box and the typed filter.
 - **Matching is on the name as drawn**, case and spaces ignored: its start, a run inside it, its letters in order.
   Not team names, not directories (deferred).
