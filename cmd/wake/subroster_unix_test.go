@@ -83,8 +83,8 @@ func TestASidebarSubagentRowDoesNotWidenTheSidebar(t *testing.T) {
 		t.Fatalf("no subagent row on screen:\n%s", s.dump())
 	}
 	lines := s.lines()
-	agentEdge := leftEdge(sidebar(lines[sub-1]))
-	subEdge := leftEdge(sidebar(lines[sub]))
+	agentEdge := leftEdge(sidebar(lines[sub-1], s.cols))
+	subEdge := leftEdge(sidebar(lines[sub], s.cols))
 	if agentEdge < 0 || subEdge < 0 {
 		t.Fatalf("the agent row or its subagent has no sidebar content to compare:\n%s", s.dump())
 	}
@@ -136,18 +136,19 @@ const paneDivider = '│'
 // the two markers.
 const subIndent = 2
 
-// sidebar is the portion of a row inside the right sidebar: everything past the
-// last pane divider, or "" if the row has none. Reading the edge here rather
-// than across the whole row is what keeps it robust to cwd length - the room
-// pane, where a long path draws at column zero, is dropped.
-func sidebar(line string) string {
-	runes := []rune(line)
-	for i := len(runes) - 1; i >= 0; i-- {
-		if runes[i] == paneDivider {
-			return string(runes[i+1:])
-		}
+// sidebar is the portion of a row inside the right sidebar: everything past its
+// divider, which stands at the same column on every row (the margin, then the
+// sidebar's own columns), or "" if the row has none; and a member's row without
+// its box's left wall, so its glyph sits at the edge. Reading the edge here
+// rather than across the whole row is what keeps it robust to cwd length - the
+// room pane, where a long path draws at column zero, is dropped.
+func sidebar(line string, cols int) string {
+	runes := []rune(line) // lines() trims a row's trailing blanks, so the divider is placed from cols
+	at := cols - 1 - sidebarCols
+	if at < 0 || at >= len(runes) || runes[at] != paneDivider {
+		return ""
 	}
-	return ""
+	return strings.TrimPrefix(string(runes[at+1:]), "│ ")
 }
 
 // leftEdge is the column a row's first non-blank character sits in, or -1.

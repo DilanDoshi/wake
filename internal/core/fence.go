@@ -38,6 +38,18 @@ func Fenced(body string) string {
 	return fence + "\n" + strings.TrimRight(body, "\n") + "\n" + fence
 }
 
+// Unfence is the body of a block Fenced drew, and any other text as it came.
+func Unfence(block string) string {
+	open, rest, ok := strings.Cut(block, "\n")
+	if !ok || len(open) < fenceMin || strings.Trim(open, fenceRune) != "" {
+		return block
+	}
+	if body, ok := strings.CutSuffix(rest, "\n"+open); ok {
+		return body
+	}
+	return block
+}
+
 // longestRun is the longest unbroken repetition of s in body.
 func longestRun(body, s string) int {
 	longest, run := 0, 0

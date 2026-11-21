@@ -244,10 +244,14 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 // reason dms is a map is that a conversation someone returns to still holds
 // what it held.
 func (a App) openDMWith(sessionID, name string) App {
-	// Here means the focused pane, and the room is never replaced: from it the
-	// conversation takes the column beside it, which is where a single DM has
-	// always opened.
-	return a.show(sessionID, name, func(g Grid) Grid {
+	return a.show(sessionID, name, a.here(sessionID))
+}
+
+// here is where a conversation opens "here": the focused pane, and the room is
+// never replaced - from it the conversation takes the column beside it, which is
+// where a single DM has always opened.
+func (a App) here(sessionID string) func(Grid) Grid {
+	return func(g Grid) Grid {
 		if a.focus != "" {
 			return g.Replace(a.focus, sessionID)
 		}
@@ -255,7 +259,24 @@ func (a App) openDMWith(sessionID, name string) App {
 			return g.Replace(g.Cols[1].Top, sessionID)
 		}
 		return g.OpenRight("", sessionID)
-	})
+	}
+}
+
+// openInNewPane puts a conversation in a new column at the grid's right end,
+// next to the sidebar, whatever pane holds the keys. A click on a sidebar agent
+// lands here, and a drop that is not below a pane. An agent already on screen is
+// only focused (Grid.OpenRight).
+//
+// Where the window carries one column (Layout.Capacity) a new column would only
+// slide the others off screen, so it opens as a conversation does everywhere
+// else: in the focused pane, or beside the room when the room holds the keys
+// (openDMWith). Asked at the click, from the layout as it is, so a resize is read
+// the next time and nothing is cached per frame.
+func (a App) openInNewPane(sessionID, name string) App {
+	if a.layout.Capacity() == 1 {
+		return a.openDMWith(sessionID, name)
+	}
+	return a.show(sessionID, name, func(g Grid) Grid { return g.OpenEnd(sessionID) })
 }
 
 // openRight and openBelow are ⌃Y and ⌃B: the same open, placed beside the
@@ -570,12 +591,19 @@ func (a App) withFocus(f string) App {
 		a.statusUI = StatusView{} // and so does /status's
 	}
 	a.focus = f
-	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
+	return a.composersFocused()
+}
+
+// composersFocused tells every composer whether it holds the keys and whether
+// the window does - the two halves of "where do I type". See windowfocus.go.
+func (a App) composersFocused() App {
+	lit := !a.windowBlurred
+	a.room = a.room.WithComposer(a.room.Composer().Focused(a.focus == "").WindowFocused(lit))
 	for _, id := range a.grid.Panes() {
 		if id == "" {
 			continue
 		}
-		a = a.withDM(id, a.dms[id].WithComposer(a.dms[id].Composer().Focused(id == f)))
+		a = a.withDM(id, a.dms[id].WithComposer(a.dms[id].Composer().Focused(id == a.focus).WindowFocused(lit)))
 	}
 	return a
 }

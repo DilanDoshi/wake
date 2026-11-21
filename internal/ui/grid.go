@@ -68,6 +68,10 @@ func (g Grid) OpenRight(beside, id string) Grid {
 	return g.withCols(slices.Insert(slices.Clone(g.Cols), g.after(beside), Column{Top: id}))
 }
 
+// OpenEnd puts a conversation in a new column at the right-hand end, next to the
+// sidebar: right of the last column, whatever pane holds the keys.
+func (g Grid) OpenEnd(id string) Grid { return g.OpenRight(g.Cols[len(g.Cols)-1].Top, id) }
+
 // OpenBelow splits the column holding `under` and puts a conversation in the
 // lower slot.
 //

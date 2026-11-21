@@ -66,7 +66,7 @@ SHOTS = [
         "Every team header on the roster is a channel. Put the cursor on "
         "<code>backend</code> and press <code>↵</code>, or click it, and the group "
         "chat shows only that team's messages, titled <code>backend</code> instead "
-        "of <code>group chat</code>, until you pick <code>── all ──</code> or "
+        "of <code>group chat</code>, until you pick <code>all</code> or "
         "another team. The manager has a seat in every channel, so you can ask it "
         "from whichever one you are in. Inside a channel the room works as it "
         "always does: a lone <code>@name</code> narrows further, <code>⌃A</code> "

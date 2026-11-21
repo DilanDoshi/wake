@@ -232,7 +232,7 @@ func TestADragOnTheQueryBarLeavesNoHighlight(t *testing.T) {
 	s.await("ready")
 	s.settle()
 
-	box := s.rowOf("╭")
+	box := rowIn(paneRows(s), "╭")
 	if box < 0 {
 		t.Fatalf("no composer on screen to drag across.\n%s", s.dump())
 	}

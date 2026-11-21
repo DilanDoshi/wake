@@ -249,6 +249,10 @@ type App struct {
 	// "which conversation".
 	focus string
 
+	// windowBlurred is the terminal window lacking the keyboard, as its focus
+	// reports say; false until told. See windowfocus.go.
+	windowBlurred bool
+
 	// sessionID is the session this client attached to: the one a hang-up
 	// reattaches to, and the one whose ending closes its composer. It is not
 	// "the session this App is about" - the room is about all of them - which
@@ -315,15 +319,17 @@ type App struct {
 	// transcript starts at, selRows how many rows of it are drawn, and
 	// selecting whether the button is still down. One selection for the whole
 	// app. See mouse.go, which is all four.
-	sel       selection
-	selTop    int
-	selRows   int
-	selecting bool
-	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
-	edge      edgeScroll   // a transcript drag held at a pane's edge; see edgescroll.go
-	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
-	upgrade   updateCue    // whether a newer wake is out, and when to ask; see updatecue.go
-	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
+	sel          selection
+	selTop       int
+	selRows      int
+	selecting    bool
+	cdrag        composerDrag // query-box drag geometry, captured at its start; see composersel.go
+	edge         edgeScroll   // a transcript drag held at a pane's edge; see edgescroll.go
+	rosterHit    rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
+	dragged      agentDrag    // a sidebar agent row held down, and where it is; see agentdrag.go
+	afterDragEsc bool         // an alt+esc just ended a drag: a stray mouse report may follow
+	upgrade      updateCue    // whether a newer wake is out, and when to ask; see updatecue.go
+	clicks       clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
 	// out is the terminal, for what Wake writes that is not a frame - a copy,
 	// the friends' pictures, the title. Nil writes nowhere. See clipboard.go

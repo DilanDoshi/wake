@@ -29,8 +29,10 @@ func splitIDs(key string) iter.Seq[string] { return strings.SplitSeq(key, focusS
 //
 // focus == "" is the unfocused room and admits everything, so the filter is the
 // identity until a target resolves. A user line (the operator's own turn) is
-// admitted when it is a broadcast (to == "") or addressed to a member; an
-// agent-produced line (prose, turn-end, permission ask) when it is a member's.
+// admitted when it is a broadcast (to == "") or addressed to a member; the
+// daemon's resume of an agent (core.NoticeAutoResumed), which has no addressee
+// and is Wake's, when it is a member's; an agent-produced line (prose, turn-end,
+// permission ask) when it is a member's.
 // The manager's own lines are hidden like any other agent's; a message it sends
 // a member is a peer message, which belongs to the member's thread. Everything
 // else is hidden.
@@ -42,7 +44,13 @@ func focusAdmits(l roomLine, focus string) bool {
 		var admit bool
 		switch l.ev.Kind {
 		case core.KindUserText:
-			admit = l.to == "" || addressedTo(l.to, id)
+			if l.ev.Notice == core.NoticeAutoResumed {
+				// The daemon's resume has no addressee but is no broadcast: it
+				// is its own agent's line, which the stamped session id names.
+				admit = l.ev.SessionID == id
+			} else {
+				admit = l.to == "" || addressedTo(l.to, id)
+			}
 		case core.KindCrossSession:
 			// A peer message belongs to both threads: the sender's (l.by,
 			// resolved at Append) and the receiver's (l.ev.SessionID). Either

@@ -151,6 +151,7 @@ func helpSurfaces() []helpSurface {
 		{"completionKey", "slash and " + agentPrefix + " menu", completionKeys + hintSep + completionAliases},
 		{"helpKey", wakeHelpVerb, helpKeys},
 		{"helpKey", wakeHelpVerb + " also", helpParkKey},
+		{"dragKey", dragVerb, dragKeys},
 	}
 }
 

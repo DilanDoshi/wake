@@ -1,8 +1,10 @@
 package main
 
-// The agent behind the usage-limit screen test: every turn hits the limit while
-// Claude's config file names limitedAccount, and is heard on any other - the way
-// signing in to another account lifts a limit.
+// The agent behind the usage-limit screen tests: every turn hits the limit while
+// Claude's config file names a spent account, and is heard on any other - the way
+// signing in to another account lifts a limit. scriptUsageLimits spends one
+// account; scriptUsageLimitsHold spends every account but freeAccount, so each
+// flip resumes the agent and the limit stops it again.
 
 import (
 	"fmt"
@@ -19,7 +21,22 @@ const scriptUsageLimits = "usagelimits"
 // limitedAccount is the account whose limit is spent.
 const limitedAccount = "acct-limited"
 
+// scriptUsageLimitsHold is fakeAgentEcho behind a limit every account but
+// freeAccount has spent.
+const (
+	scriptUsageLimitsHold = "usagelimitshold"
+	freeAccount           = "acct-free"
+)
+
 func fakeAgentUsageLimits(sid string) int {
+	return fakeAgentBehindLimit(sid, func(account string) bool { return account == limitedAccount })
+}
+
+func fakeAgentUsageLimitsHold(sid string) int {
+	return fakeAgentBehindLimit(sid, func(account string) bool { return account != freeAccount })
+}
+
+func fakeAgentBehindLimit(sid string, spent func(account string) bool) int {
 	sayText(sid, "ready")
 	sayResult(sid)
 	path := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
@@ -29,7 +46,7 @@ func fakeAgentUsageLimits(sid string) int {
 			continue
 		}
 		raw, _ := os.ReadFile(path)
-		if account, _ := core.DecodeAccount(raw); account.ID == limitedAccount {
+		if account, _ := core.DecodeAccount(raw); spent(account.ID) {
 			fmt.Printf(`{"type":"assistant","is_api_error_message":true,"error":"rate_limit","session_id":%q,"message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"You've hit your session limit"}]}}`+"\n", sid)
 		} else {
 			sayText(sid, heardPrefix+text)

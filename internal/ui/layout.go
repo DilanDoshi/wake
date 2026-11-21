@@ -69,9 +69,9 @@ const (
 	groupsWidth = 16
 
 	// rosterWidth is 24 rather than the brief's 20: one of those columns is the
-	// rule between this sidebar and the pane beside it, and the row it draws is
-	// a glyph, a name, an unread badge and - indented under them - what the
-	// agent is doing, which is the column that ran out of room first.
+	// rule between this sidebar and the pane beside it, and four more are the walls
+	// of the box each section draws, so the row inside is a glyph, a name, an unread
+	// badge and - indented under them - what the agent is doing, in 19.
 	rosterWidth = 24
 
 	// dmTakeoverColumns is where a second column stops being worth having.
@@ -188,26 +188,10 @@ func (r Regions) Drawn() int {
 // anything is drawn at all.
 func (l Layout) Regions(cols, focused int) Regions {
 	r := Regions{Cols: make([]int, max(cols, 1))}
-	rest := l.Width
+	r.Groups, r.Roster = l.sidebars()
+	rest := l.Width - r.Groups - r.Roster
 
-	// Sidebars first, and they give way first. They are context; the
-	// conversation is the work.
-	if l.ShowRoster && l.windowWidth() >= sidebarsHideColumns {
-		r.Roster = rosterWidth
-		rest -= rosterWidth
-	}
-	if l.ShowGroups && l.windowWidth() >= groupsCollapseColumns {
-		r.Groups = groupsWidth
-		rest -= groupsWidth
-	}
-
-	// How many columns the width can carry. Below the takeover exactly one is
-	// drawn however many are open, which is the rule the room and a single DM
-	// have always followed, read for any number of them.
-	fit := 1
-	if l.windowWidth() >= dmTakeoverColumns {
-		fit = fits(rest, len(r.Cols))
-	}
+	fit := min(l.Capacity(), len(r.Cols))
 	first := window(len(r.Cols), fit, focused)
 
 	space := rest - (fit-1)*dividerWidth
@@ -217,15 +201,40 @@ func (l Layout) Regions(cols, focused int) Regions {
 	return r
 }
 
+// sidebars are the columns the two sidebars take. They come first, and they give
+// way first: they are context; the conversation is the work.
+func (l Layout) sidebars() (groups, roster int) {
+	if l.ShowRoster && l.windowWidth() >= sidebarsHideColumns {
+		roster = rosterWidth
+	}
+	if l.ShowGroups && l.windowWidth() >= groupsCollapseColumns {
+		groups = groupsWidth
+	}
+	return groups, roster
+}
+
+// Capacity is how many conversation columns the window can draw at once, which is
+// Regions' own count and the only place it is worked out. Below the takeover
+// width exactly one is drawn however many are open - the rule the room and a
+// single DM have always followed, read for any number of them - and above it as
+// many as the space beside the sidebars carries at minPaneWidth. A sidebar click
+// reads it to know whether a new column would sit beside the others or only slide
+// them, so the answer cannot drift from what is drawn.
+func (l Layout) Capacity() int {
+	if l.windowWidth() < dmTakeoverColumns {
+		return 1
+	}
+	groups, roster := l.sidebars()
+	return fits(l.Width - groups - roster)
+}
+
 // windowWidth is the terminal's width, margins and all. §8's breakpoints name
 // the window the operator sizes, so they are read against it, not the frame.
 func (l Layout) windowWidth() int { return l.Width + 2*SideMargin }
 
-// fits is how many columns of minPaneWidth the space carries, at least one and
-// never more than there are.
-func fits(space, cols int) int {
-	n := (space + dividerWidth) / (minPaneWidth + dividerWidth)
-	return clamp(n, 1, cols)
+// fits is how many columns of minPaneWidth the space carries, at least one.
+func fits(space int) int {
+	return max((space+dividerWidth)/(minPaneWidth+dividerWidth), 1)
 }
 
 // window is the leftmost column drawn when not all of them fit.

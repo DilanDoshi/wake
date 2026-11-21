@@ -50,7 +50,7 @@ The roster's team headers are **channels**. Put the cursor on one with `⇧↑�
 it, and the room shows only that team's thread — its members' lines, the turns you sent them, the
 messages sent to or from them, every broadcast, and the manager, which has a seat in every channel —
 titled with the team's name instead of `group chat`. It lasts until you pick another team or
-`── all ──`, the header pinned at the top of the sidebar, which is where every window starts.
+`all`, the header pinned at the top of the sidebar, which is where every window starts.
 
 Inside a channel the room works as it always does. A lone `@name` narrows further (`backend › @kit`),
 `⌃A` widens back to the channel, and where a message goes does not change: a draft with no `@` still

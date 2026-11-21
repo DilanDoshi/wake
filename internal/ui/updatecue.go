@@ -2,16 +2,17 @@ package ui
 
 // Telling a room left open for days that a newer wake is out. The check itself is
 // cmd/wake's - the release host and the cache under ~/.wake - and this holds when
-// to ask and what the answer was: on the first frame, then on a keystroke once
-// updateRecheckEvery has passed. Never on a timer, so a room nobody types in does
-// nothing. A newer release, once known, ends the asking and is named on the strip
-// (upgradeMarked) for the life of the process - upgrading and restarting stay
-// the operator's.
+// to ask: on the first frame, then on a keystroke once updateRecheckEvery has
+// passed. Never on a timer, so a room nobody types in does nothing. The strip
+// (upgradeMarked) names the newest release any answer has brought and never
+// clears: `wake upgrade` replaces the binary on disk, not this process.
 
 import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // UpdateCheck asks whether a newer wake is out: its version, or "" for none and
@@ -37,18 +38,21 @@ type updateCheckedMsg struct{ newer string }
 // WithUpdateCheck gives the room its check; nil (WAKE_NO_UPDATE_CHECK) never asks.
 func (a App) WithUpdateCheck(c UpdateCheck) App { a.upgrade.check = c; return a }
 
-// dueUpdateCheck takes a check's answer ("" is nothing newer, or a check that
-// failed), and is the check as a Cmd when msg should set one off: the first
-// message, then a keystroke an hour on, never while one is out and never once a
-// newer release is known - no later answer changes what to do. Typed on keys,
-// so the composer's blink ticks cost no clock read.
+// dueUpdateCheck takes a check's answer into the marker - only a newer release
+// replaces it, so "" (nothing newer, or a failed check) never does - and is the
+// check as a Cmd when msg should set one off: the first message, then a keystroke
+// an hour on, never while one is out. Typed on keys, so the composer's blink
+// ticks cost no clock read.
 func (a App) dueUpdateCheck(msg tea.Msg) (App, tea.Cmd) {
 	if m, ok := msg.(updateCheckedMsg); ok {
-		a.upgrade.asking, a.upgrade.newer = false, m.newer
+		a.upgrade.asking = false
+		if a.upgrade.newer == "" || version.Newer(m.newer, a.upgrade.newer) {
+			a.upgrade.newer = m.newer
+		}
 		return a, nil
 	}
 	u := a.upgrade
-	if u.check == nil || u.asking || u.newer != "" {
+	if u.check == nil || u.asking {
 		return a, nil
 	}
 	if !u.asked.IsZero() {

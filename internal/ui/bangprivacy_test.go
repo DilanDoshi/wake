@@ -114,8 +114,9 @@ func TestTheAnswerToARoomBangIsTheRooms(t *testing.T) {
 	}
 }
 
-// Restored off disk, a DM bang ends the public turn before it, so its answer
-// stays out of the room; one aimed from the room opens a public turn.
+// Restored off disk, a DM bang ends the public turn before it, so its answer and
+// its own record stay out of the room; one aimed from the room opens a public
+// turn and is drawn, as the room drew it live.
 func TestARestoredBangsAnswerIsOnlyTheRoomsWhenTheRoomAimedIt(t *testing.T) {
 	for _, tc := range []struct {
 		aimed  bool
@@ -134,8 +135,8 @@ func TestARestoredBangsAnswerIsOnlyTheRoomsWhenTheRoomAimedIt(t *testing.T) {
 		if strings.Contains(got, "the key is sk-secret") != tc.public {
 			t.Errorf("aimed from the room %v: restored %q, want the answer drawn %v", tc.aimed, got, tc.public)
 		}
-		if strings.Contains(got, "cat .env") {
-			t.Errorf("aimed from the room %v: the bang's record itself was restored: %q", tc.aimed, got)
+		if strings.Contains(got, "cat .env") != tc.aimed {
+			t.Errorf("aimed from the room %v: restored %q, want the bang's own record drawn %v", tc.aimed, got, tc.aimed)
 		}
 		if !strings.Contains(got, "s1 is fine") {
 			t.Errorf("the public turn before the bang was lost: %q", got)

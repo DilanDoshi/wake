@@ -158,8 +158,10 @@ func (h handOver) Run() error {
 		return err
 	}
 	h.cmd.Stdin, h.cmd.Stdout, h.cmd.Stderr = h.k.tty, h.k.out, h.k.out
-	_, _ = fmt.Fprintf(h.k.out, "\r\n%s\r\n\r\n", h.header)
+	// The child has the terminal's own Shift behaviour; Wake's comes back with it.
+	_, _ = fmt.Fprintf(h.k.out, "%s\r\n%s\r\n\r\n", shiftEscapeOff, h.header)
 	runErr := h.cmd.Run()
+	_, _ = io.WriteString(h.k.out, shiftEscapeOn)
 	if err := h.k.resume(); err != nil && runErr == nil {
 		return err
 	}

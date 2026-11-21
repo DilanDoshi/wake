@@ -363,6 +363,7 @@ var surfaceHandlers = map[string][][2]string{
 	"completionKey":   {{"completion.go", "completionKey"}},
 	"cardKey":         {{"cardkeys.go", "cardKey"}},
 	"statusKey":       {{"statuscmd.go", "statusKey"}},
+	"dragKey":         {{"agentdrag.go", "dragKey"}},
 	"mcpMenuKey": {
 		{"mcpmenu.go", "mcpMenuKey"}, {"mcpmenu.go", "mcpListKey"}, {"mcpmenu.go", "mcpDetailKey"}, {"mcpmenu.go", "mcpToolsKey"},
 	},
