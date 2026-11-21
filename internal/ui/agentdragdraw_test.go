@@ -43,7 +43,7 @@ func TestALiveDragDrawsTheNameAtThePointerAndOutlinesTheZone(t *testing.T) {
 		t.Errorf("the pointer's row %q carries no tag", row)
 	}
 	// Dropping below the room outlines its lower half: the box's corners are there.
-	_, lowerY, w, h, ok := a.zoneRect(dropZone{kind: zoneBelow, pane: ""})
+	_, lowerY, w, h, ok := a.zoneRect(dropZone{kind: zoneBelow, pane: ""}, "s3")
 	if !ok {
 		t.Fatal("no rect for a drop below the room")
 	}
@@ -163,7 +163,7 @@ func TestAnOutlineIsExactlyWhereTheAgentLands(t *testing.T) {
 				}
 			}
 			for _, z := range zones {
-				x, y, w, h, ok := base.zoneRect(z)
+				x, y, w, h, ok := base.zoneRect(z, "s12")
 				after, id := base, "s12"
 				switch z.kind {
 				case zoneColumn:
@@ -190,7 +190,7 @@ func drawnPane(a App, id string) bool {
 }
 
 func TestTheSidebarHasNoRect(t *testing.T) {
-	if _, _, _, _, ok := dragFleet(t).zoneRect(dropZone{kind: zoneNone}); ok {
+	if _, _, _, _, ok := dragFleet(t).zoneRect(dropZone{kind: zoneNone}, "s3"); ok {
 		t.Error("the sidebar has a rect")
 	}
 }
@@ -249,5 +249,34 @@ func BenchmarkLiveDragOverlay(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = a.overlayAgentDrag(frame)
+	}
+}
+
+// In a one-column window a new-column drop replaces the pane that holds the keys,
+// or the one beside the room when the room does, so the outline is that pane's
+// own rect - half a column when it is half of a split one - to the cell, for each
+// pane that can hold the keys.
+func TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces(t *testing.T) {
+	split := func(t *testing.T) App { // the room, then s1 over s2; s2, the lower pane, holds the keys
+		return clickAgent(t, fleetApp(t, 100, 40, 6), "s1").openBelow("s2", "agent02")
+	}
+	for name, setup := range map[string]func(*testing.T) App{
+		"the room alone":                  func(t *testing.T) App { return fleetApp(t, 100, 40, 6) },
+		"a whole column holds the keys":   func(t *testing.T) App { return clickAgent(t, fleetApp(t, 100, 40, 6), "s1") },
+		"the lower half of a column":      split,
+		"the upper half of a column":      func(t *testing.T) App { return split(t).refocus("s1") },
+		"the room, beside a split column": func(t *testing.T) App { return split(t).showRoom() },
+		"the room, beside a whole column": func(t *testing.T) App { return clickAgent(t, fleetApp(t, 100, 40, 6), "s1").showRoom() },
+	} {
+		a := setup(t)
+		if a.layout.Capacity() != 1 {
+			t.Fatalf("%s: capacity %d, the test proves nothing", name, a.layout.Capacity())
+		}
+		x, y, w, h, ok := a.zoneRect(dropZone{kind: zoneColumn}, "s5")
+		after := a.openInNewPane("s5", "agent05")
+		ax, ay, aw, ah, aok := paneRectOf(after, "s5")
+		if ok != aok || x != ax || y != ay || w != aw || h != ah {
+			t.Errorf("%s: outline (%d,%d %dx%d ok=%v), the agent lands at (%d,%d %dx%d ok=%v)", name, x, y, w, h, ok, ax, ay, aw, ah, aok)
+		}
 	}
 }

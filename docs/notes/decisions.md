@@ -6388,7 +6388,11 @@ every click piled another column up behind it.
   rightmost column, as before; the wide-window slide stays, with no cap. It is read at the click from the layout as
   it then is, so a resize is picked up the next time and nothing is cached or computed per frame.
 - **A drag's new-column drop in a one-column window replaces the shown pane**, the same function. Its outline is
-  the whole pane area, which is where the agent lands either way. **A drop below is unchanged** and the grid
+  the pane it replaces - half a column when that pane is half of a split one. **Every outline is the pane in the grid
+  the drop would produce** (`zoneRect` applies the drop's own grid operation - `Grid.OpenEnd`, `App.here`,
+  `OpenBelow` - and reads `paneRect`), so it is where the agent lands by construction; found by probing the
+  revision, since a split column beside a one-column window had the outline cover the whole area while the agent
+  landed in half of it (`TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces`). **A drop below is unchanged** and the grid
   allows it there: the drawn column splits and holds two panes, so a below drop adds no column and leaves nothing
   off screen (`TestABelowDropInASingleColumnLayoutStillSplitsTheShownColumn`).
 - Held by `TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne`, `...FromAConversation...ReplacesIt`,

@@ -178,3 +178,25 @@ func TestTenClicksLeaveTenColumnsAndNothingCapsThem(t *testing.T) {
 		t.Errorf("drew %d of %d columns with s10 among them %v", drawn, len(a.grid.Cols), a.drawnIDs())
 	}
 }
+
+// A window that shrank to one column still holds every conversation in the grid:
+// a click replaces the pane the window shows (the one holding the keys), keeps the
+// others where they are, and the agent is drawn - from the room it takes column 1.
+func TestAClickAfterTheWindowShrankReplacesTheShownPane(t *testing.T) {
+	a := fleetApp(t, 200, 40, 6)
+	for _, id := range []string{"s1", "s2", "s3"} {
+		a = clickAgent(t, a, id)
+	}
+	a = settle(a.withSize(100, 40))
+	if a.layout.Capacity() != 1 || len(a.grid.Cols) != 4 {
+		t.Fatalf("capacity %d with %d columns: the test proves nothing", a.layout.Capacity(), len(a.grid.Cols))
+	}
+	a = clickAgent(t, a, "s5")
+	if want := []string{"", "s1", "s2", "s5"}; !slices.Equal(tops(a), want) || !slices.Contains(a.drawnIDs(), "s5") {
+		t.Errorf("columns %q drawn %v, want s5 in the focused column's place and drawn", tops(a), a.drawnIDs())
+	}
+	a = clickAgent(t, a.showRoom(), "s6")
+	if want := []string{"", "s6", "s2", "s5"}; !slices.Equal(tops(a), want) || a.focus != "s6" || !slices.Contains(a.drawnIDs(), "s6") {
+		t.Errorf("columns %q focus %q drawn %v, want s6 in column 1 and drawn", tops(a), a.focus, a.drawnIDs())
+	}
+}

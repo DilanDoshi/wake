@@ -244,10 +244,14 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 // reason dms is a map is that a conversation someone returns to still holds
 // what it held.
 func (a App) openDMWith(sessionID, name string) App {
-	// Here means the focused pane, and the room is never replaced: from it the
-	// conversation takes the column beside it, which is where a single DM has
-	// always opened.
-	return a.show(sessionID, name, func(g Grid) Grid {
+	return a.show(sessionID, name, a.here(sessionID))
+}
+
+// here is where a conversation opens "here": the focused pane, and the room is
+// never replaced - from it the conversation takes the column beside it, which is
+// where a single DM has always opened.
+func (a App) here(sessionID string) func(Grid) Grid {
+	return func(g Grid) Grid {
 		if a.focus != "" {
 			return g.Replace(a.focus, sessionID)
 		}
@@ -255,7 +259,7 @@ func (a App) openDMWith(sessionID, name string) App {
 			return g.Replace(g.Cols[1].Top, sessionID)
 		}
 		return g.OpenRight("", sessionID)
-	})
+	}
 }
 
 // openInNewPane puts a conversation in a new column at the grid's right end,
@@ -272,9 +276,7 @@ func (a App) openInNewPane(sessionID, name string) App {
 	if a.layout.Capacity() == 1 {
 		return a.openDMWith(sessionID, name)
 	}
-	return a.show(sessionID, name, func(g Grid) Grid {
-		return g.OpenRight(g.Cols[len(g.Cols)-1].Top, sessionID) // right of the last column
-	})
+	return a.show(sessionID, name, func(g Grid) Grid { return g.OpenEnd(sessionID) })
 }
 
 // openRight and openBelow are ⌃Y and ⌃B: the same open, placed beside the

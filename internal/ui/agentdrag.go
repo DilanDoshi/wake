@@ -95,7 +95,7 @@ func (a App) dragMoved(m tea.MouseMsg) App {
 	}
 	d.live, d.x, d.y = true, m.X, m.Y
 	if zone := a.dropZoneFor(d.id, m.X, m.Y); zone != d.zone {
-		d.zone, d.outline = zone, a.outlineOf(zone)
+		d.zone, d.outline = zone, a.outlineOf(zone, d.id)
 	}
 	a.dragged = d
 	return a

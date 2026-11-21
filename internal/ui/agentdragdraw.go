@@ -109,8 +109,8 @@ func cells(line string, from, to int) string {
 
 // outlineOf is the box a zone draws: where the agent will be once it is dropped.
 // None for the sidebar, and for a zone whose pane is not on screen.
-func (a App) outlineOf(z dropZone) []edit {
-	x, y, w, h, ok := a.zoneRect(z)
+func (a App) outlineOf(z dropZone, id string) []edit {
+	x, y, w, h, ok := a.zoneRect(z, id)
 	if !ok || w < 2 || h < 2 {
 		return nil
 	}
@@ -124,38 +124,47 @@ func (a App) outlineOf(z dropZone) []edit {
 	return append(rows, edit{row: y + h - 1, segs: []seg{{x, AccentStyle.Render("└" + rule + "┘")}}})
 }
 
-// zoneRect is the cells a zone's pane takes once the drop is done: the window
-// slides to the column that then holds the keys, so every kind is laid out with
-// that column focused. A new column takes its own share (the whole pane area in a
-// window too narrow to sit beside another), a drop below the lower slot of its
-// column, and an agent already open its own pane.
-func (a App) zoneRect(z dropZone) (x, y, w, h int, ok bool) {
-	n := len(a.grid.Cols)
+// zoneRect is the cells the dropped agent's pane takes once the drop is done: the
+// pane in the grid the drop would produce, with the keys moved to it - the window
+// slides to the column that then holds them. It is the drop's own grid operation
+// (a new column, the replaced pane in a one-column window, the lower slot, the
+// agent's pane where it already is), so it is where the agent lands by construction.
+func (a App) zoneRect(z dropZone, id string) (x, y, w, h int, ok bool) {
 	switch z.kind {
 	case zoneColumn:
-		return a.slotRect(n+1, n, 0, a.paneHeight())
-	case zoneBelow:
-		col := a.columnOf(z.pane)
-		upper, lower := a.layout.SplitRowsIn(col, a.paneHeight())
-		return a.slotRect(n, col, upper+dividerHeight, lower)
-	case zoneFocus:
-		col := a.columnOf(z.pane)
-		upper, lower := a.layout.SplitRowsIn(col, a.paneHeight())
-		switch a.grid.Cols[col].Bottom {
-		case "":
-			return a.slotRect(n, col, 0, a.paneHeight())
-		case z.pane:
-			return a.slotRect(n, col, upper+dividerHeight, lower)
-		default:
-			return a.slotRect(n, col, 0, upper)
+		if a.layout.Capacity() == 1 {
+			return a.landed(a.here(id)(a.grid), id)
 		}
+		return a.landed(a.grid.OpenEnd(id), id)
+	case zoneBelow:
+		return a.landed(a.grid.OpenBelow(z.pane, id), id)
+	case zoneFocus:
+		return a.landed(a.grid, z.pane)
 	}
 	return 0, 0, 0, 0, false
 }
 
-// slotRect is rows [y, y+h) of column col in a grid of cols columns whose focus
-// is that column.
-func (a App) slotRect(cols, col, y, h int) (int, int, int, int, bool) {
-	r := a.layout.Regions(cols, col)
-	return a.layout.PaneLeft(r, col), y, r.Cols[col], h, r.Cols[col] > 0 && h > 0
+// landed is where id's pane is drawn in grid g once it holds the keys.
+func (a App) landed(g Grid, id string) (int, int, int, int, bool) {
+	a.grid, a.focus = g, id
+	return a.paneRect(id)
+}
+
+// paneRect is the cells id's pane is drawn in under this App's layout and focus,
+// and false when it is not on screen.
+func (a App) paneRect(id string) (x, y, w, h int, ok bool) {
+	r, col := a.regions(), a.columnOf(id)
+	if !a.grid.Has(id) || r.Cols[col] == 0 {
+		return 0, 0, 0, 0, false
+	}
+	upper, lower := a.layout.SplitRowsIn(col, a.paneHeight())
+	x, w = a.layout.PaneLeft(r, col), r.Cols[col]
+	switch a.grid.Cols[col].Bottom {
+	case "":
+		return x, 0, w, a.paneHeight(), true
+	case id:
+		return x, upper + dividerHeight, w, lower, lower > 0
+	default:
+		return x, 0, w, upper, true
+	}
 }
