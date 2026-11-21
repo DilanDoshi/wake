@@ -134,7 +134,8 @@ While an agent works, its conversation, the room and a `/board` row each name wh
 - **To have every ordinary agent keep one**, export `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` before the first `wake` of a
   fleet. Wake passes your environment to the agents it starts (they take the one their fleet's daemon began with, so an
   already-running fleet keeps what it has). It can cost: the model may spend several extra calls building and ticking
-  the list, and the tools' definitions sit in each agent's context.
+  the list, and the tools' definitions sit in each agent's context. Claude Code's tools reference lists its other
+  opt-ins; this variable is the one Wake passes through.
 
 ## Answering a blocked agent
 

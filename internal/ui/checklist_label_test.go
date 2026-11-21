@@ -30,7 +30,9 @@ func TestAnInProgressItemsLabelReachesEachRenderer(t *testing.T) {
 				t.Errorf("the agent's label is %q, want %q", ag.Doing, c.want)
 			}
 
-			dm := stripANSI(workingLine("s1", rpc.StateWorking, ag.Doing, clock(), 0, 80))
+			pane := NewDM("s1", "alex").SetSize(80, 20)
+			pane.Agent = ag
+			dm := stripANSI(pane.heartbeat())
 			room := stripANSI(roomWorkingLine([]Agent{ag}, nil, 80))
 			row := stripANSI(boardRow(ag, false, 6, 8, 120, false))
 			for surface, got := range map[string]string{"conversation line": dm, "room line": room, "board row": row} {
@@ -65,6 +67,15 @@ func TestActiveFormIsTheFirstInFlightItemsLabelOrItsSubject(t *testing.T) {
 			{Text: "later", Status: core.TodoPending, ActiveForm: "Doing it later"},
 			{Text: "now", Status: core.TodoActive},
 		}, "now"},
+		{"a blank activeForm falls back to the subject", []core.Todo{
+			{Text: "encode the receipt", Status: core.TodoActive, ActiveForm: " \t"},
+		}, "encode the receipt"},
+		{"a blank subject and no label draws nothing", []core.Todo{
+			{Text: " \n", Status: core.TodoActive},
+		}, ""},
+		{"a label is trimmed", []core.Todo{
+			{Text: "encode", Status: core.TodoActive, ActiveForm: "  Encoding  "},
+		}, "Encoding"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := activeForm(c.todos); got != c.want {

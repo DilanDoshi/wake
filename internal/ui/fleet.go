@@ -51,6 +51,7 @@ package ui
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -502,14 +503,15 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 }
 
 // activeForm is the label of the first item a task list marks in progress, and
-// "" for a list with none: its activeForm, else its subject, since claude's
-// CHANGELOG makes activeForm optional (2.1.69). The first wins: claude's own
-// tool description says at least one task is in progress at all times, and two
-// would be the model contradicting itself rather than a case to render.
+// "" for a list with none: its activeForm, else its subject (blank ones do not
+// count), since claude's CHANGELOG makes activeForm optional (2.1.69). The first
+// wins: claude's own tool description says at least one task is in progress at
+// all times, and two would be the model contradicting itself rather than a case
+// to render.
 func activeForm(todos []core.Todo) string {
 	for _, t := range todos {
 		if t.Status == core.TodoActive {
-			return cmp.Or(t.ActiveForm, t.Text)
+			return cmp.Or(strings.TrimSpace(t.ActiveForm), strings.TrimSpace(t.Text))
 		}
 	}
 	return ""
