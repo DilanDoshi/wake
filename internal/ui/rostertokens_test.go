@@ -26,8 +26,8 @@ func TestARosterRowCarriesItsAgentsTokenCount(t *testing.T) {
 	if !strings.Contains(row, tokenArrow+" "+humanTokens(12_400)) {
 		t.Errorf("the row is %q, want %q spelled the way the working line spells it", row, tokenArrow+" "+humanTokens(12_400))
 	}
-	// The word costs seven of twenty-three columns and the arrow already says
-	// what the number is.
+	// The word costs seven of the nineteen columns a row has and the arrow already
+	// says what the number is.
 	if strings.Contains(row, "tokens") {
 		t.Errorf("the row is %q; the sidebar has no room for the word", row)
 	}

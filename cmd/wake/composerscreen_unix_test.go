@@ -157,7 +157,7 @@ func TestTheComposerWithBlankRowsKeepsItsTail(t *testing.T) {
 // border corners rather than from any model.
 func boxRows(s *screen) int {
 	top, bottom := -1, -1
-	for i, line := range s.lines() {
+	for i, line := range paneRows(s) {
 		switch {
 		case strings.Contains(line, "╭"):
 			top = i

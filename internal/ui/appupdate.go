@@ -25,7 +25,17 @@ import (
 // spawn arriving, and cmd/wake building the model - and only two are in a
 // position to return a tea.Cmd. One seam instead of seven signatures.
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A typed key proves the window has the keyboard, so it heals a focus report
+	// that never arrived. A paste can land in a window without focus, and so can the
+	// wheel; neither proves it.
+	var regained tea.Cmd
+	if k, typed := msg.(tea.KeyMsg); typed && !k.Paste && a.windowBlurred {
+		var healed tea.Model
+		healed, regained = a.update(tea.FocusMsg{})
+		a = healed.(App)
+	}
 	model, cmd := a.update(msg)
+	cmd = tea.Batch(regained, cmd)
 	next, ok := model.(App)
 	if !ok {
 		return model, cmd
@@ -83,6 +93,11 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mcpSignedInMsg:
 		return a.mcpSignedIn(m)
+
+	case tea.BlurMsg:
+		a = a.withWindowFocus(false) // and on to the composer, whose caret stops blinking
+	case tea.FocusMsg:
+		a = a.withWindowFocus(true) // and on to the composer, which lights its caret
 
 	case frameMsg:
 		// The frame is folded first, then two things read the result: the

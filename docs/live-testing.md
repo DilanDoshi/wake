@@ -1027,6 +1027,30 @@ Wake leaves, is the tab bar's to say.
 - [ ] **Inside tmux.** `tmux display -p '#{pane_title}'` reads the fleet's name while Wake is up and the
       old one after; the tab's name in the status bar stays whatever tmux names it.
 
+## A blurred window — what only a real terminal's focus shows
+
+The suite writes the focus reports (`ESC [ O`, `ESC [ I`) to a pty and reads vt10x's screen; whether a
+terminal *sends* them, and when, is the terminal's to say.
+
+- [ ] **`wake` in cmux.** Click into another window or app: the caret in the query box and the accent
+      colour around it are gone at once, the draft unchanged. Click back: both return, and the caret
+      blinks again. Do it with the room focused and with a conversation focused.
+- [ ] **A bare `/resume` and a `/workflows` run's `s` (save) dialog.** Click away: the picker's search
+      box loses its accent and the save dialog's caret after the name goes; click back: both return.
+- [ ] **The same in Terminal.app.** Not expected to report focus (say whether it does): if it does not,
+      the window must look exactly as before, caret and accent always on.
+- [ ] **iTerm2 and Ghostty.** As cmux. In iTerm2, click the Wake window from another app *on its query
+      box*: the caret and accent must be back without typing (the click's press and the report can share
+      a read - `focusLast`), and the click must not have moved the cursor in the draft unexpectedly.
+- [ ] **Inside tmux with `set -g focus-events on`.** Switching panes (`prefix` + arrow) hides the caret
+      and accent in the Wake pane and shows them on return; with `focus-events off` nothing changes.
+- [ ] **`⌃C⌃C` and `⌃Q⌃Q` after switching windows.** The shell afterwards is sent no `^[[I` or `^[[O`
+      when you switch windows again.
+- [ ] **`/mcp` → a server that needs sign-in.** While `claude mcp login` has the terminal, switching
+      windows prints no `^[[I`/`^[[O` at its prompt; when Wake returns it is drawn focused.
+- [ ] **Leave the window blurred during a long turn** (another app in front, an agent working): the
+      window draws no caret and nothing else about the room changes.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

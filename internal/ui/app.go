@@ -249,6 +249,10 @@ type App struct {
 	// "which conversation".
 	focus string
 
+	// windowBlurred is the terminal window lacking the keyboard, as its focus
+	// reports say; false until told. See windowfocus.go.
+	windowBlurred bool
+
 	// sessionID is the session this client attached to: the one a hang-up
 	// reattaches to, and the one whose ending closes its composer. It is not
 	// "the session this App is about" - the room is about all of them - which

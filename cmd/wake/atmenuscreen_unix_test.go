@@ -91,7 +91,7 @@ func TestAtMenuOffersPeersSessionsAgentsAndFiles(t *testing.T) {
 		t.Fatalf("@wf-alpha is not offered once with its directory.\n%s", s.dump())
 	}
 	for _, y := range s.rowsWith("@" + atMenuAgent) {
-		if !strings.Contains(s.lines()[y], "╭") {
+		if !strings.Contains(paneRows(s)[y], "╭") {
 			t.Fatalf("the conversation's own agent is offered to itself.\n%s", s.dump())
 		}
 	}

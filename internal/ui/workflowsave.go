@@ -109,7 +109,11 @@ func (a App) workflowSaved(f rpc.Frame) App {
 
 // rows is the dialog w wide: a box naming itself over where the save lands and
 // the name being typed, with its keys in the bottom edge.
-func (d saveDialog) rows(w int, personal string) []string {
+func (d saveDialog) rows(w int, personal string, blurred bool) []string {
+	caret := saveCursor
+	if blurred {
+		caret = "" // nobody is typing into a window another application has
+	}
 	edge, inner := max(w-2, 0), max(w-4, 0)
 	wall := HintStyle.Render("│")
 	row := func(s string) string { return wall + " " + fitRow(s, inner) + " " + wall }
@@ -117,7 +121,7 @@ func (d saveDialog) rows(w int, personal string) []string {
 	return []string{
 		titledEdge("╭", "─", "╮", saveDialogTitle, edge, 0, HintStyle, AccentStyle),
 		row(AccentStyle.Render(scope) + HintStyle.Render(" · "+path)),
-		row(TextStyle.Render("Save as: > "+oneLine(d.Name)) + saveCursor),
+		row(TextStyle.Render("Save as: > "+oneLine(d.Name)) + caret),
 		titledEdge("╰", "─", "╯", saveDialogKeys, edge, 0, HintStyle, HintStyle),
 	}
 }
@@ -125,12 +129,12 @@ func (d saveDialog) rows(w int, personal string) []string {
 // over draws the dialog onto a view's rows from its key line down - the last
 // row stacked did not pad - pushed up only as far as the pane needs, so the
 // view's own keys, which are the dialog's while it is up, are never drawn.
-func (d saveDialog) over(rows []string, w int, personal string) []string {
+func (d saveDialog) over(rows []string, w int, personal string, blurred bool) []string {
 	foot := len(rows) - 1
 	for foot > 0 && rows[foot] == "" {
 		foot--
 	}
-	box := d.rows(w, personal)
+	box := d.rows(w, personal, blurred)
 	out := slices.Clone(rows)
 	copy(out[max(min(foot, len(out)-len(box)), 0):], box)
 	return out

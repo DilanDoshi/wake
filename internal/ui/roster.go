@@ -244,19 +244,23 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpo
 		// The gap and the header lead the item and belong to no agent: a click on
 		// the header picks its channel and one on the gap nothing - the
 		// discriminator fable named. The agent's own rows follow them, which is why
-		// an agent is resolved only past item.lead().
+		// an agent is resolved only past item.lead(), and the box's closing row,
+		// under them, is no one's either.
 		if within < item.lead() {
 			if item.hasHeader() && within == item.lead()-1 {
 				return rosterSpot{header: item.header}, true
 			}
 			return rosterSpot{}, false
 		}
+		if within >= len(rl)-item.trail() { // the box's closing row
+			return rosterSpot{}, false
+		}
 		a := item.agent
 		mine := subsFor(subs, a.ID)
-		// The subagent rows are the last len(mine) of the item's lines, so which
+		// The subagent rows are the len(mine) above the closing row, so which
 		// one was hit is measured from the bottom rather than from an offset that
 		// would have to restate whether this agent drew a header or a tool call.
-		if subFrom := len(rl) - len(mine); within >= subFrom {
+		if subFrom := len(rl) - item.trail() - len(mine); within >= subFrom {
 			if t := mine[within-subFrom]; t.Selectable() {
 				return rosterSpot{agent: a, dispatch: t.Dispatch}, true
 			}
@@ -443,7 +447,7 @@ func headLine(a Agent, glyph string, width int) string {
 // The arrow and the abbreviation are the working line's own - shared rather than
 // re-spelled, so the figure beside a name and the figure beside a conversation
 // cannot read differently for the same agent. The word `tokens` is not: it is
-// seven of the twenty-three columns this sidebar has, and the arrow already
+// seven of the nineteen columns a row has inside its box, and the arrow already
 // says what the number is.
 //
 // # Working only, and the turn's own figure

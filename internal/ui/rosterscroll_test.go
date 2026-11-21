@@ -121,6 +121,18 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 	}
 }
 
+// flatRows is what each item of a fleet with no team draws, counted without
+// rowsForRow so a test of the window does not borrow its oracle from the code it
+// tests: the agent's own rows, and the box's closing row under the last.
+func flatRows(agents []Agent, subs subsOf) heights {
+	out := make(heights, len(agents))
+	for i, a := range agents {
+		out[i] = rowsFor(a, subsFor(subs, a.ID))
+	}
+	out[len(out)-1]++
+	return out
+}
+
 // The window is maximal: nothing more would fit on either side of it.
 //
 // **Nothing asserted this, and the review found it.** Deleting the backward
@@ -139,19 +151,20 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 					if w.from == 0 && w.to == len(agents) {
 						continue // everything fits
 					}
+					h := flatRows(agents, subs)
 					used := 0
-					for _, a := range agents[w.from:w.to] {
-						used += rowsFor(a, subsFor(subs, a.ID))
+					for _, n := range h[w.from:w.to] {
+						used += n
 					}
 					room := height - 1
-					if c := indexOf(agents, cursor); w.from == w.to && w.from == c && rowsFor(agents[c], subsFor(subs, cursor)) > room {
+					if c := indexOf(agents, cursor); w.from == w.to && w.from == c && h[c] > room {
 						continue // the cursor's own agent is taller than the room: the count alone is drawn
 					}
-					if w.to < len(agents) && used+rowsFor(agents[w.to], subsFor(subs, agents[w.to].ID)) <= room {
+					if w.to < len(agents) && used+h[w.to] <= room {
 						t.Errorf("%d agents, height %d, cursor %q: window [%d,%d) uses %d of %d rows and the agent after it would fit",
 							len(agents), height, cursor, w.from, w.to, used, room)
 					}
-					if w.from > 0 && used+rowsFor(agents[w.from-1], subsFor(subs, agents[w.from-1].ID)) <= room {
+					if w.from > 0 && used+h[w.from-1] <= room {
 						t.Errorf("%d agents, height %d, cursor %q: window [%d,%d) uses %d of %d rows and the agent before it would fit",
 							len(agents), height, cursor, w.from, w.to, used, room)
 					}
@@ -182,20 +195,21 @@ func TestTheCursorIsAlwaysInsideTheWindow(t *testing.T) {
 				for i, a := range agents {
 					r := Roster{Selected: a.ID}
 					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
+					h := flatRows(agents, subs)
 					if w.to == w.from {
 						// An empty window is only honest when no whole agent fits.
 						// Skipping it unconditionally is what made the first draft
 						// of this test vacuous: a mutant that returned span{} for
 						// everything passed it.
-						if room := height - 1; rowsFor(a, subsFor(subs, a.ID)) <= room {
+						if room := height - 1; h[i] <= room {
 							t.Errorf("height %d, cursor on agent %d (%d rows): window is empty and the cursor's agent fits in %d rows",
-								height, i, rowsFor(a, subsFor(subs, a.ID)), room)
+								height, i, h[i], room)
 						}
 						continue
 					}
 					if i < w.from || i >= w.to {
 						t.Errorf("height %d, cursor on agent %d (%d rows): window is [%d,%d), which does not contain it",
-							height, i, rowsFor(a, subsFor(subs, a.ID)), w.from, w.to)
+							height, i, h[i], w.from, w.to)
 					}
 				}
 			}
@@ -233,10 +247,10 @@ func TestAClickOnAScrolledColumnLandsOnTheAgentUnderIt(t *testing.T) {
 
 	lines := strings.Split(stripANSI(r.View(agents, nil, rosterWidth, height)), "\n")
 	for y, line := range lines {
-		name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "○"))
+		name := strings.TrimSpace(strings.TrimPrefix(inBox(line), "○"))
 		spot, ok := r.At(agents, nil, rosterWidth, height, y)
 		got := spot.agent
-		if name == "" || isCountRow(line) {
+		if name == "" || isCountRow(line) || isFooter(strings.TrimRight(line, " ")) {
 			continue
 		}
 		if !ok || got.Name != name {
@@ -363,18 +377,19 @@ func hasCountRow(out string) bool { return slices.ContainsFunc(strings.Split(out
 // row that belongs to none - the count, or the padding below the fleet.
 //
 // A row indented past the glyph is a continuation of the agent above it, which
-// is what makes a click on a tool call open its agent's conversation.
+// is what makes a click on a tool call open its agent's conversation. A box's
+// closing row belongs to none.
 func ownerPerRow(rows []string) []string {
 	out := make([]string, len(rows))
 	current := ""
 	for i, row := range rows {
 		switch {
-		case strings.TrimSpace(row) == "" || isCountRow(row):
+		case strings.TrimSpace(row) == "" || isCountRow(row) || isFooter(strings.TrimRight(row, " ")):
 			current = ""
-		case strings.HasPrefix(row, "  "):
+		case strings.HasPrefix(strings.TrimPrefix(row, "│ "), "  "):
 			// A continuation keeps the agent above it.
 		default:
-			current = strings.Fields(row)[1]
+			current = strings.Fields(inBox(row))[1]
 		}
 		out[i] = current
 	}

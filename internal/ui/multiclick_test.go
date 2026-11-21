@@ -155,14 +155,14 @@ func TestMoreClicksSelectInTheQueryBox(t *testing.T) {
 }
 
 // Chrome takes it too, bounded by the surface clicked: on the sidebar's pinned
-// all header the two clicks after the first select the word and then the
-// roster's row - the roster's row, not the frame's.
+// all header (the loose box's top edge) the two clicks after the first select the
+// word and then the roster's row - the roster's row, not the frame's.
 func TestMoreClicksSelectInTheRoster(t *testing.T) {
 	frozenClock(t)
 	a := rosterApp(t)
 	line := frameRow(a, 0)
 	rest := line[strings.LastIndex(line, "│")+len("│"):]
-	word := strings.Fields(strings.ReplaceAll(rest, "─", " "))[0]
+	word := strings.Fields(strings.NewReplacer("─", " ", "╭", " ", "╮", " ").Replace(rest))[0] // the loose box's top edge
 	x := len([]rune(line[:strings.Index(line, rest)])) + len([]rune(rest[:strings.Index(rest, word)])) + 1
 
 	a, _ = click(a, x, 0)

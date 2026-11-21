@@ -62,7 +62,7 @@ func TestNoTextTouchesTheWindowsEdges(t *testing.T) {
 			}
 		}
 	}
-	if x := s.cellOf(s.rowOf("╭"), "╭"); x != ui.SideMargin {
+	if x := s.cellOf(rowIn(paneRows(s), "╭"), "╭"); x != ui.SideMargin {
 		t.Errorf("the composer's border starts in column %d, want %d: one margin in.\n%s", x, ui.SideMargin, s.dump())
 	}
 }

@@ -58,7 +58,7 @@ func TestARunningDispatchDrawsARowUnderItsAgent(t *testing.T) {
 	if subAt <= agentAt {
 		t.Errorf("the subagent is drawn above its agent, at %d against %d:\n%s", subAt, agentAt, out)
 	}
-	if !strings.HasPrefix(lines[subAt], strings.Repeat(" ", toolIndent)) {
+	if !strings.HasPrefix(inBox(lines[subAt]), strings.Repeat(" ", toolIndent)) {
 		t.Errorf("the subagent row is not indented under its agent: %q", lines[subAt])
 	}
 }
@@ -128,12 +128,13 @@ func TestTheTokenCountIsDroppedWholeRatherThanCuttingTheType(t *testing.T) {
 	// enough for the count at rosterWidth and not at anything narrower.
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 1100))
 
-	wide := stripANSI(Roster{}.View(agents, subs, rosterWidth, 10))
+	// A row has rosterWidth inside the box, so the box is drawn that much wider.
+	wide := stripANSI(Roster{}.View(agents, subs, rosterWidth+2*boxInset, 10))
 	if !strings.Contains(wide, "1.1k") {
 		t.Fatalf("the count is missing at full width, so this test measures nothing:\n%s", wide)
 	}
 
-	narrow := stripANSI(Roster{}.View(agents, subs, rosterWidth-4, 10))
+	narrow := stripANSI(Roster{}.View(agents, subs, rosterWidth-4+2*boxInset, 10))
 	if strings.Contains(narrow, "1.1k") {
 		t.Errorf("the count survived into a column too narrow for it:\n%s", narrow)
 	}
@@ -559,7 +560,7 @@ func TestWorkflowRowDropsTheFigureWholeWhenItDoesNotFit(t *testing.T) {
 // path.
 func TestARunningWorkflowDrawsARowUnderItsAgent(t *testing.T) {
 	agents, subs := alexWith(workflowTask("toolu_1", "count-lines", 2, 3))
-	out := stripANSI(Roster{}.View(agents, subs, rosterWidth, 10))
+	out := stripANSI(Roster{}.View(agents, subs, rosterWidth+2*boxInset, 10)) // rows keep rosterWidth inside the box
 
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	agentAt, workflowAt := -1, -1
