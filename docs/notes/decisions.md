@@ -6313,3 +6313,43 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
   than 2.1.319 killed that work and may have sent no ending, leaving its row until the agent ends.
 - Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
   `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).
+
+## 2026-11-14 — a message that opens with a /command is your own turn, the word in Claude's skill colour (the owner, via wake-orch)
+
+The owner's report, with a screenshot: a message opening `/init-orch you are responsible for …` was drawn as one
+orange `⌘` row cut with "…". "When I use a skill in a message it should just be purple / the skill colour and the
+message should send normally." It always did send normally (a skill is claude's, and passes to the agent byte for
+byte); only the drawing was wrong, and it lost the argument.
+
+- **Every `/name` turn is an ordinary turn.** The conversation's `› you` head and shaded body, the room's shaded
+  line, wrapped as prose is and never cut. Only the command word is tinted, in `Skill` (`skill` in
+  `claude-palette.json`, held by `palette_test`), by `colourLead` in `chat_blocks.go` - the place the room already
+  tinted a leading `@handle`, extended rather than paralleled. A name must be a command's (`commandWord`): a path,
+  `/foo.md`, `//x` and `/123go` are words.
+- **The tint changes the foreground only.** A span carrying a background reads to lipgloss's wrap as a visible
+  blank, so it will not break at the spaces inside it and the first line split mid-word (`/init-` over
+  `orch you are …`); the turn's own style supplies the ground. `TestATintedTurnWrapsExactlyAsPlainTextDoes` holds the
+  turn to plain `shadedOwn`'s wrap at every width, which a comparison with the whitespace squashed cannot see.
+  The room's `@handle` line had the same split before this and no longer does.
+- **What a leading `@word` means is the surface's** (`leadMention`). The room tints a handle and the word behind it
+  (`@who /skill args`). A conversation's own turn routes nothing, so its `@word` is text: only a `/command`
+  opening the message is a skill call. A message the room routed there had its handle taken off before it was
+  sent, so the word behind the handle is the call, and the handle stays plain. A word is looked for behind a
+  handle only past whitespace: `@internal/ui` is one path. A handle is a name or a team as the router reads it
+  (`@deploy_bot`, `@2026q4`), the `/` the one character it never takes. The room tints by shape, as it tints the handle: an
+  `@x /foo` naming no live agent goes to the manager as typed and is still tinted (deferred).
+- **A reopened conversation draws a skill call as the live one.** Claude records it as its name twice and then the
+  arguments, `<command-message>…<command-name>/name</command-name>…<command-args>…`, which drew as raw tags; the
+  airlock reads it back as `/name args` (`unwrapSkillCall`, `localreply.go`; `testdata/stream/loop-self-paced-end.jsonl`,
+  `workflow-saved-command.jsonl`), only a whole record of string content: a record's tags inside an array block are
+  text. A built-in's record is still dropped whole on restore (`deferred.md`).
+- **The orange `⌘` row is gone, not kept for Wake's commands.** A typed Wake command is claimed before anything is
+  sent (`slash`, `roomCommand`, `mentionCommand`, asked by `submit` for both surfaces), so `/board`, `/wake-help`,
+  `/status` open their view and leave nothing in a transcript: there was nothing for the row to draw.
+  `/effort` and `/model` with an argument, `/compact`, `/context` and a conversation's `/clear` are claude's and read
+  as the turn they are. The one turn a Wake menu writes is the effort and model picker's `/effort high`, claude's
+  command with its argument, sent and drawn as a typed one is. `TestEveryWakeCommandIsClaimedBeforeAnythingIsSent`
+  holds the premise (that `slash` claims every one, and that a conversation's transcript gains no turn). Whether
+  Wake's commands should leave an orange line is new behaviour, left to the owner.
+- Rendering and decoding only. What reaches claude (2.1.322) is unchanged; no routing file is touched.
+- Held by `internal/ui/skillecho_test.go` and `internal/core/skillcall_test.go`.

@@ -155,7 +155,7 @@ live. Older than the window. *Closes with:* `completionUp` declining when no men
 ## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
 
 The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
-`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+`field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
 question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
 can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
 
@@ -6561,3 +6561,24 @@ Left out:
   starting shells at once cost thirty. *Closes with:* one shared listing with a short cache, if it is ever felt.
 - **Only a shell is known to hold claude open.** A Monitor's, or any other unrecorded, `task_type` reads as
   `TaskKindUnknown` and neither notes nor ends. *Closes with:* a recording of one.
+
+---
+
+## FOLLOW-UP, 2026-11-14 — what the skill-call echo left alone
+
+- **A built-in's invocation is dropped whole on restore.** `<command-name>/compact</command-name>…` is plumbing
+  (`isLocalCommandPlumbing`), so a reopened conversation does not show the `/compact keep the plan` the operator
+  typed, though the live one does. A skill's record is read back as typed now; a built-in's would be the same
+  unwrap, but its output is a separate frame and the choice to show the invocation is the owner's.
+- **A command word followed by a newline is not Wake's.** `/board`⌥↵`show me the tiles` is not claimed (`slash` splits
+  on a space), so it is sent to the agent as a message and drawn as an ordinary turn with `/board` tinted.
+- **The room tints a `/word` behind any `@handle` by shape.** `@x /foo` with no live `x` goes to the manager as
+  typed and is tinted as the handle always was; telling it apart needs the fleet at draw time.
+- **A second-line `/word` is not tinted.** `@john`⌥↵`/init-orch args` routes as a real call (the handle and break
+  are stripped), but the tint reads the first line only.
+- **A self-paced `/loop`'s scheduled wakeup turns restore as a typed call.** Each wakeup is written to disk as the
+  loop's own skill-call record, carrying `turnOrigin:"scheduled"` and `wakeupSource:"loop_wakeup"` where a typed one
+  carries `turnOrigin:"sdk"`, so a reopened conversation draws `› you /loop …` once per wakeup, as the raw tags
+  were drawn under `› you` before (one such record on the machine it was found on). Telling them apart means decoding
+  the disk's `turnOrigin`, which wants a recorded transcript of a scheduled wakeup (`testdata/transcript` has none)
+  and room in `protocol.go`, which is at the 800-line limit.
