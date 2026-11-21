@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -436,5 +437,59 @@ func TestAHiddenBarsHoldIsNotRevivedByTheSidebarReturning(t *testing.T) {
 	a.layout.ShowRoster = true
 	if a = a.resizePanes(); a.barFocused() {
 		t.Error("the bar holds the keys again with the sidebar back")
+	}
+}
+
+// The bar, the roster and the usage bar total the pane's height at every size: a frame one
+// row too tall scrolls the alt screen on every draw.
+func TestTheBarTheRosterAndTheUsageBarFillThePaneAtEverySize(t *testing.T) {
+	filtered, plain := 0, 0
+	for _, w := range []int{100, 140, 200} {
+		for h := 8; h <= 46; h++ {
+			for _, query := range []string{"", "blu", "zzq"} {
+				a := barFleet(t, w, h)
+				a.daemon.usage = &rpc.SessionUsage{Percent: 47, Resets: usageResets} // the usage bar under the roster
+				a.sideSearch.Query = query
+				a = a.resizePanes()
+				if got := lipgloss.Height(a.View()); got > h {
+					t.Fatalf("%dx%d filter %q: the frame is %d rows tall", w, h, query, got)
+				}
+				// The frame is cut to the terminal, so a roster too tall pushes the usage bar off the
+				// pane rather than the frame past it: its last row must be the pane's.
+				if len(a.usageDrawn()) > 0 {
+					if last := sideColumn(a)[a.paneHeight()-1]; !strings.Contains(last, "session") {
+						t.Fatalf("%dx%d filter %q: the usage bar does not end the sidebar, its last row is %q", w, h, query, last)
+					}
+				}
+				if a.searchBarShown() && query != "" {
+					filtered++
+				} else if a.searchBarShown() {
+					plain++
+				}
+			}
+		}
+	}
+	if filtered == 0 || plain == 0 {
+		t.Errorf("the sweep drew the bar %d times filtered and %d plain: both must be exercised", filtered, plain)
+	}
+}
+
+// A row narrower or wider than the sidebar makes the whole column the wrong width, so the
+// bar's three rows are exactly the sidebar's wide - for a long query, a wide one and the
+// counts at both ends. The sidebar is rosterWidth columns whenever it is drawn, so the
+// sweep starts under it, at the narrowest a "50/50" count fits, and stops over.
+func TestTheBarIsExactlyAsWideAsTheSidebarAtEveryWidth(t *testing.T) {
+	a := barFleet(t, 140, 40)
+	for _, query := range []string{"", "blu", "web-blur-and-then-a-very-long-query-indeed", "日本語日本語日本語", "zzq"} {
+		for _, focus := range []bool{false, true} {
+			a.sideSearch = SideSearch{Query: query, Focus: focus}
+			for w := 12; w <= 40; w++ {
+				for i, row := range strings.Split(a.searchBar(w), "\n") {
+					if got := ansi.StringWidth(row); got != w {
+						t.Errorf("width %d, query %q, focus %v: row %d is %d cells wide", w, query, focus, i, got)
+					}
+				}
+			}
+		}
 	}
 }
