@@ -8,6 +8,34 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-21 — the sidebar's search bar (D1 of the jump picker's mockups), PR2
+
+The owner picked D with the jump box (A): a search bar atop the sidebar for the agent you want to *see in place*, where
+the jump box is for the one you want to open. Built on the same matcher (`agentfind.go`), so a few letters mean the
+same thing in both.
+
+- **In place, not re-ranked.** The filter keeps the roster's order (top block, then each team, attention within) and
+  drops the rest; a team with no match drops out. The jump box ranks by match quality because it is a list of one
+  kind; the sidebar's order is its own and a second opinion here would make the two disagree about who is first.
+- **Click to focus; `⌃F` never does.** Every other press lets go (`App.press`), so the bar holds the keys only
+  while a press landed on it. Not a modal (settled with the owner's defaults): a key it does not read lets go and
+  goes on to do its own job, because a search field in a sidebar is not worth swallowing `⌃C` or `⌃X` for.
+- **The filter stands.** After a click elsewhere it stays, the glyph and `N/M` in the accent, until `esc` clears it
+  (`esc` is clear-and-return, one key). A sidebar too short for the bar and a list draws neither the bar nor the
+  filter (`activeQuery`); the query is kept and applies again when the room is back.
+- **One source, five readers.** `rosterAgents` replaces the roster's own reads at the draw, the click, the window,
+  `cursorAgent` and `pickAgent`; the strip, the board, the channel logic and the jump box keep `OnRoster`. A new reader
+  of "the sidebar's agents" is `rosterAgents`, never `OnRoster`.
+- **A hidden selection takes no key and says why**, the wheel's 2026-11-06 ruling extended: `cursorFilteredOut` joins
+  `rosterPickHidden`, and `unseenOr` answers `pickFilteredOut`. Typing moves the cursor to the first match when its own
+  is filtered out, so the common path never meets the refusal; it meets it only when a report changes the fleet under
+  a standing filter. `⌃X` can still select an agent the filter hides - it opens that agent's conversation, so its pane
+  is its own proof.
+- **One opener.** `openedBy` is the jump box's and the bar's: an agent already drawn is only focused, whichever key it
+  was, and a refusal is an agent that was not drawn and still is not.
+- **Not built (`deferred.md`):** matching a team or directory, a keyboard way to focus the bar, and the composer's caret
+  going dark while the bar holds the keys (a focus sync that would kill its blink loop without a `Refocus`).
+
 ## 2026-11-20 — ⌃F and `/jump`: find an agent by a few letters of its name; fork is `/fork`
 
 The owner runs 40-50 agents, and walking the sidebar with ⇧↑↓ is too slow. `wake-orch` briefed mockups of four

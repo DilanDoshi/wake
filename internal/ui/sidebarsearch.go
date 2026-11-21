@@ -133,6 +133,14 @@ func (a App) cursorFilteredOut() bool {
 	return false
 }
 
+// letGoOfBar is the bar not holding the keys. A key that goes on to the composer is
+// let through by App.key, whose returned App Update then discards, so Update calls
+// this too, beside the closes it does for the same reason.
+func (a App) letGoOfBar() App {
+	a.sideSearch.Focus = false
+	return a
+}
+
 // barKey is the bar's keys while it holds them: typing, ⌫ and space edit the
 // filter, the arrows walk the matches, ↵ ⌃B and ⌃D open the cursored agent the way
 // the jump box does, esc clears the filter and gives the keys back. Any other key
@@ -140,8 +148,7 @@ func (a App) cursorFilteredOut() bool {
 // including ⌃F, which opens the jump box and never focuses this.
 func (a App) barKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if !a.barFocused() {
-		a.sideSearch.Focus = false // a hold the sidebar's hiding left behind is no hold
-		return a, nil, false
+		return a.letGoOfBar(), nil, false // a hold the sidebar's hiding left behind is no hold
 	}
 	switch m.Type {
 	case tea.KeyRunes:
@@ -165,8 +172,7 @@ func (a App) barKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.rosterView = rosterView{}
 		return a, nil, true
 	}
-	a.sideSearch.Focus = false
-	return a, nil, false
+	return a.letGoOfBar(), nil, false
 }
 
 // openSearched opens what the cursor is on, as the jump box does and a click does:

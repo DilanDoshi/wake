@@ -233,11 +233,8 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	bar := a.barRows()
-	if y < bar {
-		return rosterSpot{}, false // the search bar is no row of the roster's
-	}
-	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-bar)
+	// A row above the roster's own - the search bar's - is a negative row, which Hit refuses.
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-a.barRows())
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the

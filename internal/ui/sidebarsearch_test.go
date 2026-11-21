@@ -164,20 +164,33 @@ func TestTheCursorGoesToTheFirstMatchWhenItsAgentIsFilteredOut(t *testing.T) {
 	if want := a.fleet.sectioned(a.rosterAgents())[0].ID; a.roster.Selected != want {
 		t.Errorf("the cursor is on %q, want the first match %q", a.roster.Selected, want)
 	}
-	a.roster.Selected = "s3" // ui-blueprint, a match: typing on keeps it
+	a.roster.Selected = "s4" // infra-blue-green, a match and not the first: typing on keeps it
 	a = jumpTyped(a, "e")
-	if a.roster.Selected != "s3" {
-		t.Errorf("the cursor left %q, which still matches", "s3")
+	if a.roster.Selected != "s4" {
+		t.Errorf("the cursor left %q, which still matches", "s4")
 	}
 }
 
 func TestArrowsWalkTheMatchesAndEnterOpensTheCursorsAgentAsAClickDoes(t *testing.T) {
 	for _, down := range []tea.KeyType{tea.KeyDown, tea.KeyShiftDown} {
 		a := jumpTyped(barApp(t), "blu")
-		first := a.roster.Selected
-		a, _ = pressKey(a, kmsg(down))
-		if a.roster.Selected == first || !slices.ContainsFunc(a.rosterAgents(), func(ag Agent) bool { return ag.ID == a.roster.Selected }) {
-			t.Fatalf("%v left the cursor on %q (was %q), want the next match", down, a.roster.Selected, first)
+		first, seen := a.roster.Selected, map[string]bool{}
+		for range 2 * len(a.rosterAgents()) { // the walk wraps, and never lands on what the filter hides
+			a, _ = pressKey(a, kmsg(down))
+			if a.roster.Selected == "" && a.roster.Header != "" && !a.cursorFilteredOut() {
+				continue // a channel header is a stop of the walk too, and one the filter still draws
+			}
+			if !slices.ContainsFunc(a.rosterAgents(), func(ag Agent) bool { return ag.ID == a.roster.Selected }) {
+				t.Fatalf("%v landed on %q (header %q), which the filter hides", down, a.roster.Selected, a.roster.Header)
+			}
+			seen[a.roster.Selected] = true
+		}
+		if len(seen) != len(a.rosterAgents()) || a.roster.Selected == "" {
+			t.Fatalf("%v walked %d of the %d matches", down, len(seen), len(a.rosterAgents()))
+		}
+		a.roster = Roster{Selected: first}
+		for a.roster.Selected == first || a.roster.Selected == "" { // on to the next agent, past any header
+			a, _ = pressKey(a, kmsg(down))
 		}
 		want := clickAgent(t, barFleet(t, 140, 40), a.roster.Selected)
 		got, _ := pressKey(a, kmsg(tea.KeyEnter))
@@ -227,6 +240,11 @@ func TestAKeyTheBarDoesNotReadLetsGoAndDoesItsOwnJob(t *testing.T) {
 	b := jumpOpened(t, barFleet(t, 140, 40))
 	if b.barFocused() {
 		t.Error("⌃F focused the bar")
+	}
+	// A key nothing binds goes on to the composer, and App.key's own App is thrown away with it.
+	c, _ := pressKey(jumpTyped(barApp(t), "blu"), kmsg(tea.KeyCtrlG))
+	if c.barFocused() || c.sideSearch.Query != "blu" {
+		t.Errorf("after a key nothing reads: bar focused %v, filter %q; want it let go and the filter standing", c.barFocused(), c.sideSearch.Query)
 	}
 }
 
@@ -304,5 +322,119 @@ func TestASidebarTooShortForItsBarDrawsNoBarAndNoFilter(t *testing.T) {
 	}
 	if back := short.withSize(140, 40).resizePanes(); len(back.rosterAgents()) != 5 {
 		t.Errorf("the filter did not return with the room: %d agents", len(back.rosterAgents()))
+	}
+}
+
+// A click lands on the row drawn under the pointer: with the bar over the roster
+// every row sits three lower, and the click's row is read off the frame, not off
+// the code that decides where it should be.
+func TestAClickOnADrawnRowOpensThatAgentUnderTheBar(t *testing.T) {
+	a := jumpTyped(barApp(t), "blu")
+	y := sidebarHas(a, "qa-visual-blur")
+	if y < searchBarRows {
+		t.Fatalf("qa-visual-blur is drawn at row %d", y)
+	}
+	got, _ := click(a, sidebarX(a), y)
+	if got.focus != "s5" {
+		t.Errorf("a click on the row drawn for qa-visual-blur (row %d) put the keys in %q, want s5", y, got.focus)
+	}
+}
+
+// With nothing selected the agent a cursor key acts on is the first one the sidebar
+// draws, not the first of the whole roster the filter hides.
+func TestWithNothingSelectedTheFirstAgentDrawnIsTheCursorsAgent(t *testing.T) {
+	a := jumpTyped(barApp(t), "scr")
+	a, _ = click(a, 5, 5)
+	a.roster = Roster{}
+	agent, ok := a.cursorAgent()
+	if want := a.fleet.sectioned(a.rosterAgents())[0]; !ok || agent.ID != want.ID {
+		t.Errorf("the cursor's agent is %q, want the first drawn, %q", agent.Name, want.Name)
+	}
+}
+
+// The roster's rows are what the bar leaves: the count row and the agents drawn fit
+// the sidebar's height under it, so the wheel's window and the draw agree.
+func TestTheWindowIsCutToTheRowsUnderTheBar(t *testing.T) {
+	a := wheelFleet(t)
+	if !a.searchBarShown() {
+		t.Fatal("setup: no bar is drawn")
+	}
+	rows := sideColumn(a)
+	listed := 0
+	for _, row := range rows[searchBarRows : searchBarRows+a.rosterListHeight()] {
+		if strings.TrimSpace(row) != "" {
+			listed++
+		}
+	}
+	if a.rosterRows()+allRows != a.rosterListHeight() || listed > a.rosterListHeight() {
+		t.Errorf("the window has %d rows and the list %d, with %d drawn", a.rosterRows(), a.rosterListHeight(), listed)
+	}
+	if countText(a) == "" {
+		t.Error("a roster taller than its rows draws no count row")
+	}
+}
+
+// The wheel only scrolls a roster taller than its rows: a filter that makes it fit
+// leaves nothing for the wheel to move.
+func TestAFilterThatFitsTheRosterTakesNoWheel(t *testing.T) {
+	a := wheelFleet(t)
+	a, _ = click(a, sidebarX(a), 1)
+	a = jumpTyped(a, "agent25")
+	if got := len(drawnAgents(a)) - 1; got != 1 { // the bar's own row reads as an agent's too
+		t.Fatalf("the filter left %d agents drawn, want 1", got)
+	}
+	if a = wheelSidebar(a, true, 3); a.rosterView.held {
+		t.Error("the wheel held a window over a roster that fits")
+	}
+}
+
+// An edit that leaves the cursor where it was still lets go of the wheel's hold: the
+// hold's "is it drawn" was worked out for the old list.
+func TestAnEditLetsGoOfTheWheelEvenWhereTheCursorStays(t *testing.T) {
+	a := wheelFleet(t)
+	a.roster = Roster{Selected: a.fleet.sectioned(a.rosterAgents())[0].ID}
+	a = wheelSidebar(a, true, 20) // the first agent scrolled out of view
+	if !a.rosterPickHidden() {
+		t.Fatal("setup: the wheel did not hide the selection")
+	}
+	a, _ = click(a, sidebarX(a), 1)
+	a = jumpTyped(a, "a") // every agent still matches
+	if a.rosterPickHidden() {
+		t.Error("the filter's edit left the wheel's stale verdict on a selection that is drawn")
+	}
+}
+
+// ⌃B on an agent already drawn, from a lower pane, only focuses it: the refusal it
+// would meet is for an agent that has to be placed.
+func TestCtrlBOnAnAgentDrawnAboveOnlyFocusesIt(t *testing.T) {
+	a := clickAgent(t, barFleet(t, 200, 40), "s2")
+	a, _ = click(a, sidebarX(a), 1)
+	a, _ = pressKey(jumpTyped(a, "scr"), kmsg(tea.KeyCtrlB)) // scratch under web-blur, with the keys
+	if a.focus != "s7" {
+		t.Fatalf("setup: the keys are in %q", a.focus)
+	}
+	a, _ = click(a, sidebarX(a), 1)
+	a, _ = pressKey(a, kmsg(tea.KeyEsc)) // the first filter stands until it is cleared
+	a, _ = click(a, sidebarX(a), 1)
+	notice.Reset()
+	a, _ = pressKey(jumpTyped(a, "web-b"), kmsg(tea.KeyCtrlB))
+	if a.focus != "s2" || a.barFocused() {
+		t.Errorf("keys in %q, bar focused %v: want the keys on the web-blur pane, the bar let go", a.focus, a.barFocused())
+	}
+	if n, ok := notice.Latest(); ok && strings.Contains(n.String(), noRowBelow) {
+		t.Errorf("⌃B refused with %q for an agent that needed no placing", n.String())
+	}
+}
+
+// A hold the sidebar's hiding left behind is dropped on the next key, so the bar does
+// not come back holding the keys when the sidebar does.
+func TestAHiddenBarsHoldIsNotRevivedByTheSidebarReturning(t *testing.T) {
+	a := barFleet(t, 140, 40)
+	a, _ = click(a, sidebarX(a), 1)
+	a.layout.ShowRoster = false
+	a, _ = pressKey(a.resizePanes(), kmsg(tea.KeyCtrlF)) // a key App.key takes: its own App is kept
+	a.layout.ShowRoster = true
+	if a = a.resizePanes(); a.barFocused() {
+		t.Error("the bar holds the keys again with the sidebar back")
 	}
 }
