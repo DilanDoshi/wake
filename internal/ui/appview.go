@@ -32,7 +32,7 @@ const dividerRow = "─"
 // copies off the same assembleFrame, so the copy is exactly the cells the
 // overlay highlighted at release. See screensel.go.
 func (a App) View() string {
-	return a.overlayScreenSelection(a.assembleFrame())
+	return a.overlayAgentDrag(a.overlayScreenSelection(a.assembleFrame()))
 }
 
 // assembleFrame draws the layout: sidebars, the room, the DM beside it, and the

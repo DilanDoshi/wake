@@ -47,11 +47,11 @@ func (g *guardedOutput) WriteString(s string) (int, error) { return g.Write([]by
 
 // handBack is the terminal's return to the shell once Bubble Tea has handed it
 // back: sealed first, so a title write in flight finishes and a late one is
-// refused, then the shell's title popped past the seal - nothing can retitle
-// after it. See internal/ui/title.go.
+// refused, then the shell's title popped and its Shift behaviour restored past
+// the seal - nothing can retitle after it. See internal/ui/title.go.
 func (g *guardedOutput) handBack() {
 	g.seal()
-	_, _ = g.File.WriteString(ui.TitleStackPop)
+	_, _ = g.File.WriteString(ui.TitleStackPop + shiftEscapeOff)
 }
 
 // seal ends Wake's writes once Bubble Tea has handed the terminal back: one in

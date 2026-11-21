@@ -63,8 +63,8 @@ func TestHandingBackSealsBeforeTheTitleIsPopped(t *testing.T) {
 	if _, err := io.WriteString(g, "\x1b]2;late\x07"); !errors.Is(err, errHandedBack) {
 		t.Errorf("a title after the hand-back got %v, want %v", err, errHandedBack)
 	}
-	if got := written(); got != ui.TitleStackPop {
-		t.Errorf("the terminal got %q, want only the pop %q", got, ui.TitleStackPop)
+	if got, want := written(), ui.TitleStackPop+shiftEscapeOff; got != want {
+		t.Errorf("the terminal got %q, want only the pop and Shift given back: %q", got, want)
 	}
 }
 

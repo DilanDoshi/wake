@@ -227,7 +227,7 @@ func TestTheHandOverRunsAChildOnTheRealTerminal(t *testing.T) {
 	go func() {
 		seen := ""
 		buf := make([]byte, 256)
-		for !strings.Contains(seen, "got:hello") {
+		for !strings.Contains(seen, "got:hello") || !strings.Contains(seen, shiftEscapeOn) {
 			n, err := r.ptmx.Read(buf)
 			seen += string(buf[:n])
 			if err != nil {
@@ -248,8 +248,22 @@ func TestTheHandOverRunsAChildOnTheRealTerminal(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("the child never finished")
 	}
-	if seen := <-out; !strings.Contains(seen, "Signing in to linear for Wake") || !strings.Contains(seen, "got:hello") {
+	var seen string
+	select {
+	case seen = <-out:
+	case <-time.After(testTimeout):
+		t.Fatal("the terminal never showed the child's output and Wake asking for Shift again")
+	}
+	if !strings.Contains(seen, "Signing in to linear for Wake") || !strings.Contains(seen, "got:hello") {
 		t.Errorf("the terminal showed %q", seen)
+	}
+	// The child gets the terminal's own Shift behaviour, and Wake's comes back with it.
+	off, header, reply := strings.Index(seen, shiftEscapeOff), strings.Index(seen, "Signing in"), strings.Index(seen, "got:hello")
+	if off < 0 || off > header {
+		t.Errorf("Shift was given back at %d, want it before the child's header at %d: %q", off, header, seen)
+	}
+	if on := strings.Index(seen, shiftEscapeOn); on < reply {
+		t.Errorf("Shift was asked for again at %d, want it after the child's output at %d: %q", on, reply, seen)
 	}
 	r.type_(t, "z")
 	r.awaitForwarded(t, "z")

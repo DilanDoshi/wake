@@ -242,7 +242,7 @@ func TestTheEmergencyRestorePutsTheTerminalBack(t *testing.T) {
 		// skips that path, so it writes its own, after the alt screen is left.
 		// And focus reporting off: left on, the shell is sent `^[[I` and `^[[O` on every
 		// window switch after Wake is gone.
-		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?1004l", "\x1b[?25h", "\x1b[?1049l\x1b[23;0t"} {
+		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?1004l", "\x1b[?25h", "\x1b[?1049l\x1b[23;0t" + shiftEscapeOff} {
 			if !strings.Contains(out, want) {
 				t.Errorf("the restore did not write %q; it wrote %q", want, out)
 			}

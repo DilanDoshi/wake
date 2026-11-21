@@ -57,7 +57,9 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 	case m.Button == tea.MouseButtonWheelDown:
 		return a.scroll(-wheelLines, m.X, m.Y), nil
 	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
-		return a.pressed(m.X, m.Y), nil
+		return a.pressedBy(m), nil
+	case a.dragged.id != "" && (m.Action == tea.MouseActionRelease || m.Action == tea.MouseActionMotion):
+		return a.dragMouse(m), nil
 	case m.Action == tea.MouseActionRelease:
 		// The button may be reported as None here: X10 encoding loses which one
 		// was let go of, and there is only one drag to end.
@@ -123,12 +125,14 @@ func (a App) rowsOf(col int) (top, bottom int) {
 // was unreachable for as long as a DM was open. Both go through App.withFocus,
 // so a click and a key leave the same state behind.
 //
-// A click on the activity sidebar opens that agent's conversation, which is
-// what noPaneAdvice has told operators to do since Phase 2 while nothing here
-// took the y coordinate. The workspaces sidebar still answers nothing: a
-// workspace is not a conversation and there is no verb for one yet.
+// A click on an agent in the activity sidebar opens its conversation in a new
+// column, and a drag of it places it (agentdrag.go) - what noPaneAdvice has told
+// operators to do since Phase 2 while nothing here took the y coordinate. The
+// workspaces sidebar still answers nothing: a workspace is not a conversation and
+// there is no verb for one yet.
 func (a App) press(x, y int) App {
 	a.rosterHit = rosterHit{} // a fresh press; only a roster press below re-arms it
+	a.dragged = agentDrag{}   // and no agent is held until a roster press says so
 	a.selecting = false       // and a new gesture: a drag whose release was lost is over
 	r := a.regions()
 	switch region, at := a.layout.Hit(r, x); region {
@@ -176,16 +180,7 @@ func (a App) press(x, y int) App {
 		a.fleet = a.fleet.Focus(id)
 		a = a.refocus(id)
 	case RegionRoster:
-		// Chrome takes a frame-wide selection so its text can be copied, and the
-		// row's click-to-open resolves on release so a drag copies a name and a
-		// click opens. The target is resolved *now*, not on release: the roster
-		// reorders by attention on every fleet report, so a report between press
-		// and release would otherwise open whatever agent slid onto this row. See
-		// screenClick.
-		a = a.startScreenSelection(x, y)
-		if spot, ok := a.clickedRow(y); ok {
-			a.rosterHit = rosterHit{id: spot.agent.ID, name: spot.agent.Name, dispatch: spot.dispatch, header: spot.header, ok: true}
-		}
+		a = a.pressRoster(x, y)
 	case RegionGroups:
 		a = a.startScreenSelection(x, y)
 	case RegionNone:

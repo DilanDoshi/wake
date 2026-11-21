@@ -63,6 +63,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
+		a.dragged = agentDrag{} // measured against a layout that is changing
 		return a.resized(m.Width, m.Height)
 
 	case geometrySettledMsg:
@@ -144,6 +145,10 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
+		var dragEsc bool
+		if a, dragEsc = a.dragKey(m); dragEsc {
+			return a, nil // esc ends a drag and is nothing else
+		}
 		// Before anything acts on a draft - the view hides its pane's. See workflowKey.
 		next, cmd, took := a.workflowKey(m)
 		if took {

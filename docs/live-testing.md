@@ -255,7 +255,49 @@ cell crossed, at whatever rate your hardware produces, which is the thing that c
 - [ ] Over **ssh**, and inside **tmux**: the paste still works. That is the OSC 52 layer, and it is
       the one no unit test can prove reached a real terminal.
 - [ ] Native terminal selection (`⌥` or `⇧` drag, depending on your terminal) still works as the
-      escape hatch — Wake does not disable it.
+      escape hatch — Wake does not disable it. **Exception (the sidebar drag, 2026-11-19):** where
+      Wake asks the terminal to deliver Shift-clicks (below), `⇧` drag no longer starts the
+      terminal's own selection while Wake is open; `⌥` drag still does where it did.
+- [ ] **Click an agent in the sidebar.** It opens in a new column next to the sidebar and the
+      pane that had the keys is untouched. Click an agent already open: its pane takes the keys,
+      no column is added. At under 120 columns the window carries one pane, so the click **replaces** the pane on screen (a second click
+      replaces that, the room's group chat is only a `⇥` away) and no columns pile up behind it.
+- [ ] **Drag an agent out of the sidebar.** A small tag in its colour follows the pointer with no lag;
+      the pane under it outlines its bottom half (open below) or the column strip beside the sidebar
+      (new column); the outline changes only when the zone does; nothing re-wraps until you let go.
+      Let go: it lands where outlined. **Esc** mid-drag, and **letting go back on the sidebar**, both
+      leave everything as it was, and esc does not interrupt the agent in the focused pane.
+- [ ] **A very slight wobble on a click is still a click** (under two cells); it does not start a drag.
+- [ ] **Shift-click an agent in the sidebar** opens it *below* the focused pane (⌃B's rule), only in a
+      terminal that delivers the click - see the table below. Then quit Wake and Shift-drag some text in
+      the shell: the terminal's own selection must be back (Wake sends `CSI > 0 s` on every way out,
+      the emergency `⌃C⌃C` and a `/mcp` sign-in included).
+
+### Which terminals deliver a Shift-click
+
+Wake sends XTSHIFTESCAPE (`CSI > 1 s`) on start. Whether a terminal then delivers the Shift-click
+cannot be asked of it or driven from a script (a GUI terminal needs a real pointer), so each row
+is a hand check. In the terminal under test, with Wake closed:
+
+```sh
+stty raw -echo; printf '\033[?1000h\033[?1006h\033[>1s'; head -c 24 | cat -v; printf '\033[>0s\033[?1006l\033[?1000l'; stty sane
+```
+
+then Shift-click once. A delivered click prints `^[[<4;X;YM` (button 0 plus Shift's bit 4); with
+no Shift it prints `^[[<0;X;YM`; a terminal that kept the click for itself prints nothing and
+selects text. Drop the `\033[>1s` and repeat to see what it does by default.
+
+| Terminal | Shift-click delivered with `CSI > 1 s` | By default | Date and version |
+|---|---|---|---|
+| cmux | unchecked | unchecked | |
+| Ghostty | unchecked | unchecked | |
+| Terminal.app | unchecked | unchecked | |
+| iTerm2 | unchecked | unchecked | |
+| tmux (inside any of the above) | unchecked | unchecked | |
+
+A terminal that does not know the sequence ignores it (check none prints stray characters), and
+the click then opens an agent in the new column, as without Shift, if it never delivers the Shift
+bit.
 
 ---
 

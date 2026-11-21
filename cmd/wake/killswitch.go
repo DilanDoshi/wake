@@ -632,8 +632,9 @@ func (k *killSwitch) restoreTerminal() {
 		defer close(written)
 		// Mouse reporting off, focus reporting off, bracketed paste off, cursor back, alt screen
 		// left - bubbletea's own restoreTerminalState, in the order it does it -
-		// then the shell's title, which converseModel's exit is not here to pop.
-		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
+		// then the shell's title and Shift behaviour, which converseModel's exit is
+		// not here to restore.
+		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop+shiftEscapeOff)
 		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine(k.fleetName()))
 	}()
 	select {

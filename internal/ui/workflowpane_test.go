@@ -25,16 +25,16 @@ func clickRosterAgent(t *testing.T, a App, id string) App {
 }
 
 // The reviewer's reproduction: the save dialog up in alex's view, a roster
-// click puts sydney in alex's slot, and a second brings alex back - to the
-// conversation, never to a view or a dialog that outlived the pane.
+// click opens sydney in a new column, and a second brings the keys back to alex
+// - to the conversation, never to a view or a dialog that outlived the pane.
 func TestTheViewDoesNotOutliveItsPane(t *testing.T) {
 	a, _ := pressKey(runOpen(t), wfRune('s'))
 	if a.workflow.view.Save == nil {
 		t.Fatal("s opened no save dialog")
 	}
 	a = clickRosterAgent(t, a, "s2")
-	if a.focus != "s2" || a.grid.Has("s1") {
-		t.Fatalf("the click left focus %q and alex on screen %v, want sydney in alex's slot", a.focus, a.grid.Has("s1"))
+	if a.focus != "s2" || !a.grid.Has("s1") {
+		t.Fatalf("the click left focus %q and alex on screen %v, want sydney in a new column beside alex", a.focus, a.grid.Has("s1"))
 	}
 	a = clickRosterAgent(t, a, "s1")
 	if a.focus != "s1" {

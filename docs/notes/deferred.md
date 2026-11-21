@@ -359,6 +359,23 @@ off `rate_limit_event`. Consciously left out:
 
 *Closes with:* each item on its own; none blocks the bar.
 
+## KNOWN GAP, 2026-11-19 — an Esc and the next mouse report can reach Bubble Tea in one read
+
+**Found by review** on `feat/sidebar-click-and-drag`. When Bubble Tea's reader is busy for a frame, an Esc and the next
+mouse report (a drag sends them continuously) can both be queued in the pipe, and `alignedPipe.Read` hands them over
+whole: `\x1b\x1b[<32;61;6M` decodes as alt+esc and the runes `[<32;61;6M`, which land in the draft. An agent drag drops
+that report after the esc that ended it (`strayReport`); **an Esc during a text-selection drag, or any other
+moment reports are arriving, still types it.**
+
+A split at the pipe does not work: Bubble Tea's reader (cancelreader's kqueue wait) calls `Read` only when the
+descriptor is readable, so a remainder held in `alignedPipe` is never read until more input arrives, and a held
+release report would be swallowed - the stuck drag this was meant to avoid. Writing the remainder back into the pipe
+from the reader's own goroutine can block on a full pipe (the small-pipe wheel flood). So the fix is a timer or a
+change in Bubble Tea, and the doctrine is no timer.
+
+*Closes with:* a decision on a short inter-byte hold in the pump (`chunker.step`'s own comment names the same trade
+for a lone trailing ESC), or the report-shaped runes dropped after any alt+esc, not only a drag's.
+
 ## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
 
 Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not

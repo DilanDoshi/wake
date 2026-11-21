@@ -33,16 +33,13 @@ func rosterRow(a App) (int, bool) {
 func rosterLeft(a App) int { return a.layout.Width - a.regions().Roster + 1 }
 
 // The reported bug: every rendered surface must be highlightable and copied on
-// release, not just the transcript and the query box. A drag across a roster
-// row - chrome that took no selection at all before - now selects it as screen
-// cells and copies on release.
+// release, not just the transcript and the query box. A drag across the
+// sidebar's pinned all header - chrome that took no selection at all before -
+// selects it as screen cells and copies on release. (An agent's row is a drag
+// source now: see agentdrag.go.)
 func TestADragOverChromeSelectsAndCopies(t *testing.T) {
 	a := rosterApp(t)
-	y, ok := rosterRow(a)
-	if !ok {
-		t.Fatal("no roster row on screen to drag across")
-	}
-	x0 := rosterLeft(a)
+	y, x0 := 0, rosterLeft(a)
 	got, cmd := drag(a, x0, x0+10, y)
 	if !got.sel.onScreen {
 		t.Errorf("sel = %+v: a drag on chrome is a screen selection", got.sel)
@@ -87,11 +84,7 @@ func TestAClickOnTheRosterStillOpensTheConversation(t *testing.T) {
 // assembled frame instead of a pane's scrollback.
 func TestTheScreenSelectionCopiesTheCellsUnderIt(t *testing.T) {
 	a := rosterApp(t)
-	y, ok := rosterRow(a)
-	if !ok {
-		t.Fatal("no roster row on screen to drag across")
-	}
-	x0 := rosterLeft(a)
+	y, x0 := 0, rosterLeft(a) // the pinned all header, which is text and no drag source
 	x1 := x0 + 12
 	got, _ := drag(a, x0, x1, y)
 	lines := strings.Split(got.assembleFrame(), "\n")
@@ -117,8 +110,8 @@ func TestARosterClickOpensThePressTimeAgentNotAReorderedOne(t *testing.T) {
 
 	// Press resolves the target at press time.
 	a, _ = a.mouse(pressAt(a.layout.Width-2, y))
-	if a.rosterHit.id != pressed.ID {
-		t.Fatalf("press resolved %q, want the agent under the pointer %q", a.rosterHit.id, pressed.ID)
+	if a.dragged.id != pressed.ID {
+		t.Fatalf("press resolved %q, want the agent under the pointer %q", a.dragged.id, pressed.ID)
 	}
 
 	// A fleet report reorders the roster before release: the other agent blocks
