@@ -67,24 +67,6 @@ selection over the row. The conversation draws each one too and would want the s
 
 ---
 
-## KNOWN GAP, 2026-11-18 — a room left open names the first newer release it heard of, for as long as it runs
-
-The strip's `↑ wake X` (`internal/ui/updatecue.go`) is the newest release the check knew when it first found one
-newer than this build. `dueUpdateCheck` never asks again once `newer` is set - "no later answer changes what to do"
-- so a room opened before v0.1.16 went out kept saying `↑ wake 0.1.15` for days after, while the on-disk cache
-(`~/.wake/update-check.json`, `cmd/wake/updatecheck.go`) already read v0.1.16 and `wake` on the machine's `PATH` was
-0.1.16. Found 2026-11-18 from a screenshot of such a room; the marker is not a stale cache, and the window's own
-build was older than 0.1.15 (the cue only draws for a release newer than the build). **Restarting that window runs
-0.1.16 and draws no cue.**
-
-**Not built:** keep asking on the hourly keystroke after a newer release is known, and let a newer answer replace
-the marker - a failed or older answer never clearing it. One condition in `dueUpdateCheck` and its test; the
-network stays at one request a day because the ask is a cache read.
-
-*Revisit if:* the owner asks for it; a second report of a stale name on the strip would make it one.
-
----
-
 ## FOLLOW-UP, 2026-11-12 — a click on a completion offer, the wheel over the menu, and bigger steps
 
 The completion menu now walks every offer with ↑↓, ⌃N/⌃P, ⇥ and ↵ (`decisions.md`, 2026-11-12). The mouse does
