@@ -35,9 +35,16 @@ func sidebarRows(rows []string) []string {
 	return out
 }
 
-// boxRowOf is the screen row of the sidebar row satisfying match, or -1.
+// searchBarRows is the sidebar's search bar over the roster (ui.searchBarRows): its box
+// has edges of its own, and none of them is a team's.
+const searchBarRows = 3
+
+// boxRowOf is the screen row of the sidebar row under the search bar satisfying match, or -1.
 func boxRowOf(s *screen, match func(string) bool) int {
-	return slices.IndexFunc(sidebarRows(s.lines()), match)
+	if i := slices.IndexFunc(sidebarRows(s.lines())[searchBarRows:], match); i >= 0 {
+		return i + searchBarRows
+	}
+	return -1
 }
 
 func hasEdge(name string) func(string) bool {
@@ -74,7 +81,7 @@ func TestTeamSectionsAreBoxesInTheRosterAndClicksFollowTheRows(t *testing.T) {
 	teamedFleet(t, s)
 	s.settle()
 
-	rows := sidebarRows(s.lines())
+	rows := sidebarRows(s.lines())[searchBarRows:]
 	for _, team := range []string{"all", "backend", "frontend"} {
 		if !slices.ContainsFunc(rows, hasEdge(team)) {
 			t.Fatalf("no top edge for %s in the sidebar:\n%s", team, s.dump())

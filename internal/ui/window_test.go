@@ -160,13 +160,15 @@ func mouseGestures() []gesture {
 		}, func(b, a App) bool { return a.transcriptIn("s1").scroll != b.transcriptIn("s1").scroll }},
 		{"a click on the roster's first column", threeColumns, 200, 40, func(a App) []tea.MouseMsg {
 			x := a.layout.Width - a.regions().Roster
-			return []tea.MouseMsg{windowPress(x, 2), windowAt(tea.MouseActionRelease, tea.MouseButtonNone, x, 2)}
+			y := searchBarRows + 1 // the first agent, under the search bar and the pinned all
+			return []tea.MouseMsg{windowPress(x, y), windowAt(tea.MouseActionRelease, tea.MouseButtonNone, x, y)}
 		}, func(b, a App) bool { return a.focus != b.focus || a.roster.Selected != b.roster.Selected }},
 		{"a press in the left margin", threeColumns, 200, 40, func(App) []tea.MouseMsg {
 			return []tea.MouseMsg{pressAt(0, 10)}
 		}, func(b, a App) bool { return a.focus != b.focus }},
 		{"a press in the right margin", threeColumns, 200, 40, func(App) []tea.MouseMsg {
-			return []tea.MouseMsg{pressAt(199, 2), {Action: tea.MouseActionRelease, X: 199, Y: 2}}
+			y := searchBarRows + 1 // the first agent
+			return []tea.MouseMsg{pressAt(199, y), {Action: tea.MouseActionRelease, X: 199, Y: y}}
 		}, func(b, a App) bool { return a.focus != b.focus || a.roster.Selected != b.roster.Selected }},
 		{"the wheel on the roster's first column", wheelFleet, 100, 30, func(a App) []tea.MouseMsg {
 			return []tea.MouseMsg{windowAt(tea.MouseActionPress, tea.MouseButtonWheelDown, a.layout.Width-a.regions().Roster, 10)}
@@ -230,10 +232,10 @@ func TestAWindowDragBoundsThePressAndTheFrameByTheNewestWidth(t *testing.T) {
 	if m.app().layout.Width != 98 {
 		t.Fatalf("the grown window's frame is %d wide before the settle, want the old 98", m.app().layout.Width)
 	}
-	if edge := press(grown(t), 98, 2).app(); edge.focus == "" && edge.roster.Selected == "" {
+	if edge := press(grown(t), 98, searchBarRows+1).app(); edge.focus == "" && edge.roster.Selected == "" {
 		t.Fatal("a press on the old frame's last column opened nothing, so the press below proves nothing")
 	}
-	if got := press(m, 139, 2).app(); got.focus != m.app().focus || got.roster.Selected != m.app().roster.Selected {
+	if got := press(m, 139, searchBarRows+1).app(); got.focus != m.app().focus || got.roster.Selected != m.app().roster.Selected {
 		t.Errorf("a press in the grown window's right margin acted on the old frame (focus %q, roster %q)", got.focus, got.roster.Selected)
 	}
 
