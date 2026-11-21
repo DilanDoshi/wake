@@ -92,14 +92,14 @@ func shellFleet(t *testing.T) (*testDaemon, *testClient, leftovers, string) {
 	return d, c, readLeftovers(t, pidfile), pidfile
 }
 
-// /quit is FrameStop: the agent exits on EOF and retire runs.
-func TestAStopSweepsTheShellTheAgentStartedInAGroupOfItsOwn(t *testing.T) {
+// /quit gracefully ends the agent, then retire sweeps the processes it started.
+func TestQuitSweepsTheShellTheAgentStartedInAGroupOfItsOwn(t *testing.T) {
 	_, c, left, _ := shellFleet(t)
 
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.send(rpc.Frame{Kind: rpc.FrameEndSession, SessionID: idAlpha})
 	c.pollState(idAlpha, rpc.StateEnded)
 
-	left.wantGone(t, "stop")
+	left.wantGone(t, "/quit")
 }
 
 func TestWakeStopLeavesNothingOfTheFleetRunning(t *testing.T) {

@@ -303,8 +303,9 @@ const wakeHelpCommand = "wake-help"
 const wakeHelpVerb = SlashPrefix + wakeHelpCommand // for resumeVerb's reason
 
 // quitCommand ends one agent and removes it from this window - `/manager-stop`
-// for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
-// back, and unlike ⌃C park it is not recoverable.
+// for an ordinary session. It writes `rpc.FrameEndSession`, which gives the
+// session a bounded graceful stop before killing its process group if needed.
+// The process is ended, while its transcript remains available to `/resume`.
 //
 // **The word is safe to take on the evidence `new` and `manager` are:** the
 // recorded corpus carries 133 commands claude advertises on its `init` frames

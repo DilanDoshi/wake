@@ -49,6 +49,7 @@ var frameKinds = map[string]string{
 	"FrameDeny":               FrameDeny,
 	"FrameInterrupt":          FrameInterrupt,
 	"FrameStop":               FrameStop,
+	"FrameEndSession":         FrameEndSession,
 	"FramePark":               FramePark,
 	"FrameWake":               FrameWake,
 	"FrameKill":               FrameKill,

@@ -304,8 +304,9 @@ type agent struct {
 	// its own turn end. Folded by trackSub - see subagenttrack.go.
 	runningSubs map[string]struct{}
 
-	stopped bool
-	ended   bool
+	stopped  bool
+	endAsked bool
+	ended    bool
 
 	// stopQueued is a stop on its way to this agent's stdin, behind whatever is
 	// queued before it. It fences the park-ready file the moment the operator

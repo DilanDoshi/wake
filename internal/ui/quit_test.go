@@ -29,8 +29,8 @@ func TestQuitInAConversationEndsThatAgent(t *testing.T) {
 		t.Fatal("the router did not take /quit, so it went to the agent as a message")
 	}
 	f := sentFrame(t, next, cmd)
-	if f.Kind != rpc.FrameStop {
-		t.Errorf("/quit wrote a %q, want a %q: quit is the per-agent ending", f.Kind, rpc.FrameStop)
+	if f.Kind != rpc.FrameEndSession {
+		t.Errorf("/quit wrote a %q, want a %q: quit must end the whole session process tree", f.Kind, rpc.FrameEndSession)
 	}
 	if f.SessionID != "s1" {
 		t.Errorf("/quit in alex's conversation ended %q, want the focused agent s1", f.SessionID)
@@ -49,8 +49,8 @@ func TestMentionedQuitInTheRoomEndsThatAgent(t *testing.T) {
 	go func() { _ = runCmdQuietly(cmd) }()
 	f := awaitFrame(t, sent)
 
-	if f.Kind != rpc.FrameStop {
-		t.Fatalf("@sydney /quit wrote a %q frame, want %q", f.Kind, rpc.FrameStop)
+	if f.Kind != rpc.FrameEndSession {
+		t.Fatalf("@sydney /quit wrote a %q frame, want %q", f.Kind, rpc.FrameEndSession)
 	}
 	if f.SessionID != "s2" {
 		t.Errorf("@sydney /quit ended %q, want sydney (s2)", f.SessionID)
@@ -153,10 +153,10 @@ var quitStates = map[string]struct {
 	kind string
 	why  string
 }{
-	rpc.StateIdle:    {kind: rpc.FrameStop, why: "a process between turns: stdin is open and there is something to end"},
-	rpc.StateWorking: {kind: rpc.FrameStop, why: "mid-turn. The daemon closes stdin and lets the in-flight turn finish, which is what stop has meant here"},
-	rpc.StateSilent:  {kind: rpc.FrameStop, why: "a guess about a working agent that has not spoken, not a state of the process. Its stdin is open, so a stop reaches it"},
-	rpc.StateBlocked: {kind: rpc.FrameStop, why: "park refuses this because the denial nobody made survives the wake. A stop has no wake, and refusing would leave the operator unable to end it"},
+	rpc.StateIdle:    {kind: rpc.FrameEndSession, why: "gracefully close stdin, then end the process group if needed"},
+	rpc.StateWorking: {kind: rpc.FrameEndSession, why: "allow the turn a bounded grace, then end the process group"},
+	rpc.StateSilent:  {kind: rpc.FrameEndSession, why: "a silent process may be wedged, so the bounded grace must lead to a process-group end"},
+	rpc.StateBlocked: {kind: rpc.FrameEndSession, why: "ending is allowed even when a permission request is outstanding"},
 	rpc.StateEnded:   {kind: "", why: "already over, and nothing is lost, so this is silent - interrupt's own trade for an ended session"},
 	rpc.StateParked:  {kind: "", why: "no process, and the daemon refuses a stop at one. /resume wakes it first"},
 }

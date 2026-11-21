@@ -249,7 +249,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   running background work running** (claude 2.1.319; owner's 2026-11-11 ruling): a running agent, shell or
   workflow keeps its sidebar row and backlog across a `/clear`, in the fleet and in the daemon's replay, its
   ending arrives under the new conversation and is named, and a finished one goes (`Fleet.keepRunning`).
-- `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
+- `/quit` gracefully stops one agent, then kills its process group after the bounded grace if it is
+  still running; its ending also sweeps recorded child groups. It drops its row **per window** once
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - **A team's verbs** (owner's 2026-11-09 yes, `internal/ui/teamverbs.go`): `/park @team` parks its live
   members but a blocked one and confirms once for the team; `/resume <team>` wakes its parked ones, the

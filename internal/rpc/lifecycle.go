@@ -57,6 +57,11 @@ const (
 	// signal, and it must never be routed to the kill path.
 	FrameStop = "stop"
 
+	// FrameEndSession lets the session finish for a bounded grace period, then
+	// kills its process group if Claude or any child it started is still alive.
+	// It is the per-session, irreversible /quit operation.
+	FrameEndSession = "end_session"
+
 	// FramePark stops one session's process and keeps everything else about
 	// it: its id, its transcript on disk, its name, its label and the
 	// directory it ran in. It is the recoverable ending, and it is what made

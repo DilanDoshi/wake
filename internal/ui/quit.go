@@ -5,11 +5,10 @@ package ui
 // # Why it is a stop and not a park
 //
 // ⌃C parks the focused agent: the process stops, the transcript stays, and
-// `/resume` brings it back. `/quit` is the other ending, the one `wake stop` and
-// `/manager-stop` already spell - `rpc.FrameStop`, which closes stdin, lets the
-// in-flight turn finish, and releases the name back to the pool. Nothing brings
-// it back, which is why it is a typed verb rather than a key: a reflex must not
-// reach the one thing that cannot be undone.
+// `/resume` brings it back. `/quit` closes stdin, gives the in-flight turn a
+// bounded grace, then kills the session's process group if it is still alive.
+// The ending releases its name; the transcript remains on disk for a later
+// `/resume`. It is a typed verb rather than a key because it ends the process.
 //
 // # Why removal is a client-side fold and not a daemon change
 //
@@ -130,7 +129,7 @@ func (a App) quitOne(agent Agent) (App, tea.Cmd) {
 	}
 	a = a.clearDraft()
 	notice.Report(quitAsked, agentPrefix, agent.Name)
-	return a.awaitingQuit(agent.ID), a.write(quitFailed, rpc.Frame{Kind: rpc.FrameStop, SessionID: agent.ID})
+	return a.awaitingQuit(agent.ID), a.write(quitFailed, rpc.Frame{Kind: rpc.FrameEndSession, SessionID: agent.ID})
 }
 
 // awaitingQuit remembers a quit this client asked for, so the report that
