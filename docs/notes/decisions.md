@@ -6406,3 +6406,52 @@ byte); only the drawing was wrong, and it lost the argument.
   Wake's commands should leave an orange line is new behaviour, left to the owner.
 - Rendering and decoding only. What reaches claude (2.1.322) is unchanged; no routing file is touched.
 - Held by `internal/ui/skillecho_test.go` and `internal/core/skillcall_test.go`.
+
+## 2026-11-18 — a blurred window draws no caret and no focus colour (the owner, via wake-orch)
+
+The ask: "when I am clicked off the Wake session, i.e. a different terminal window, can the cursor and the
+colour around the query bar go away?" The terminal says so (DECSET 1004), Bubble Tea delivers `BlurMsg` and
+`FocusMsg` once `tea.WithReportFocus` asks, and a terminal that never reports is a window that is focused.
+
+- **The caret was already bubbles'.** `cursor.Update` blurs on `BlurMsg` (hidden, no re-arm: the tick in flight
+  is dropped) and focuses on `FocusMsg` (shown, blink restarted), and `update`'s fall-through already hands
+  every unclaimed message to the focused composer. So the caret needed no Wake code, only the messages;
+  `windowfocus_test.go` pins it, since a bubbles upgrade is what could change it.
+- **The border is Wake's.** `Composer.windowBlurred` joins `blurred` in `boxStyle`, the one predicate, set for
+  every composer in `composersFocused` (the loop `withFocus` already ran). The resume picker's search box is
+  the other accent-bordered input, and the `/workflows` save dialog draws its own caret (a reverse-video
+  cell): both take the flag at draw time. `Refocus` does nothing in a blurred window: a pane that takes the
+  keys behind it (a fork arriving, a click) must not light up.
+- **A typed key heals a missed report; a wheel or a paste does not.** A typed key cannot come from an
+  unfocused window, and a window left dark for good is worse than one lit a moment too long. A terminal
+  delivers the wheel over a window without focus, and a paste can arrive in one (a drop on a background
+  window, tmux's `paste-buffer`), so neither proves it.
+- **Bubble Tea drops a report that shares a read with other bytes.** `detectReportFocus` compares the
+  remainder of the read whole, so `ESC [ O` followed by a mouse report is dropped, silently and without keys
+  (measured: every case with a neighbour lost it). A click that focuses a window sends the report and the
+  press together, so `alignedPipe.Read` moves the last report to the end of the read (`focusLast`; of several
+  the last is the state) - **only when the rest of the read is mouse reports.** The first version reordered
+  whatever shared the read, and the adversarial review found what that breaks: a paste whose end marker lands
+  in a later read took the report into its text, and Bubble Tea's own `ESC [ O A` (Shift+Up in the DECCKM
+  form) became the rune A and a blur. Anything else is left as it was, and the report is dropped as before.
+  How often a real terminal glues the two was not measured: none was available. **A paste spanning reads is
+  tracked** (`alignedPipe.pasting`, `pasteOpen`): the second review found that a paste whose body is nothing but
+  report-shaped bytes had its middle read reordered, since `focusLast` sees one chunk and cannot know a paste is
+  open. While one is open every byte is the paste's and `focusLast` does not run. That state is lost if the
+  chunk holding an end marker is dropped (the pump drops a whole read when the forward queue is full): reordering
+  then stays off until the next paste's markers, which is today's behaviour, the report dropped.
+- **Known, and Bubble Tea's.** An Escape keypress and a report in one read decode as alt+esc and `[O` with or
+  without `focusLast`; a report split right after its ESC across two reads (SSH, tmux) arrives as an Escape
+  and `[O`, and disarms ⌃C⌃C - the lone-ESC residual `chunker.step` documents for mouse reports.
+- **The kill switch ignores reports for ⌃C⌃C.** They are the terminal's, not the operator's; a mouse report
+  still disarms, as any input does. The emergency restore writes `?1004l`, or a wedged exit leaves the shell
+  sent a report on every window switch.
+- **A hand-over needs no code of its own.** Bubble Tea's release turns reporting off before the child runs and
+  its restore turns it on after; `TestTheHandOverSwitchesFocusReportingOffForTheChildAndBackOn` pins Bubble
+  Tea's order (it reads what Bubble Tea writes, not the tty the child is handed). The hand-over starts from a
+  key (`↵` or a digit in the `/mcp` menu), which has already healed a window thought blurred, so there is no
+  reset on its return; a terminal does not say what it holds when reporting is switched back on, and a sign-in
+  that opens a browser may well return to a blurred window, which costs today's behaviour until the next report.
+- **Not done:** the real terminals. Only a pty and vt10x ran; cmux, Terminal.app, iTerm2, Ghostty and tmux
+  (`focus-events on`) are `live-testing.md`'s checklist. Held by `windowfocus_test.go`,
+  `cmd/wake/focusreport_unix_test.go` and `focusscreen_unix_test.go`.
