@@ -87,7 +87,7 @@ func (a App) assembleFrame() string {
 		}
 		side := roster.Column(a.fleet.sectioned(listed), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), a.room.channel)
 		if a.searchBarShown() {
-			side = a.searchBar(r.Roster-dividerWidth) + "\n" + side // the filter over it; see sidebarsearch.go
+			side = a.searchBar(r.Roster-dividerWidth, len(listed), len(agents)) + "\n" + side // the filter over it; see sidebarsearch.go
 		}
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go

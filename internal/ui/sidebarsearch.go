@@ -197,8 +197,9 @@ func (a App) openSearched(place func(App, string, string) App) App {
 }
 
 // searchBar is the three rows drawn over the roster: the filter in a box that is lit
-// while it holds the keys, with how many of the roster it found once there is a filter.
-func (a App) searchBar(width int) string {
+// while it holds the keys, with how many of the roster's total it found once there is
+// a filter. The counts come from the frame, which ranks the roster once.
+func (a App) searchBar(width, found, total int) string {
 	focus, query := a.barFocused(), a.sideSearch.Query
 	edge := HintStyle
 	if focus {
@@ -219,7 +220,7 @@ func (a App) searchBar(width int) string {
 		if !focus {
 			style = AccentStyle // a filter standing while the keys are elsewhere stays visible
 		}
-		count = style.Render(fmt.Sprintf("%d/%d", len(a.rosterAgents()), len(a.fleet.OnRoster())))
+		count = style.Render(fmt.Sprintf("%d/%d", found, total))
 	}
 	inner := max(width-2*boxInset, 1)
 	room := max(inner-ansi.StringWidth(count)-ansi.StringWidth(glyph), 0)

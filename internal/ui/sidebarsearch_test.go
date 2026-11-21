@@ -484,7 +484,7 @@ func TestTheBarIsExactlyAsWideAsTheSidebarAtEveryWidth(t *testing.T) {
 		for _, focus := range []bool{false, true} {
 			a.sideSearch = SideSearch{Query: query, Focus: focus}
 			for w := 12; w <= 40; w++ {
-				for i, row := range strings.Split(a.searchBar(w), "\n") {
+				for i, row := range strings.Split(a.searchBar(w, 3, 8), "\n") {
 					if got := ansi.StringWidth(row); got != w {
 						t.Errorf("width %d, query %q, focus %v: row %d is %d cells wide", w, query, focus, i, got)
 					}
