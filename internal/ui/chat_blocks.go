@@ -493,14 +493,20 @@ func resolvedLine(ev core.Event, a Agent, width int) string {
 	case noticeTakenBack:
 		return mutedLine(takenBackLead+a.Name, width)
 	case core.NoticeAutoResumed:
-		tail := autoResumedTail
-		if reconnected(ev.MessageID) {
-			tail = autoReconnectedTail
-		}
-		return mutedLine(autoResumedLead+a.Name+tail, width)
+		return mutedLine(autoResumedText(ev, a), width)
 	default:
 		return ""
 	}
+}
+
+// autoResumedText is the daemon's resume of an agent: the words, without the count
+// a run of them draws (roomresumefold.go).
+func autoResumedText(ev core.Event, a Agent) string {
+	tail := autoResumedTail
+	if reconnected(ev.MessageID) {
+		tail = autoReconnectedTail
+	}
+	return autoResumedLead + a.Name + tail
 }
 
 // speaker is who is talking: the name, and what they are on.
