@@ -470,12 +470,13 @@ func TestABelowDropInASingleColumnLayoutStillSplitsTheShownColumn(t *testing.T) 
 	}
 }
 
-// The outline over the shown pane is the whole pane area: where the agent lands.
+// The outline over the shown pane is that pane's own rect, as the draw's hit-testing
+// and the laid-out size see it: where the agent replacing it lands.
 func TestTheNewColumnOutlineInASingleColumnLayoutIsTheShownPane(t *testing.T) {
 	a := narrowFleet(t)
 	x, y, w, h, ok := a.zoneRect(dropZone{kind: zoneColumn}, "s3")
-	px, py, pw, ph, pok := paneRectOf(a, "s1")
-	if !ok || !pok || x != px || y != py || w != pw || h != ph {
-		t.Errorf("outline (%d,%d %dx%d ok=%v), shown pane (%d,%d %dx%d ok=%v)", x, y, w, h, ok, px, py, pw, ph, pok)
+	if !ok {
+		t.Fatal("no outline over the shown pane")
 	}
+	landsAt(t, "the shown pane", a, "s1", x, y, w, h)
 }
