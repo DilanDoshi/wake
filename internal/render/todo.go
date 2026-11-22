@@ -2,12 +2,12 @@ package render
 
 // An agent's task list, the way Claude Code draws one.
 //
-// The glyphs are Claude's: ☐ and ☑ are in the shipped binary, and the filled
-// square marking the item in progress is measured off a side-by-side. Colour
-// carries the same split - the item being worked on is the accent, everything
-// else recedes - because the question this block answers at a glance is "what
-// is it doing now", and a checklist where every row is equally bright answers
-// it no better than no checklist.
+// The glyphs are Claude's: ☐ and ☑ are matched against Claude Code by hand, and
+// the filled square marking the item in progress is measured off a side-by-side.
+// Colour carries the same split - the item being worked on is the accent,
+// everything else recedes - because the question this block answers at a glance
+// is "what is it doing now", and a checklist where every row is equally bright
+// answers it no better than no checklist.
 //
 // The list is bounded. An agent's plan is arbitrary length and this block sits
 // in a transcript beside thirty others; what is kept is the work in flight and

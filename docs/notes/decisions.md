@@ -8,6 +8,32 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-20 — the task tools follow Claude Code's default: Wake does not turn them on (the owner, via wake-orch)
+
+wake-orch's check of the task-label surfaces found the pinned checklist and the working label on the conversation
+line, the room line and the `/board` row never fire for a default agent.
+
+- **It is the model.** Claude Code's public docs ("Task tool availability", code.claude.com/docs/en/tools-reference)
+  offer `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier,
+  and its CHANGELOG dates the change (2.1.233 took them off the newest models, 2.1.268 made it the allow-list). The
+  corpus fits: before 2.1.233 Sonnet 5 and Opus 5 inits list them (a `--tools`-restricted run lists none); from 2.1.233
+  on every init that lists them is Haiku 4.5 or Sonnet 4.5, and every Sonnet 5.x, Opus 5.5 and Haiku 5.5 init from
+  2.1.281 on lists none.
+- **The ruling: Wake does not export `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` to its agents** - not in `core.agentEnv`, not
+  anywhere - and follows Claude Code's own default, since claude is going that way. An operator who wants the list
+  exports the variable before the first `wake` of a fleet: Wake passes the environment through (`core.agentEnv`
+  scrubs only the nested-session and launcher variables) and a daemon starts its agents with the one it began with.
+  `docs/user_manual/02-the-room.md` says so.
+- **Why not forced.** Observed once, unrecorded (haiku-5-5, claude 2.1.328, tools on): a three-item job cost ten extra
+  tool calls - a `ToolSearch` to load the deferred tools, three `TaskCreate`, six `TaskUpdate` - and the tools'
+  definitions and reminders sit in every agent's context, times thirty agents. The docs say newer models keep track of
+  multi-step work without a written checklist.
+- **What goes with it.** With the tools on, the label of the item in flight is its `activeForm`, else its subject:
+  claude's CHANGELOG (2.1.69) made `activeForm` optional, and that same run sent none (observed once, unrecorded). The
+  fallback is held by `internal/ui/checklist_label_test.go`, and the airlock's decode of a subject-only `TaskCreate` by
+  `internal/core/checklist_op_test.go`. A blank label or subject is not a label. The fallback widens the known
+  subagent-commingling gap (`deferred.md`, 2026-08-26): an unlabelled subagent item can now reach a parent's line.
+
 ## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
 
 The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again

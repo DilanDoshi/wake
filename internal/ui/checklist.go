@@ -10,11 +10,12 @@ import (
 // The live checklist fold: a run of TaskCreate/TaskUpdate ops accumulated into
 // the list a renderer draws.
 //
-// Claude 2.1.240 retired TodoWrite, whose one call carried the whole list, for
-// TaskCreate/TaskUpdate, which build the list across many calls. So the
-// accumulation the renderer used to get for free is done here, and the snapshot
-// attached to the call that produced it - so the renderer (render.TodoList) and
-// the working line (activeForm) read a finished list off the event, unchanged.
+// Claude's task tools, which only some models are offered (see CLAUDE.md), build
+// the list across many TaskCreate/TaskUpdate calls where TodoWrite's one call
+// carried it whole. So the accumulation the renderer used to get for free is
+// done here, and the snapshot attached to the call that produced it - so the
+// renderer (render.TodoList) and the working line (activeForm) read a finished
+// list off the event, unchanged.
 //
 // It is folded in two places that share this one type: the Fleet, for the
 // working line an agent shows while it has no pane open, and the DM, so a

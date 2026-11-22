@@ -249,12 +249,14 @@ const (
 	wireTodoActive = "in_progress"
 	wireTodoDone   = "completed"
 
-	// The live checklist tools. TodoWrite is retired in 2.1.240 (off unless
-	// CLAUDE_CODE_ENABLE_TASKS is false); its replacement builds a list from a
-	// run of TaskCreate/TaskUpdate calls. Named rather than payload-keyed like
-	// toolTodos: create and update share a generic `subject`, and the
-	// create-vs-update distinction *is* the tool identity - only the name tells
-	// a create that also happens to name a status from an update.
+	// The live checklist tools, which Claude Code offers by default only on an
+	// allow-list of older models (opt in: CLAUDE_CODE_ENABLE_TODO_TOOLS=1; the
+	// public docs' "Task tool availability"). They build a list from a run of
+	// TaskCreate/TaskUpdate calls where TodoWrite sent it whole. Named rather
+	// than payload-keyed like toolTodos: create and update share a generic
+	// `subject`, and the create-vs-update distinction *is* the tool identity -
+	// only the name tells a create that also happens to name a status from an
+	// update.
 	toolTaskCreate = "TaskCreate"
 	toolTaskUpdate = "TaskUpdate"
 	taskSubjectKey = "subject"

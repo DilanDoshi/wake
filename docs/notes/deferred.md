@@ -665,8 +665,9 @@ relabel `idle`, which is wrong the moment a task takes more than one turn.
 items going all-`completed` is the agent's *own* declaration that its self-tracked plan is finished —
 a semantic signal, per-agent, already decoded (`internal/ui/checklist.go`; `status` is
 `pending|in_progress|completed`). An "all items completed" derivation (which `checklist.go` does not
-expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (it is
-off unless `CLAUDE_CODE_ENABLE_TASKS`), so it is a signal *when present*, not a universal one.
+expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (the task
+tools are model-gated: a default Sonnet, Opus or Haiku 5.x agent has none, `decisions.md` 2026-11-20), so it is
+a signal *when present*, not a universal one.
 
 **Candidate approaches (none decided):**
 - **Derive "done" client-side from the checklist** — all items `completed` → a "done" annotation on the
@@ -1141,8 +1142,11 @@ excludes subagents, so the board is correct. The commingling only touches the wo
 subagent's *inline* forwarded list. A one-line `ev.Subagent == nil` guard in `Fleet.foldChecklist`
 would stop the pollution but also blank the subagent's inline list (its `Todos` comes from that very
 fold), so a real fix is a **per-subagent checklist** rather than a guard — new machinery, out of the
-board PR's scope. **Unverified whether subagents emit these ops at all** (no corpus fixture does), so
-this is latent until one is recorded.
+board PR's scope. **Live whenever the session has the tools:** Claude Code's tools reference ("Task-tracking
+tools in subagents and agent teams") says a subagent has them whenever its session does, whatever its model,
+though no corpus fixture records one using them. **Widened 2026-11-20:** `activeForm()` now falls back to an
+item's subject, so a subagent's in-progress item with no `activeForm` reaches the parent's `Doing` as a
+labelled one already did. The pinned board stays correct, so the working line can name an item it does not show.
 
 *Blocks:* nothing; correctness of a subagent's own inline checklist and the parent's working line, if
 subagents turn out to author task lists.
