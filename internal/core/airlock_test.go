@@ -272,6 +272,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// A self-paced loop's own wakeup turn names itself on its lifecycle, which
 	// is how the daemon tells that its loop ended (foldWakeup).
 	"wakeup_source", "loop_wakeup",
+	// The same wakeup on disk: its user record carries the loop's own command, and
+	// these two keys say claude, not the operator, started that turn.
+	"wakeupSource", "turnOrigin",
 
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
@@ -525,6 +528,9 @@ var deliberatelyGeneric = wordSet([]string{
 	// A send-now's priority value and origin kind: plain English, and "human"
 	// is already a word Wake spells (mcp's reserved names).
 	"now", "human",
+	// turnOrigin's value for a turn claude started itself: plain English, and no
+	// route in without "turnOrigin", which is policed.
+	"scheduled",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
@@ -848,7 +854,10 @@ var notNamedByTheAirlock = map[string]string{
 // 259 → 263: a skill call's record, <command-message>, </command-message>,
 // </command-name> and <command-args>, which unwrapSkillCall reads back as the
 // command that was typed. loop-self-paced-end.jsonl, workflow-saved-command.jsonl.
-const policedWordCount = 263
+// 263 → 265: "wakeupSource" and "turnOrigin", the on-disk marks of a turn claude
+// started itself (a loop's wakeup), which DecodeTranscriptLine reads so that
+// record is never the operator's turn. loop-wakeup-turn.jsonl.
+const policedWordCount = 265
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

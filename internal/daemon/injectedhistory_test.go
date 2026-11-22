@@ -20,9 +20,13 @@ import (
 var injectedFixtures = map[string]string{
 	"subagent-handback.jsonl": "33333333-3333-4333-8333-333333333333",
 	"injected-meta.jsonl":     "77777777-0000-4000-8000-000000000000",
+	"loop-wakeup-turn.jsonl":  "b21fc9dd-3e72-4e83-ab96-7bbb2ac8e4d6",
 }
 
 const typedTurn = "the only turn the operator typed"
+
+// loopWakeupUUID is the uuid of loop-wakeup-turn.jsonl's one record.
+const loopWakeupUUID = "80322a09-aa16-4fd6-bedc-58ba48a1db79"
 
 func injectedTranscript(t *testing.T, fixture, root string) []string {
 	t.Helper()
@@ -35,7 +39,8 @@ func injectedTranscript(t *testing.T, fixture, root string) []string {
 }
 
 // A reopened conversation shows the operator's own turns and nothing claude
-// injected as one - a subagent's hand-back, a skill's body, an idle notice.
+// injected as one - a subagent's hand-back, a skill's body, an idle notice, the
+// turn it started itself for a loop's wakeup.
 func TestARestoredConversationHasNoInjectedTurn(t *testing.T) {
 	for fixture, root := range injectedFixtures {
 		t.Run(fixture, func(t *testing.T) {
@@ -82,6 +87,15 @@ func TestRewindTargetsOfferNoInjectedTurn(t *testing.T) {
 		})
 		if len(f.RewindTargets) != 1 || f.RewindTargets[0].UUID != root {
 			t.Errorf("%s: rewind targets = %+v, want only the typed turn %s", fixture, f.RewindTargets, root)
+		}
+		// Claude's tip is its newest turn, and a turn it started itself counts: a rewind
+		// declaring the prompt before a loop's wakeup is refused as an "unseen later turn".
+		tip := root
+		if fixture == "loop-wakeup-turn.jsonl" {
+			tip = loopWakeupUUID
+		}
+		if f.RewindLastSeen != tip {
+			t.Errorf("%s: the tip a rewind declares = %q, want %q", fixture, f.RewindLastSeen, tip)
 		}
 	}
 }

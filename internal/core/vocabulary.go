@@ -761,6 +761,33 @@ func (e Event) MessageEnded() bool {
 // loop's next iteration (loop-self-paced-end.jsonl:53).
 const wakeupLoop = "loop_wakeup"
 
+// claudeOwnMarks say claude wrote a user record itself, never the operator's turn (loop-wakeup-turn.jsonl).
+type claudeOwnMarks struct {
+	Meta         bool   `json:"isMeta"`
+	WakeupSource string `json:"wakeupSource"`
+	TurnOrigin   string `json:"turnOrigin"`
+}
+
+func (m claudeOwnMarks) claimed() bool {
+	return m.Meta || m.WakeupSource != "" || m.TurnOrigin == "scheduled"
+}
+
+// claudesTurn takes the operator's turn out of such a record. One that started a turn is restored as
+// the started state the live stream gives it (a loop's: LoopWakeup); an isMeta record starts none.
+func (m claudeOwnMarks) claudesTurn(events []Event) []Event {
+	out, started := make([]Event, 0, len(events)), false
+	for _, ev := range events {
+		switch {
+		case ev.Kind != KindUserText || ev.Notice != "":
+			out = append(out, ev)
+		case !m.Meta && !started:
+			ev.Kind, ev.Text, ev.LoopWakeup, started = KindMessageState, "started", m.WakeupSource == wakeupLoop, true
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
 // MessageStarted reports claude taking up a message Wake sent: into the running
 // turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
 // midturn-later.jsonl:52); or starting a loop's wakeup turn (LoopWakeup).

@@ -53,7 +53,7 @@ func TestHistoryLeavesOutAResumesClose(t *testing.T) {
 
 func TestAResumesCloseIsNoRewindTarget(t *testing.T) {
 	plantTranscript(t, histID, resumeFixture(t, "resume-interrupted.jsonl")...)
-	targets, err := RewindTargets(histID)
+	targets, _, err := RewindTargets(histID)
 	if err != nil {
 		t.Fatalf("RewindTargets: %v", err)
 	}
