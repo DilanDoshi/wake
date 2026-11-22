@@ -33,10 +33,6 @@ var quitGrace = defaultQuitGrace
 
 const defaultQuitGrace = 30 * time.Second
 
-// agentSettle is how often shutdown re-checks whether the sessions it
-// stopped have actually ended.
-const agentSettle = 20 * time.Millisecond
-
 // shutdownWait bounds the last wait of all: everything this server started,
 // after every session has ended or been killed. Short, because by this point
 // nothing legitimate is still working.
@@ -365,12 +361,7 @@ func (s *server) shutdown() error {
 		}
 		s.stopForShutdown(a, parking)
 	}
-	remaining := waitForAgents(agents, quitGrace)
-	s.noteFleet(remaining) // what started during the grace, before its kill
-	for _, a := range remaining {
-		logf("wake: session %s did not end within %v of being stopped; ending its process group", a.id, quitGrace)
-		a.endForShutdown(parking)
-	}
+	s.endAfterGrace(agents, quitGrace, parking)
 
 	// The park book's two arms are in different places, and the asymmetry is
 	// the rule rather than an accident: **an entry that must exist has to be
@@ -485,23 +476,6 @@ func (s *server) takeAgents() []*agent {
 	}
 	s.agents = make(map[string]*agent)
 	return out
-}
-
-// waitForAgents returns the agents that had not ended within grace.
-func waitForAgents(agents []*agent, grace time.Duration) []*agent {
-	deadline := time.Now().Add(grace)
-	for {
-		var alive []*agent
-		for _, a := range agents {
-			if !a.finished() {
-				alive = append(alive, a)
-			}
-		}
-		if len(alive) == 0 || !time.Now().Before(deadline) {
-			return alive
-		}
-		time.Sleep(agentSettle)
-	}
 }
 
 func (s *server) closeClients() {

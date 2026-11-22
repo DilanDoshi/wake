@@ -654,9 +654,9 @@ func bareAgent() *agent {
 	return newAgent(idAlpha, "alex", "dev", "/tmp/repo", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
 }
 
-// A stop the agent's queue refused did not happen, and the agent goes on
-// running: taking its only crash record with it would lose it to a crash.
-func TestARejectedStopKeepsTheParkReadyRecord(t *testing.T) {
+// A quit of an agent whose queue is full still goes ahead - that agent is the
+// wedged one the grace's kill is for - so its record is fenced like any quit's.
+func TestAQuitOfAnAgentWithAFullQueueStillFencesItsParkReadyRecord(t *testing.T) {
 	sock := tempSocket(t)
 	s := newServer(sock)
 	a := bareAgent()
@@ -672,22 +672,22 @@ func TestARejectedStopKeepsTheParkReadyRecord(t *testing.T) {
 
 	s.submit(newClient(conn), rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
 
-	if _, ok := loadParkReady(parkReadyPath(sock))[idAlpha]; !ok {
-		t.Error("a stop that was refused removed the record of an agent that is still running")
+	if _, ok := loadParkReady(parkReadyPath(sock))[idAlpha]; ok {
+		t.Error("a quit of an agent with a full queue left the record a crash would park")
 	}
-	if a.departed() {
-		t.Error("a stop that was refused left the agent fenced out of the park-ready file")
+	if !a.departed() {
+		t.Error("a quit of an agent with a full queue left it offering its record to every status push")
 	}
 }
 
-// The fence goes up when the operator asks, not when the stop is carried out
-// behind whatever is queued first, and a row taken before it cannot land after.
+// The fence goes up when the operator asks, not when the stop reaches stdin, and
+// a row taken before it cannot land after.
 func TestAQueuedStopFencesTheParkReadyWriters(t *testing.T) {
 	s := newServer(tempSocket(t))
 	a := bareAgent()
 	before, _ := a.runningRecord()
 
-	a.markStopQueued(true)
+	a.beginQuit()
 	s.forgetReady(a.id)
 
 	if err := s.keepReady(a); err != nil {
@@ -743,9 +743,8 @@ func TestAnOlderRowLandingLateDoesNotUndoANewerOne(t *testing.T) {
 	}
 }
 
-// The stop is queued behind whatever the agent was sent first and may sit there
-// a while; the fence is up from the moment it was accepted, not when it is
-// carried out. No input goroutine runs here, so the stop is never carried out.
+// The stop is carried out on goroutines that may take a while to get anywhere;
+// the fence is up from the moment it was accepted, not when it is carried out.
 func TestAQueuedStopIsFencedFromTheMomentItIsAccepted(t *testing.T) {
 	s := newServer(tempSocket(t))
 	a := bareAgent()

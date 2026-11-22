@@ -37,23 +37,15 @@ type pending struct {
 	resume *resumeAsk
 }
 
-// submit hands a stdin-bound frame to the agent that owns it. A stop is fenced
-// out of the park-ready file before its row goes - an operator's stop is not a
-// crash for the next daemon to undo, and its turn may take a while to end - and
-// is taken back if the stop was not queued.
+// submit hands a stdin-bound frame to the agent that owns it. A stop is not
+// queued behind what the agent was sent: it is a /quit, which interrupts, stops
+// and ends by force what ignores both, on goroutines of its own (quitAgent).
 func (s *server) submit(c *client, f rpc.Frame) {
 	s.withAgent(c, f, func(a *agent) error {
-		if f.Kind != rpc.FrameStop {
-			return a.submit(c, f)
+		if f.Kind == rpc.FrameStop {
+			return s.quitAgent(a)
 		}
-		a.markStopQueued(true)
-		s.forgetReady(a.id)
-		err := a.submit(c, f)
-		if err != nil {
-			a.markStopQueued(false)
-			s.noteReady(a)
-		}
-		return err
+		return a.submit(c, f)
 	})
 }
 
@@ -232,10 +224,6 @@ func (a *agent) apply(p pending) {
 			a.refuse(p, err)
 			return
 		}
-	case rpc.FrameStop:
-		// Here rather than on the connection's goroutine so it lands behind
-		// the messages already queued for this agent - see dispatch.
-		err = a.stopWorld() // noted while claude lives: once it exits its shells are nobody's child
 	case rpc.FramePark:
 		// The label before the stop, never after: retire runs the moment the
 		// events channel closes, which can be before this function returns.

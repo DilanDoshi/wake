@@ -426,27 +426,28 @@ func TestAParkInATurnTheAgentStartedItselfLetsTheTurnFinish(t *testing.T) {
 	}
 }
 
-// A message typed before the stop is the stop's to finish: it is queued behind
+// A message typed before a park is the park's to finish: it is queued behind
 // the turn in flight, and that turn's end is not the end of what was given.
-func TestAMessageQueuedBeforeTheStopIsAnsweredEvenWithAShellRunning(t *testing.T) {
+func TestAMessageQueuedBeforeTheParkIsAnsweredEvenWithAShellRunning(t *testing.T) {
 	t.Setenv(fakeSlowEnv, "600ms")
-	_, c, left := holdFleet(t)
+	_, c, _ := holdFleet(t)
 
 	for _, text := range []string{"first", "second"} {
 		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: text, MessageID: uuid.NewString()})
 	}
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
 	c.awaitEvent(idAlpha, "second")
-	c.pollState(idAlpha, rpc.StateEnded)
-
-	left.wantGone(t, "a stop after two messages")
+	c.awaitState(idAlpha, rpc.StateParked)
 }
 
-// A shell that starts after the stop's listing, in the turn the stop lets run,
-// is noted before claude is ended for it, or nothing would ever reach it.
+// A shell that starts after the stop's listing, in a turn the agent runs on
+// through, is noted before claude is ended for it, or nothing would ever reach
+// it. An interrupt frees a claude from its shell, so this is the agent that
+// ignored one and is held open by the shell it started.
 func TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent(t *testing.T) {
 	pidfile := filepath.Join(t.TempDir(), "pids")
 	t.Setenv(fakePidfileEnv, pidfile)
+	t.Setenv(fakeIgnoreInterruptEnv, "1")
 	t.Setenv(fakeTaskEnv, "1")
 	t.Setenv(fakeHoldEnv, "1")
 	t.Setenv(fakeLateEnv, "1")

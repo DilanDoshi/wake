@@ -37,6 +37,10 @@ const (
 	// fakeSelfTurnEnv makes the agent open a turn of its own after "ready", this
 	// long: claude does, when a background task finishes.
 	fakeSelfTurnEnv = "WAKE_FAKE_SELFTURN"
+	// fakeIgnoreInterruptEnv makes the agent acknowledge an interrupt and do
+	// nothing about it, as a claude wedged past one would: it is not freed from
+	// its shell, so only the daemon's kill after the grace ends it.
+	fakeIgnoreInterruptEnv = "WAKE_FAKE_IGNORE_INTERRUPT"
 	// fakePidfileEnv names the file the pids are written beside: the shell's
 	// pid in it, the shell's child in <it>.gc, the agent's own-group child in
 	// <it>.own.
@@ -128,7 +132,8 @@ func fakeShellGroup(sid string) int {
 	for line := range stdinLines() {
 		if strings.Contains(line, `"type":"control_request"`) {
 			if strings.Contains(line, `"subtype":"interrupt"`) {
-				interrupted = true
+				logInterrupt()
+				interrupted = os.Getenv(fakeIgnoreInterruptEnv) != "1"
 				fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"still_queued":[]}}}`+"\n",
 					controlRequestID(line))
 			}
