@@ -123,35 +123,8 @@ func TestMessagesReachTheSessionTheyAreAddressedTo(t *testing.T) {
 	}
 }
 
-// Stop is not kill, and this is the difference in one test: an agent that is
-// mid-turn when the stop arrives finishes the turn. Stop closes stdin; the
-// process exits on the EOF *after* the work it was doing.
-//
-// The delay is the whole discrimination. Against a kill, or against any stop
-// that signalled, the reply never arrives.
-func TestStopLetsTheInFlightTurnFinish(t *testing.T) {
-	fakeClaudeOnPath(t, "slow")
-	t.Setenv(fakeDelayEnv, "300ms")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-
-	c.spawn(idAlpha, "sydney")
-	c.awaitEvent(idAlpha, "ready")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "one last thing"})
-
-	// Stopped while the turn is still running.
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
-
-	c.awaitEvent(idAlpha, "one last thing")
-	c.pollState(idAlpha, rpc.StateEnded)
-
-	if st := c.status(); len(live(st)) != 0 {
-		t.Errorf("status = %+v, want the stopped session gone from the roster", st.Sessions)
-	}
-}
-
-// The other half: a hard kill is available and it is a different verb.
-// Whether an agent is killed mid-Edit must be a decision somebody made.
+// A hard kill is available and it is a different verb from stop, which ends the
+// agent by itself and kills only what outlasts the grace (quit_unix_test.go).
 func TestKillEndsTheTurnStopWouldHaveWaitedFor(t *testing.T) {
 	fakeClaudeOnPath(t, "slow")
 	t.Setenv(fakeDelayEnv, "10s")

@@ -45,35 +45,19 @@ func TestAQuitInterruptsFirstSoAShellDoesNotHoldTheAgentOpen(t *testing.T) {
 // grace has run, and the group it started while the grace ran - with no task
 // event, so nothing noted it - is swept with it: the world is noted again first.
 func TestAQuitEndsAnAgentThatIgnoredBothAndSweepsAGroupItStartedMeanwhile(t *testing.T) {
-	pidfile := filepath.Join(t.TempDir(), "pids")
-	t.Setenv(fakePidfileEnv, pidfile)
-	t.Setenv(fakeHoldEnv, "1")
-	t.Setenv(fakeLateEnv, "1")
-	t.Setenv(fakeSlowEnv, "400ms")
-	t.Setenv(fakeIgnoreInterruptEnv, "1")
-	fakeClaudeOnPath(t, "shellgroup")
-	shortQuitGrace(t, time.Second)
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "alex")
-	c.awaitEvent(idAlpha, "ready")
+	_, c, read := lateGroupFleet(t)
 
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
 	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha}) // its listing is before the group exists
 	c.pollState(idAlpha, rpc.StateEnded)
 
-	left := leftovers{shell: waitForPid(t, pidfile), shellChild: waitForPid(t, pidfile+".gc"), own: waitForPid(t, pidfile+".own")}
-	t.Cleanup(func() {
-		for _, pid := range left.all() {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-		}
-	})
-	left.wantGone(t, "a quit of an agent that ignored the interrupt and the stop") // the daemon is still running
+	read().wantGone(t, "a quit of an agent that ignored the interrupt and the stop") // the daemon is still running
 }
 
-// A turn that ends inside the grace ends the agent by itself: nothing is killed.
-func TestAQuitDoesNotKillATurnThatEndsInsideTheGrace(t *testing.T) {
-	t.Setenv(fakeDelayEnv, "700ms")
+// A turn that ends late in the grace still ends the agent by itself: the grace is
+// waited out in full, and nothing is killed before it has run.
+func TestAQuitDoesNotKillATurnThatEndsLateInTheGrace(t *testing.T) {
+	t.Setenv(fakeDelayEnv, "3s")
+	t.Setenv(fakeInstantControlEnv, "1")
 	logs := captureLog(t)
 	grace := 4 * time.Second
 	shortQuitGrace(t, grace)
@@ -206,13 +190,7 @@ func TestAQuitOfAnAgentWithAFullQueueIsEndedAfterTheGrace(t *testing.T) {
 	c := attach(t, d.socket)
 	c.spawn(idAlpha, "alex")
 	c.awaitEvent(idAlpha, "ready")
-	text := strings.Repeat("x", 8<<10)
-	for i := 0; i < agentQueue+32; i++ {
-		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: text})
-	}
-	c.await("the agent's queue refusing a message", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameError && strings.Contains(f.Text, "not reading its input")
-	})
+	fillTheQueue(t, c)
 
 	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
 	c.pollState(idAlpha, rpc.StateEnded)
@@ -349,5 +327,107 @@ func TestWakeStopLeavesAnAgentThatHeedsTheInterruptToExitByItself(t *testing.T) 
 	left.wantGone(t, "wake stop mid-turn with a shell running")
 	if got := logs.String(); strings.Contains(got, "held open") {
 		t.Errorf("an agent that heeded the interrupt was killed at its turn's end for the shell it ran:\n%s", got)
+	}
+}
+
+// fillTheQueue sends an agent that reads nothing enough that its stdin write
+// blocks and its queue refuses the next message.
+func fillTheQueue(t *testing.T, c *testClient) {
+	t.Helper()
+	text := strings.Repeat("x", 8<<10)
+	for i := 0; i < agentQueue+32; i++ {
+		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: text})
+	}
+	c.await("the agent's queue refusing a message", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameError && strings.Contains(f.Text, "not reading its input")
+	})
+}
+
+// `wake stop` of the same agent: the interrupt's write blocks, and the daemon
+// still ends it at the grace and exits - the interrupt is on a goroutine of its
+// own, or the shutdown would wait on it for ever.
+func TestWakeStopOfAnAgentWithAFullQueueStillEndsTheFleet(t *testing.T) {
+	logs := captureLog(t)
+	shortQuitGrace(t, 2*time.Second)
+	fakeClaudeOnPath(t, "deaf")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	fillTheQueue(t, c)
+
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	d.waitForExit(t)
+
+	if got := logs.String(); !strings.Contains(got, "did not end within") {
+		t.Errorf("the wedged agent ended without the kill the grace is for:\n%s", got)
+	}
+}
+
+// lateGroupFleet is an agent that ignores the interrupt and the stop and starts a
+// group of its own during the grace, with no task event, so nothing notes it
+// until the grace has run.
+func lateGroupFleet(t *testing.T) (*testDaemon, *testClient, leftoversReader) {
+	t.Helper()
+	pidfile := filepath.Join(t.TempDir(), "pids")
+	t.Setenv(fakePidfileEnv, pidfile)
+	t.Setenv(fakeHoldEnv, "1")
+	t.Setenv(fakeLateEnv, "1")
+	t.Setenv(fakeSlowEnv, "400ms")
+	t.Setenv(fakeIgnoreInterruptEnv, "1")
+	fakeClaudeOnPath(t, "shellgroup")
+	shortQuitGrace(t, time.Second)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	return d, c, func() leftovers {
+		left := leftovers{shell: waitForPid(t, pidfile), shellChild: waitForPid(t, pidfile+".gc"), own: waitForPid(t, pidfile+".own")}
+		t.Cleanup(func() {
+			for _, pid := range left.all() {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		})
+		return left
+	}
+}
+
+type leftoversReader func() leftovers
+
+// The same group is swept when the daemon ends the fleet: the world is noted
+// again after the grace for `wake stop` and ⌃Q as it is for a /quit.
+func TestTheFleetsEndingSweepsAGroupAnIgnoringAgentStartedDuringTheGrace(t *testing.T) {
+	for _, q := range []struct{ name, kind string }{{"wake stop", rpc.FrameQuit}, {"ctrl-q", rpc.FrameParkAll}} {
+		t.Run(q.name, func(t *testing.T) {
+			d, c, read := lateGroupFleet(t)
+
+			c.send(rpc.Frame{Kind: q.kind})
+			d.waitForExit(t)
+
+			read().wantGone(t, q.name+" of an agent that ignored the interrupt and the stop")
+		})
+	}
+}
+
+// And for `wake stop`: a turn that ends late in the grace is waited for.
+func TestWakeStopDoesNotKillATurnThatEndsLateInTheGrace(t *testing.T) {
+	t.Setenv(fakeDelayEnv, "3s")
+	t.Setenv(fakeInstantControlEnv, "1")
+	logs := captureLog(t)
+	shortQuitGrace(t, 4*time.Second)
+	fakeClaudeOnPath(t, "slow")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	c.awaitEvent(idAlpha, `echo: {`) // the turn's last words
+	d.waitForExit(t)
+
+	if got := logs.String(); strings.Contains(got, "did not end within") {
+		t.Errorf("an agent whose turn ended inside the grace was killed:\n%s", got)
 	}
 }

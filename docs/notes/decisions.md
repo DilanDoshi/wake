@@ -6706,9 +6706,14 @@ tool boundary the way Esc does, so by the time anything is killed the agent had 
   A message typed ahead and not yet written when stdin closes is reported as unwritten to its sender; the
   interrupt would have cancelled it.
 - **What stays true, and what is claimed.** The transcript stays on claude's disk and `/resume` can reopen a quit
-  session's conversation in a new process (`TestAQuitSessionCanBeResumedFromItsTranscript`); the live agent and
-  what it was running are gone. So `/quit` is no longer called "irreversible" in the docs, nor is `wake stop`
+  session's conversation in a new process (`TestAQuitSessionCanBeResumedFromItsTranscript`), including one the grace
+  killed: a `--resume` closes a turn a kill cut, as `resume-killed.jsonl` records. The live agent and what it was
+  running are gone. So `/quit` is no longer called "irreversible" in the docs, nor is `wake stop`
   the "only irreversible verb": it is the most final one, since it also forgets the park book.
+- **Measured live (claude 2.1.329, Haiku, a scratch daemon, a project under /tmp).** An agent mid-turn with a
+  background shell, a subagent's `sleep` and a foreground command, then `/quit`: on `origin/main` it was still
+  working 60 s later with all of its processes alive (the turn runs to its end); on this branch the agent ended in
+  1.0 s and every process of the take was gone by then, claude having exited by itself.
 - Held by `internal/daemon/quit_unix_test.go`, `shutdownstop_test.go`, `crashpark_unix_test.go` and
   `world_unix_test.go`, each checked by a mutation that turns it red (no re-note, no grace goroutine, a grace armed
   behind the interrupt, no interrupt, no once-guard, no fence, no note before the stop).
