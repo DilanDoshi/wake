@@ -56,8 +56,8 @@ const (
 // FrameQuit starts a shutdown that interrupts every agent, closes its stdin and
 // ends by force only what ignored both once the grace has run. A `wake stop`
 // that wrote the frame and exited would return the shell prompt while 20 agents
-// were still ending, and the
-// outgoing daemon holds its listener bound for the whole of that - so the next
+// were still ending, and the outgoing daemon holds its listener bound for the
+// whole of that - so the next
 // `wake` in that window waits on a daemon that is on its way out, correctly
 // and without explanation. The wait is what makes the prompt mean something.
 //

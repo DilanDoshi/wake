@@ -567,12 +567,13 @@ func (s *server) reconsiderEmptyExit() {
 // frame. So they are handed to the agent's own input goroutine and this
 // returns immediately.
 //
-// Stop goes through that same queue, and the ordering is the reason. Stop
-// means "finish what I have given you, then end", so it has to arrive behind
-// the messages already queued for that agent - applied here it would overtake
-// them, and a client that typed one last thing and then hit stop would watch
-// its message be refused by the session it just closed. That happened; this
-// comment is the fix.
+// Stop is the exception, and it is the daemon's own (submit, quitAgent): it
+// does not go through the queue. A stop is an interrupt, which cancels what is
+// queued behind the turn anyway, so arriving behind the messages already sent
+// would only make it wait; and the agent it exists for is the one that stopped
+// reading its stdin, whose queue is full and whose stop would wait there for
+// ever. A message typed just before it may find stdin closed and be reported as
+// not written, which is true.
 //
 // Park goes through the queue for both of Stop's reasons and they are the same
 // reasons. It is a write to the agent's stdin - it *is* a stop, with a label

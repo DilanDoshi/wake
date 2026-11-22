@@ -6661,6 +6661,11 @@ tool boundary the way Esc does, so by the time anything is killed the agent had 
   interrupt, since one that heeds it exits before a refresh could see its shell).
 - **A second `/quit` starts nothing** (`agent.quitting`, which is also the park-ready fence the old `stopQueued`
   was: the record is dropped when the operator asks, so a crash in the grace does not park what was ended).
+  **A quit beats a park, in either order** (found by review): `⌃C` on a busy agent closes its stdin, so a `/quit`
+  after it cannot interrupt, and the turn ending inside the grace would have completed the park under a quit the
+  operator typed. The quit withdraws a park in flight (a session ended by a quit is never a parked one, as a kill
+  already said), a `⌃C` of an agent being quit is refused, and `⌃Q` does not book one. Interrupt first with `esc`
+  and park second, or just `/quit`.
   A message typed ahead and not yet written when stdin closes is reported as unwritten to its sender; the
   interrupt would have cancelled it.
 - **What stays true, and what is claimed.** The transcript stays on claude's disk and `/resume` can reopen a quit

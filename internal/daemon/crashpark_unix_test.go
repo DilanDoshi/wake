@@ -667,6 +667,7 @@ func TestAQuitOfAnAgentWithAFullQueueStillFencesItsParkReadyRecord(t *testing.T)
 	for len(a.in) < cap(a.in) {
 		a.in <- pending{}
 	}
+	t.Cleanup(func() { a.finish(nil) }) // a quit's grace goroutine ends with the agent
 	conn, peer := net.Pipe()
 	t.Cleanup(func() { _ = conn.Close(); _ = peer.Close() })
 
@@ -687,7 +688,7 @@ func TestAQueuedStopFencesTheParkReadyWriters(t *testing.T) {
 	a := bareAgent()
 	before, _ := a.runningRecord()
 
-	a.beginQuit()
+	a.markQuitting()
 	s.forgetReady(a.id)
 
 	if err := s.keepReady(a); err != nil {
@@ -752,6 +753,7 @@ func TestAQueuedStopIsFencedFromTheMomentItIsAccepted(t *testing.T) {
 		t.Fatal("the agent could not be put in the fleet")
 	}
 	s.noteReady(a)
+	t.Cleanup(func() { a.finish(nil) }) // a quit's grace goroutine ends with the agent
 	conn, peer := net.Pipe()
 	t.Cleanup(func() { _ = conn.Close(); _ = peer.Close() })
 

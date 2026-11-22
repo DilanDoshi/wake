@@ -49,7 +49,7 @@ func (s *server) quitAgent(a *agent) error {
 		return fmt.Errorf("session %s has ended", a.id)
 	default:
 	}
-	if !a.beginQuit() {
+	if !a.markQuitting() {
 		return nil
 	}
 	s.forgetReady(a.id) // an operator's quit is not a crash for the next daemon to undo

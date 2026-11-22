@@ -248,3 +248,70 @@ func TestAQuitSessionCanBeResumedFromItsTranscript(t *testing.T) {
 		t.Fatalf("a quit session cannot be resumed: %s", f.Text)
 	}
 }
+
+// ⌃C on a busy agent parks it once its turn ends. A /quit typed after that wins:
+// the agent ends and is not parked, since a quit is the operator saying it is
+// not to come back (the turn ended inside the grace here, which is when a park in
+// flight would otherwise have completed).
+func TestAQuitOfAnAgentBeingParkedEndsItRatherThanParkingIt(t *testing.T) {
+	t.Setenv(fakeDelayEnv, "1500ms")
+	shortQuitGrace(t, 4*time.Second)
+	fakeClaudeOnPath(t, "slow")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
+	time.Sleep(300 * time.Millisecond) // the park is applied behind the message and stdin closes; its turn runs on
+
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.pollState(idAlpha, rpc.StateEnded)
+
+	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 0 {
+		t.Errorf("the park book holds %+v: a session the operator quit after parking it came back as parked", recs)
+	}
+}
+
+// And the other order: a park of an agent already being quit is refused, and the
+// agent ends as the quit it is.
+func TestAParkOfAnAgentBeingQuitIsRefused(t *testing.T) {
+	t.Setenv(fakeDelayEnv, "700ms")
+	shortQuitGrace(t, 4*time.Second)
+	fakeClaudeOnPath(t, "slow")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
+	c.await("the park of an agent being quit refused", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameError && strings.Contains(f.Text, "being quit")
+	})
+	c.pollState(idAlpha, rpc.StateEnded)
+
+	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 0 {
+		t.Errorf("the park book holds %+v: an agent being quit was parked", recs)
+	}
+}
+
+// ⌃Q parks every agent it takes, but not one the operator has already quit: that
+// one ends as a quit and is not offered back.
+func TestAParkingQuitDoesNotBookAnAgentThatIsBeingQuit(t *testing.T) {
+	t.Setenv(fakeDelayEnv, "700ms")
+	shortQuitGrace(t, 4*time.Second)
+	fakeClaudeOnPath(t, "slow")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.send(rpc.Frame{Kind: rpc.FrameParkAll})
+	d.waitForExit(t)
+
+	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 0 {
+		t.Errorf("the park book holds %+v: ⌃Q parked an agent the operator had quit", recs)
+	}
+}

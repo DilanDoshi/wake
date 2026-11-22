@@ -176,15 +176,23 @@ func (a *agent) departedLocked() bool {
 	return (a.ended && !a.parking) || a.parked || ((a.stopped || a.quitting) && !a.parking)
 }
 
-// beginQuit marks a /quit under way and reports whether this call began it.
-func (a *agent) beginQuit() bool {
+// markQuitting marks a /quit under way and reports whether this call began it.
+// A park in flight is withdrawn: the operator said this agent is not to come
+// back, and a session ended by a quit is never a parked one.
+func (a *agent) markQuitting() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.quitting {
 		return false
 	}
-	a.quitting = true
+	a.quitting, a.parking = true, false
 	return true
+}
+
+func (a *agent) isQuitting() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.quitting
 }
 
 func (a *agent) departed() bool {

@@ -62,8 +62,8 @@ const (
 		"<who> ends that agent, or every live agent of that team after a confirm"
 
 	// noQuitTarget is /quit in the room with no handle. The room is not one
-	// conversation and quit is irreversible, so it may not be aimed by the roster
-	// cursor - noNameTarget's rule, one verb over.
+	// conversation and a quit ends the live agent, so it may not be aimed by the
+	// roster cursor - noNameTarget's rule, one verb over.
 	noQuitTarget = "which one? " + quitUsage
 
 	// quitParked refuses a parked agent, and it is mechanism rather than taste:
@@ -101,7 +101,7 @@ func (a App) quitAgent(arg string) (App, tea.Cmd) {
 		return a.quitOne(target.agent)
 	}
 	// Bare is the conversation you are in. The room is not one conversation and
-	// quit is irreversible, so it may not be aimed by the roster cursor.
+	// a quit ends the live agent, so it may not be aimed by the roster cursor.
 	agent, ok := a.conversationAgent()
 	if !ok {
 		notice.Report("%s", noQuitTarget)

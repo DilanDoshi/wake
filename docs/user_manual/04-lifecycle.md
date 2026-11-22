@@ -24,10 +24,10 @@ Park pauses an employee. Detach is you going home while they keep working.
 | **`⌃C`** | Park the agent in front of you (`/park @who` or `/park @team` from the composer) | **Yes** — `/resume <name>` or `/resume <team>` |
 | **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake --fleet <name>` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
-| **`/quit`** | End the conversation you are in, and everything it started | **No** — the live agent is gone; `/resume` can reopen its transcript |
+| **`/quit`** | End the conversation you are in, and what it started | **No** — the live agent is gone; `/resume` can reopen its transcript |
 | **`wake stop --fleet <name>`** | End every session and the daemon, forget the park book, remove the fleet | **No** — the same, for every agent, and nothing is parked for later |
 
-`/quit` and `wake stop` end an agent for good: its `claude` process and everything it started are gone,
+`/quit` and `wake stop` end an agent for good: its `claude` process and what it started are gone,
 and nothing parks it. What stays is the transcript on Claude's disk. `/resume` can find it and reopen the
 conversation in a new process — but not what was running when it ended. That is the gap park was built
 to close: a parked agent comes back as itself.
@@ -93,11 +93,15 @@ but you also leave 30 `claude` processes running, which is what park is for.
 ## Ending one agent
 
 `/quit` ends the conversation you are in — it interrupts the agent as `esc` does, stops its process
-and everything it started, releases the name, and drops the row from your window. The turn in flight
+and what it started, releases the name, and drops the row from your window. The turn in flight
 ends at once, what you had typed ahead of it is cancelled, and a question it was waiting on is
 withdrawn, not answered no — so `/quit` works on a blocked agent, where `⌃C` does not. A normal `/quit`
 is done within a second or two; only an agent that ignores both the interrupt and the stop is killed,
-and only after 30 seconds.
+and only after 30 seconds. What it started means the processes Wake can show are the agent's: its own
+process group and the groups its background shells and hooks led while it ran. A command that left the
+agent before the ending (`nohup cmd &` in a foreground call) is not reached.
+
+A `/quit` also beats a `⌃C` park still waiting for the turn to end: the agent ends and is not parked.
 
 That is the whole difference from `⌃C`: park pauses and `/resume` brings the agent back as itself;
 `/quit` ends the live agent. Its transcript stays on disk, so `/resume` can still find the conversation

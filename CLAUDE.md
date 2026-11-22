@@ -230,7 +230,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   interrupt, so an agent that reads nothing, with a full queue, is still ended; `endAfterGrace`, shared with
   shutdown, waits on the agent's end (no poll), notes its world again so a group started during the grace is
   caught, and kills. A normal `/quit` ends within a second or two; 30 s is for an agent that ignores the
-  interrupt. A second `/quit` starts nothing (`agent.quitting`, also the park-ready fence). The live agent and
+  interrupt. A second `/quit` starts nothing, and a quit beats a park, in either order: it withdraws one in flight, and
+  a park of an agent being quit is refused (`agent.quitting`, also the park-ready fence). The live agent and
   what it was running are gone; its transcript stays and `/resume` can reopen the conversation in a new process.
   `internal/daemon/shutdownstop.go`, `decisions.md` (2026-11-22).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)

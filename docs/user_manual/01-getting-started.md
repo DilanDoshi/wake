@@ -100,7 +100,7 @@ genuinely different, and two of them end an agent for good. The short version:
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
 - **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake --fleet <name>` offers it back.
-- **`/quit`** — end the conversation you are in and everything it started. The live agent is gone; its transcript stays, and `/resume` can reopen it.
+- **`/quit`** — end the conversation you are in and what it started. The live agent is gone; its transcript stays, and `/resume` can reopen it.
 - **`wake stop --fleet <name>`** — end the fleet, forget what it had parked, and remove its directory. **Not recoverable** as a fleet; the transcripts stay for `/resume`.
 
 ## Where your conversations actually live

@@ -197,7 +197,7 @@ func Serve(ctx context.Context, socket string) error {
 		return err
 	}
 	// Closing the listener unlinks the socket file, so it must happen *after*
-	// shutdown has finished letting in-flight turns end - while the binding
+	// shutdown has finished ending the agents - while the binding
 	// stands, a second daemon started by mistake finds a live socket and
 	// refuses, and clients keep finding a daemon on the path for the whole
 	// grace. See stopAcceptingOnStop.

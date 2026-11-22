@@ -492,7 +492,7 @@ var managerStopStates = map[string]struct {
 	why  string
 }{
 	rpc.StateIdle:    {kind: rpc.FrameStop, why: "a manager with a process, between turns: there is something to end and stdin is open"},
-	rpc.StateWorking: {kind: rpc.FrameStop, why: "mid-turn. The daemon closes stdin and lets the in-flight turn finish, which is what stop has always meant here"},
+	rpc.StateWorking: {kind: rpc.FrameStop, why: "mid-turn. The daemon interrupts the agent, closes stdin and sweeps what it started, which is what stop means here"},
 	rpc.StateSilent:  {kind: rpc.FrameStop, why: "silent is a guess about a working agent that has not spoken, not a state of the process. Its stdin is open, so a stop reaches it"},
 	rpc.StateBlocked: {kind: rpc.FrameStop, why: "park refuses this because the denial nobody made survives the wake. A stop has no wake, and refusing would leave the operator unable to end it"},
 	rpc.StateEnded:   {kind: "", why: "already over, and Fleet.manager reads it as absent because the name went back to the pool. There is nothing to address"},

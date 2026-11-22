@@ -225,6 +225,10 @@ func (a *agent) apply(p pending) {
 			return
 		}
 	case rpc.FramePark:
+		if a.isQuitting() {
+			a.refuse(p, fmt.Errorf("session %s is being quit, so it cannot be parked", a.id))
+			return
+		}
 		// The label before the stop, never after: retire runs the moment the
 		// events channel closes, which can be before this function returns.
 		a.beginPark()

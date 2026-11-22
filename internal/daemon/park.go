@@ -42,7 +42,7 @@ import (
 func (a *agent) beginPark() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.parked {
+	if a.parked || a.quitting {
 		return
 	}
 	a.parking = true
