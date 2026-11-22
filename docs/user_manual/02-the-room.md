@@ -128,6 +128,24 @@ fleet away, and `⌃R` is what closes it when you want the columns. Below 120 co
 conversation takes the whole pane instead of splitting, because a split there leaves each side too
 narrow to read.
 
+## What a working agent says it is doing
+
+While an agent works, its conversation, the room and a `/board` row each name what it is on:
+
+- **The working line** (`✻ Sailed for 49s` in the room, `✻ Sailing… (49s · ↓ 11k tokens)` in a conversation) carries
+  the item the agent has marked in progress on its own task list, in its words, or by its subject when it gave none; an
+  agent with no list gets a word from Wake's own pool (`✻ Sailing…`). **`/board`** shows that item, or else the tool
+  running (`Bash`), then the agent's last line of prose.
+- **In a conversation the list itself** is pinned above the composer: `☑` done, `■` in progress, `☐` to do.
+- **Most agents keep no list.** Claude Code offers its task tools by default only on older models (the list is in
+  "Task tool availability" in its tools reference, `code.claude.com/docs/en/tools-reference`), so an agent on a newer
+  model shows a pool word and the running tool, and no list. Wake follows that default and does not turn the tools on.
+- **To have every ordinary agent keep one**, export `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` before the first `wake` of a
+  fleet. Wake passes your environment to the agents it starts (they take the one their fleet's daemon began with, so an
+  already-running fleet keeps what it has). It can cost: the model may spend several extra calls building and ticking
+  the list, and the tools' definitions sit in each agent's context. Claude Code's tools reference lists its other
+  opt-ins; this variable is the one Wake passes through.
+
 ## Answering a blocked agent
 
 When an agent needs a decision it becomes a card at the top of the room rather than a line in it.

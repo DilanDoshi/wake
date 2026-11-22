@@ -102,7 +102,8 @@ func (a App) pressRoster(x, y int) App {
 // screenClick does what a click - a press and release on one cell - means for
 // the chrome it landed on. Only the roster has one: a dispatch row opens its
 // agent here, as it always has, and a header row picks the channel it names (an
-// agent's own row is a drag source and opens in a new column: agentdrag.go).
+// agent's own row is a drag source and opens in a new column, or in place of the
+// pane shown in a one-column window: agentdrag.go).
 // Every other surface has no click action, so a click on it does nothing and
 // leaves no highlight, exactly as a click in the transcript that hits no folded
 // tool does.

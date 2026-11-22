@@ -252,12 +252,12 @@ var claudeWireVocabulary = wordSet([]string{
 	// (2026-10-02-mid-turn-delivery-findings.md).
 	"cancel_async_message", "message_uuid", "priority",
 
-	// The live checklist tools and their input keys. TodoWrite is retired in
-	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
-	// calls (task-checklist.jsonl). "subject" and "taskId" are policed for
-	// "patch" and "content"'s reason - wire keys with one meaning here, and
-	// Wake's own words are ChecklistOp.Text and .ID. "deleted" is the fourth
-	// status the 2.1.240 bundle lists beside the three drawn ones.
+	// The live checklist tools and their input keys. They build a list across
+	// TaskCreate/TaskUpdate calls (task-checklist.jsonl). "subject" and
+	// "taskId" are policed for "patch" and "content"'s reason - wire keys with
+	// one meaning here, and Wake's own words are ChecklistOp.Text and .ID.
+	// "deleted" is the fourth status, matched against Claude Code by hand, beside
+	// the three drawn ones.
 	"TaskCreate", "TaskUpdate", "subject", "taskId", "deleted",
 	"total_tokens", "tool_uses", "duration_ms",
 
@@ -272,6 +272,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// A self-paced loop's own wakeup turn names itself on its lifecycle, which
 	// is how the daemon tells that its loop ended (foldWakeup).
 	"wakeup_source", "loop_wakeup",
+	// The same wakeup on disk: its user record carries the loop's own command, and
+	// these two keys say claude, not the operator, started that turn.
+	"wakeupSource", "turnOrigin",
 
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
@@ -525,6 +528,9 @@ var deliberatelyGeneric = wordSet([]string{
 	// A send-now's priority value and origin kind: plain English, and "human"
 	// is already a word Wake spells (mcp's reserved names).
 	"now", "human",
+	// turnOrigin's value for a turn claude started itself: plain English, and no
+	// route in without "turnOrigin", which is policed.
+	"scheduled",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
@@ -848,7 +854,10 @@ var notNamedByTheAirlock = map[string]string{
 // 259 → 263: a skill call's record, <command-message>, </command-message>,
 // </command-name> and <command-args>, which unwrapSkillCall reads back as the
 // command that was typed. loop-self-paced-end.jsonl, workflow-saved-command.jsonl.
-const policedWordCount = 263
+// 263 → 265: "wakeupSource" and "turnOrigin", the on-disk marks of a turn claude
+// started itself (a loop's wakeup), which DecodeTranscriptLine reads so that
+// record is never the operator's turn. loop-wakeup-turn.jsonl.
+const policedWordCount = 265
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1187,14 +1196,14 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// TodoWrite and its whole-list envelope. Retired in 2.1.240 (off unless
-	// CLAUDE_CODE_ENABLE_TASKS is false) and never called in the corpus, so its
-	// `todos` key stays transcribed from the shipped binary rather than recorded
+	// TodoWrite and its whole-list envelope. Never called in the corpus, so its
+	// `todos` key is matched against Claude Code and maintained by hand, not
+	// recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.
-	"todos":     "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
-	"TodoWrite": "retired in 2.1.240 and never called in the corpus",
+	"todos":     "TodoWrite is never called in the corpus; a checklist is TaskCreate/TaskUpdate",
+	"TodoWrite": "never called in the corpus",
 	"deleted":   "the fourth TaskUpdate status; the recorded session never deletes an item",
 
 	// primaryArg keys for tools the corpus never exercised.

@@ -262,21 +262,26 @@ func (a App) here(sessionID string) func(Grid) Grid {
 	}
 }
 
-// openInNewPane puts a conversation in a new column at the grid's right end,
-// next to the sidebar, whatever pane holds the keys. A click on a sidebar agent
-// lands here, and a drop that is not below a pane. An agent already on screen is
-// only focused (Grid.OpenRight).
-//
-// Where the window carries one column (Layout.Capacity) a new column would only
-// slide the others off screen, so it opens as a conversation does everywhere
-// else: in the focused pane, or beside the room when the room holds the keys
-// (openDMWith). Asked at the click, from the layout as it is, so a resize is read
-// the next time and nothing is cached per frame.
+// openInNewPane puts a conversation where a sidebar click or a drop that is not
+// below a pane puts it: a new column at the grid's right end, next to the sidebar,
+// whatever pane holds the keys (newColumnPlace). An agent already on screen is only
+// focused: Grid.OpenRight and Grid.Replace both refuse it.
 func (a App) openInNewPane(sessionID, name string) App {
+	return a.show(sessionID, name, a.newColumnPlace(sessionID))
+}
+
+// newColumnPlace is the placement behind openInNewPane, and behind the outline a
+// drag draws for it (zoneRect): the one place the choice is made. Where the window
+// carries one column (Layout.Capacity) a new column would only slide the others
+// off screen, so the conversation goes where one opens everywhere else: in the
+// focused pane, or beside the room when the room holds the keys (here). Otherwise
+// it is a new rightmost column. Asked at the click, from the layout as it is, so a
+// resize is read the next time and nothing is cached per frame.
+func (a App) newColumnPlace(sessionID string) func(Grid) Grid {
 	if a.layout.Capacity() == 1 {
-		return a.openDMWith(sessionID, name)
+		return a.here(sessionID)
 	}
-	return a.show(sessionID, name, func(g Grid) Grid { return g.OpenEnd(sessionID) })
+	return func(g Grid) Grid { return g.OpenEnd(sessionID) }
 }
 
 // openRight and openBelow are ⌃Y and ⌃B: the same open, placed beside the

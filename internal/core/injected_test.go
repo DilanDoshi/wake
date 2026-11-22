@@ -29,6 +29,25 @@ var ruledPromptSources = map[string]string{
 	"system": "claude's own injection",
 }
 
+// ruledTurnOrigins is every turnOrigin a user line has been seen to carry on disk.
+// Only "scheduled" makes a line claude's own by itself (injected()); the rest are ruled
+// here so a new value is read before anything restores it as the operator's turn.
+var ruledTurnOrigins = map[string]string{
+	"human":             "typed by the operator in an interactive claude",
+	"sdk":               "a headless session's stdin, which is Wake's own sends",
+	"peer":              "a peer's message or a subagent's hand-back",
+	"task_notification": "a background task's ending, dropped by decodeTranscript",
+	"system":            "claude's own injection; isMeta",
+	"auto_continuation": "claude resuming after a usage-limit reset; isMeta",
+	"scheduled":         "a turn claude started itself, claude's own whoever else marks it",
+}
+
+// ruledWakeupSources is every wakeupSource seen: both mark a turn claude started.
+var ruledWakeupSources = map[string]string{
+	"loop_wakeup":     "a self-paced /loop's next iteration; restored as the started turn the live stream gives it",
+	"schedule_wakeup": "a ScheduleWakeup the model made outside a /loop; claude's own",
+}
+
 // userMarks are the marks a user line carries, read off the line itself rather
 // than off what the decoder made of it.
 type userMarks struct {
@@ -36,6 +55,10 @@ type userMarks struct {
 	Meta         bool   `json:"isMeta"`
 	Synthetic    bool   `json:"isSynthetic"`
 	PromptSource string `json:"promptSource"`
+	// WakeupSource and TurnOrigin mark a turn claude started itself - a loop's
+	// wakeup, a scheduled task - on the user record that carries its prompt.
+	WakeupSource string `json:"wakeupSource"`
+	TurnOrigin   string `json:"turnOrigin"`
 	Origin       struct {
 		Kind string `json:"kind"`
 	} `json:"origin"`
@@ -58,7 +81,7 @@ func marksOf(line []byte) (m userMarks, ok bool, err error) {
 	// writing as null would otherwise read as absent.
 	var raw map[string]json.RawMessage
 	_ = json.Unmarshal(line, &raw)
-	for _, key := range []string{"isMeta", "isSynthetic", "promptSource", "origin"} {
+	for _, key := range []string{"isMeta", "isSynthetic", "promptSource", "origin", "wakeupSource", "turnOrigin"} {
 		if string(raw[key]) == "null" {
 			return userMarks{}, false, fmt.Errorf("mark %s is null", key)
 		}
@@ -67,7 +90,8 @@ func marksOf(line []byte) (m userMarks, ok bool, err error) {
 }
 
 func (m userMarks) injected() bool {
-	return m.Meta || m.Synthetic || m.PromptSource == "system" || (m.Origin.Kind != "" && m.Origin.Kind != "human")
+	return m.Meta || m.Synthetic || m.PromptSource == "system" || (m.Origin.Kind != "" && m.Origin.Kind != "human") ||
+		m.WakeupSource != "" || m.TurnOrigin == "scheduled"
 }
 
 // operatorTurn is an event a view draws as the operator's own words.
@@ -112,7 +136,7 @@ func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 		check("stream", f, DecodeLine)
 	}
 	// Each mark on the wire that carries it, so neither half can go unasserted.
-	for _, want := range []string{"transcript isMeta", "transcript origin", "transcript system", "stream isSynthetic", "stream origin"} {
+	for _, want := range []string{"transcript isMeta", "transcript origin", "transcript system", "transcript wakeupSource", "transcript scheduled", "stream isSynthetic", "stream origin"} {
 		if seen[want] == 0 {
 			t.Errorf("no recorded %s line: this guard is asserting nothing about it", want)
 		}
@@ -123,7 +147,8 @@ func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 func (m userMarks) present() map[string]bool {
 	return map[string]bool{
 		"isMeta": m.Meta, "isSynthetic": m.Synthetic, "system": m.PromptSource == "system",
-		"origin": m.Origin.Kind != "" && m.Origin.Kind != "human",
+		"origin":       m.Origin.Kind != "" && m.Origin.Kind != "human",
+		"wakeupSource": m.WakeupSource != "", "scheduled": m.TurnOrigin == "scheduled",
 	}
 }
 
@@ -136,6 +161,10 @@ func TestEachMarkAloneMakesALineInjected(t *testing.T) {
 		`{"type":"user","promptSource":"system"}`:            true,
 		`{"type":"user","origin":{"kind":"peer"}}`:           true,
 		`{"type":"user","origin":{"kind":"human"}}`:          false,
+		`{"type":"user","wakeupSource":"loop_wakeup"}`:       true,
+		`{"type":"user","turnOrigin":"scheduled"}`:           true,
+		`{"type":"user","turnOrigin":"sdk"}`:                 false,
+		`{"type":"user","turnOrigin":"human"}`:               false,
 		`{"type":"user","promptSource":"sdk"}`:               false,
 		`{"type":"user","isMeta":false,"isSynthetic":false}`: false,
 	} {
@@ -144,7 +173,8 @@ func TestEachMarkAloneMakesALineInjected(t *testing.T) {
 			t.Errorf("%s: injected() = %v (ok=%v err=%v), want %v", line, m.injected(), ok, err, want)
 		}
 	}
-	for _, changed := range []string{`{"type":"user","isMeta":"yes"}`, `{"type":"user","isMeta":null}`, `{"type":"user","origin":null}`} {
+	for _, changed := range []string{`{"type":"user","isMeta":"yes"}`, `{"type":"user","isMeta":null}`, `{"type":"user","origin":null}`,
+		`{"type":"user","wakeupSource":null}`, `{"type":"user","turnOrigin":null}`} {
 		if _, ok, err := marksOf([]byte(changed)); ok || err == nil {
 			t.Errorf("%s: a mark that changed type was read as unmarked rather than reported", changed)
 		}
@@ -168,6 +198,12 @@ func TestEveryRecordedMarkIsRuled(t *testing.T) {
 			}
 			if _, ruled := ruledPromptSources[m.PromptSource]; m.PromptSource != "" && !ruled {
 				t.Errorf("%s:%d carries promptSource %q, which ruledPromptSources does not rule", f, i+1, m.PromptSource)
+			}
+			if _, ruled := ruledTurnOrigins[m.TurnOrigin]; m.TurnOrigin != "" && !ruled {
+				t.Errorf("%s:%d carries turnOrigin %q, which ruledTurnOrigins does not rule", f, i+1, m.TurnOrigin)
+			}
+			if _, ruled := ruledWakeupSources[m.WakeupSource]; m.WakeupSource != "" && !ruled {
+				t.Errorf("%s:%d carries wakeupSource %q, which ruledWakeupSources does not rule", f, i+1, m.WakeupSource)
 			}
 		}
 	}

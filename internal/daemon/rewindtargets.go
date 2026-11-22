@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -24,17 +25,18 @@ import (
 // sendHistory's own reason: there may be no agent, and the file is claude's
 // rather than Wake's.
 func (s *server) sendRewindTargets(c *client, id string) {
-	targets, err := RewindTargets(s.transcriptID(id))
+	targets, tip, err := RewindTargets(s.transcriptID(id))
 	if err != nil {
 		c.enqueue(errorFrame(id, "could not read that conversation's transcript: "+err.Error()))
 		return
 	}
-	c.enqueue(rpc.Frame{Kind: rpc.FrameRewindTargetsReply, SessionID: id, RewindTargets: targets})
+	c.enqueue(rpc.Frame{Kind: rpc.FrameRewindTargetsReply, SessionID: id, RewindTargets: targets, RewindLastSeen: tip})
 }
 
-// RewindTargets is one session's active-branch user prompts, oldest first.
-// The newest entry is the newest active user turn, which is the last_seen
-// tip a FrameRewind's RewindLastSeen wants.
+// RewindTargets is one session's active-branch user prompts, oldest first, and the
+// tip a FrameRewind's RewindLastSeen wants: the newest active turn claude knows of,
+// which is a prompt or one it started itself (a loop's wakeup). Declared as the prompt
+// before one, a rewind is refused as an "unseen later turn" (2.1.329).
 //
 // An id with no transcript is not an error, on History's own terms: a
 // session that has never taken a turn has nothing to rewind to, and the
@@ -43,23 +45,23 @@ func (s *server) sendRewindTargets(c *client, id string) {
 // Two passes over the file, exactly as History takes: the first reconstructs
 // the active branch from tree structure alone, the second reads the user
 // lines the first pass kept.
-func RewindTargets(id string) ([]rpc.RewindTarget, error) {
+func RewindTargets(id string) ([]rpc.RewindTarget, string, error) {
 	path, ok := transcriptPath(id)
 	if !ok {
-		return nil, nil
+		return nil, "", nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer func() { _ = f.Close() }()
 
 	active, err := activeBranchOf(f)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	return livePrompts(f, active)
 }
@@ -78,26 +80,29 @@ const rewindTargetsMax = 100
 //
 // A ring rather than everything-then-slice, liveHistory's own reason: memory
 // stays proportional to the bound rather than to the whole active branch.
-func livePrompts(r io.Reader, active map[string]bool) ([]rpc.RewindTarget, error) {
+func livePrompts(r io.Reader, active map[string]bool) ([]rpc.RewindTarget, string, error) {
 	ring := make([]rpc.RewindTarget, 0, rewindTargetsMax)
+	var tip string
 	br := bufio.NewReaderSize(r, 64*1024)
 	for {
 		line, err := readTranscriptLine(br)
 		if len(line) > 0 {
-			if t, ok := promptTarget(line, active); ok {
-				ring = append(ring, t)
-				if len(ring) > rewindTargetsMax {
-					// Trimmed from the front, which is what keeps this the
-					// tail: the newest entry has to stay LastSeen's true tip.
-					ring = ring[1:]
+			if t, started, ok := promptTarget(line, active); ok {
+				tip = t.UUID
+				if !started {
+					ring = append(ring, t)
+					if len(ring) > rewindTargetsMax {
+						// Trimmed from the front, which is what keeps this the tail.
+						ring = ring[1:]
+					}
 				}
 			}
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return ring, nil
+				return ring, tip, nil
 			}
-			return nil, err
+			return nil, "", err
 		}
 	}
 }
@@ -114,15 +119,22 @@ func livePrompts(r io.Reader, active map[string]bool) ([]rpc.RewindTarget, error
 // one) or one that is Echoed is on-disk chatter rather than something typed.
 // An Absorbed one was typed, but claude stored it as an attachment taken up
 // mid-turn, and rewinding to one is unrecorded.
-func promptTarget(line []byte, active map[string]bool) (rpc.RewindTarget, bool) {
+//
+// A turn claude started itself (a loop's wakeup) is no prompt and offers no target,
+// but it is a turn claude knows of: started is true and only its uuid is set, for
+// the tip.
+func promptTarget(line []byte, active map[string]bool) (t rpc.RewindTarget, started, ok bool) {
 	node, ok := core.DecodeTranscriptNode(line)
 	if !ok || !active[node.UUID] {
-		return rpc.RewindTarget{}, false
+		return rpc.RewindTarget{}, false, false
 	}
 	events, err := core.DecodeTranscriptLine(line)
 	if err != nil {
 		logf("wake: an active-branch prompt could not be decoded: %v", err)
-		return rpc.RewindTarget{}, false
+		return rpc.RewindTarget{}, false, false
+	}
+	if slices.ContainsFunc(events, core.Event.MessageStarted) {
+		return rpc.RewindTarget{UUID: node.UUID}, true, true
 	}
 	var text strings.Builder
 	for _, ev := range events {
@@ -135,7 +147,7 @@ func promptTarget(line []byte, active map[string]bool) (rpc.RewindTarget, bool) 
 		text.WriteString(ev.Text)
 	}
 	if text.Len() == 0 {
-		return rpc.RewindTarget{}, false
+		return rpc.RewindTarget{}, false, false
 	}
-	return rpc.RewindTarget{UUID: node.UUID, Text: text.String()}, true
+	return rpc.RewindTarget{UUID: node.UUID, Text: text.String()}, false, true
 }

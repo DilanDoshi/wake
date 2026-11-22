@@ -108,6 +108,10 @@ type Tasks struct {
 	// running is what Fleet.RunningTasks answers, built as each task frame folds
 	// because a draw asks for it several times per agent (tasktree.go).
 	running []Task
+
+	// held is an agent's early ending not yet drawn, in the order held (taskhold.go).
+	// Never written in place, as rows are not.
+	held []core.Event
 }
 
 // Observe folds one event in and returns the result. It ignores everything
@@ -131,7 +135,7 @@ func (t Tasks) Observe(ev core.Event) Tasks {
 	} else {
 		rows[at] = rows[at].updated(u)
 	}
-	return Tasks{rows: rows, running: taskTree(rows, sidebarListed)}
+	return Tasks{rows: rows, running: taskTree(rows, sidebarListed), held: t.held}.holding(ev)
 }
 
 // updated applies one frame to one row.
@@ -266,6 +270,11 @@ func (t Tasks) named(u *core.TaskUpdate) *core.TaskUpdate {
 	// leave a nested ending out of the agent's conversation.
 	if filled.Parent == "" {
 		filled.Parent = row.Parent
+	}
+	// An ending held for its agent's restart is stored as a non-ending, so no line is
+	// drawn for it (taskhold.go).
+	if u.Phase == core.TaskEnded && u.Dispatch != "" && slices.ContainsFunc(t.held, func(h core.Event) bool { return h.Task.ID == u.ID }) {
+		filled.Phase, filled.Status = core.TaskProgress, core.TaskRunning
 	}
 	// A failed workflow's error arrives on task_updated, never on
 	// task_notification - the frame this whole function exists to fill in

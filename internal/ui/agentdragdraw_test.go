@@ -4,7 +4,9 @@ package ui
 // nothing laid out again, and no cost when nobody is dragging.
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -119,23 +121,44 @@ func TestNothingReLaysOutWhileDragging(t *testing.T) {
 	}
 }
 
-// paneRectOf is the cells id's pane is drawn in, read off the layout the way the
-// draw reads it.
-func paneRectOf(a App, id string) (x, y, w, h int, ok bool) {
-	r, col := a.regions(), a.columnOf(id)
-	if !a.grid.Has(id) || r.Cols[col] == 0 {
-		return 0, 0, 0, 0, false
+// landsAt fails unless id's pane is drawn in the rect (x, y, w, h) in a. It reads
+// neither paneRect nor the arithmetic behind it: the size the pane was laid out at
+// (resizePanes, from Regions and SplitRowsIn) must be the rect's, and the draw's own
+// hit-testing (Layout.Hit, App.paneAt - what a press resolves with) must name id at
+// the rect's four corners and not at the cells just outside it.
+func landsAt(t testing.TB, label string, a App, id string, x, y, w, h int) {
+	t.Helper()
+	if d := a.dms[id]; d == nil || d.width != w || d.height != h {
+		t.Errorf("%s: the outline is %dx%d, the pane is laid out %v", label, w, h, laidOut(a, id))
 	}
-	upper, lower := a.layout.SplitRowsIn(col, a.paneHeight())
-	x, w = a.layout.PaneLeft(r, col), r.Cols[col]
-	switch a.grid.Cols[col].Bottom {
-	case "":
-		return x, 0, w, a.paneHeight(), true
-	case id:
-		return x, upper + dividerHeight, w, lower, lower > 0
-	default:
-		return x, 0, w, upper, true
+	paneAt := func(px, py int) string { // "?" where no pane is
+		if py < 0 || py >= a.paneHeight() {
+			return "?"
+		}
+		region, col := a.layout.Hit(a.regions(), px)
+		if pane, _, _, ok := a.paneAt(col, py); region == RegionPane && ok {
+			return pane
+		}
+		return "?"
 	}
+	for _, c := range [][2]int{{x, y}, {x + w - 1, y}, {x, y + h - 1}, {x + w - 1, y + h - 1}} {
+		if got := paneAt(c[0], c[1]); got != id {
+			t.Errorf("%s: the outline's corner (%d,%d) is %q, want %q", label, c[0], c[1], got, id)
+		}
+	}
+	for _, c := range [][2]int{{x - 1, y}, {x + w, y}, {x, y - 1}, {x, y + h}} {
+		if got := paneAt(c[0], c[1]); got == id {
+			t.Errorf("%s: (%d,%d), outside the outline (%d,%d %dx%d), is %q's pane too", label, c[0], c[1], x, y, w, h, id)
+		}
+	}
+}
+
+// laidOut is a pane's laid-out size, for a failure message.
+func laidOut(a App, id string) string {
+	if d := a.dms[id]; d != nil {
+		return fmt.Sprintf("%dx%d", d.width, d.height)
+	}
+	return "absent"
 }
 
 // An outline is where the agent is drawn once it is dropped, to the cell: at every
@@ -174,18 +197,21 @@ func TestAnOutlineIsExactlyWhereTheAgentLands(t *testing.T) {
 					id = z.pane
 					after = after.openInNewPane(id, "x")
 				}
-				ax, ay, aw, ah, aok := paneRectOf(after, id)
-				if ok != aok || ok && (x != ax || y != ay || w != aw || h != ah) {
-					t.Errorf("width %d, %d open, zone %+v: outline (%d,%d %dx%d ok=%v), pane lands at (%d,%d %dx%d ok=%v)",
-						width, open, z, x, y, w, h, ok, ax, ay, aw, ah, aok)
+				label := fmt.Sprintf("width %d, %d open, zone %+v", width, open, z)
+				if !ok {
+					if slices.Contains(after.drawnIDs(), id) {
+						t.Errorf("%s: no outline, and the agent is drawn", label)
+					}
+					continue
 				}
+				landsAt(t, label, after, id, x, y, w, h)
 			}
 		}
 	}
 }
 
 func drawnPane(a App, id string) bool {
-	_, _, _, _, ok := paneRectOf(a, id)
+	_, _, _, _, ok := a.paneRect(id)
 	return ok
 }
 
@@ -253,30 +279,77 @@ func BenchmarkLiveDragOverlay(b *testing.B) {
 }
 
 // In a one-column window a new-column drop replaces the pane that holds the keys,
-// or the one beside the room when the room does, so the outline is that pane's
-// own rect - half a column when it is half of a split one - to the cell, for each
-// pane that can hold the keys.
+// or the one beside the room when the room does, so the outline is that pane's own
+// rect - half a column when it is half of a split one - to the cell, for each pane
+// that can hold the keys, and in a window that shrank with conversations still in
+// the grid (a one-column window holding three or more columns).
 func TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces(t *testing.T) {
 	split := func(t *testing.T) App { // the room, then s1 over s2; s2, the lower pane, holds the keys
 		return clickAgent(t, fleetApp(t, 100, 40, 6), "s1").openBelow("s2", "agent02")
 	}
-	for name, setup := range map[string]func(*testing.T) App{
+	shrunk := func(t *testing.T, splitFirst bool) App { // three conversations, then the window narrows
+		a := fleetApp(t, 200, 40, 6)
+		for _, id := range []string{"s1", "s2", "s3"} {
+			a = clickAgent(t, a, id)
+		}
+		if splitFirst {
+			a = a.refocus("s2").openBelow("s4", "agent04")
+		}
+		return settle(a.withSize(100, 40))
+	}
+	setups := map[string]func(*testing.T) App{
 		"the room alone":                  func(t *testing.T) App { return fleetApp(t, 100, 40, 6) },
 		"a whole column holds the keys":   func(t *testing.T) App { return clickAgent(t, fleetApp(t, 100, 40, 6), "s1") },
 		"the lower half of a column":      split,
 		"the upper half of a column":      func(t *testing.T) App { return split(t).refocus("s1") },
 		"the room, beside a split column": func(t *testing.T) App { return split(t).showRoom() },
 		"the room, beside a whole column": func(t *testing.T) App { return clickAgent(t, fleetApp(t, 100, 40, 6), "s1").showRoom() },
-	} {
+	}
+	for _, splitFirst := range []bool{false, true} {
+		for focus := range 5 { // the room, then each pane the shrunk grid holds
+			name := fmt.Sprintf("a shrunk window, split %v, focus #%d", splitFirst, focus)
+			setups[name] = func(t *testing.T) App {
+				a := shrunk(t, splitFirst)
+				if panes := append([]string{""}, a.grid.Panes()[1:]...); focus < len(panes) {
+					return a.refocus(panes[focus])
+				}
+				return a
+			}
+		}
+	}
+	for name, setup := range setups {
 		a := setup(t)
 		if a.layout.Capacity() != 1 {
 			t.Fatalf("%s: capacity %d, the test proves nothing", name, a.layout.Capacity())
 		}
 		x, y, w, h, ok := a.zoneRect(dropZone{kind: zoneColumn}, "s5")
 		after := a.openInNewPane("s5", "agent05")
-		ax, ay, aw, ah, aok := paneRectOf(after, "s5")
-		if ok != aok || x != ax || y != ay || w != aw || h != ah {
-			t.Errorf("%s: outline (%d,%d %dx%d ok=%v), the agent lands at (%d,%d %dx%d ok=%v)", name, x, y, w, h, ok, ax, ay, aw, ah, aok)
+		if !ok {
+			t.Errorf("%s: no outline for a drop into a drawn window", name)
+			continue
 		}
+		landsAt(t, name, after, "s5", x, y, w, h)
+	}
+}
+
+// The room is a pane too: whole when its column is alone, the upper half when it is
+// split, and a lower pane starts under the rule - none of it by the id test alone,
+// since the room's id is "" and an unsplit column's Bottom is "" as well.
+func TestPaneRectOfTheRoomAndALowerPane(t *testing.T) {
+	a := dragFleet(t)
+	r := a.regions()
+	if x, y, w, h, ok := a.paneRect(""); !ok || x != 0 || y != 0 || w != r.Cols[0] || h != a.paneHeight() {
+		t.Errorf("an unsplit room: (%d,%d %dx%d ok=%v), want the whole column %d x %d", x, y, w, h, ok, r.Cols[0], a.paneHeight())
+	}
+	a = a.refocus("").openBelow("s3", "agent03") // the room over s3
+	upper, lower := a.layout.SplitRowsIn(0, a.paneHeight())
+	if _, y, _, h, ok := a.paneRect(""); !ok || y != 0 || h != upper {
+		t.Errorf("a split room: y %d h %d ok=%v, want the upper half %d", y, h, ok, upper)
+	}
+	if _, y, _, h, ok := a.paneRect("s3"); !ok || y != upper+dividerHeight || h != lower {
+		t.Errorf("the pane under it: y %d h %d ok=%v, want y %d h %d", y, h, ok, upper+dividerHeight, lower)
+	}
+	if _, _, _, _, ok := a.paneRect("nobody"); ok {
+		t.Error("a conversation that is not in the grid has a rect")
 	}
 }

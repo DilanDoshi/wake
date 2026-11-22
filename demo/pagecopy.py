@@ -418,7 +418,8 @@ ALSO = [
     ),
     (
         "The task board",
-        "An agent's own <code>TaskCreate</code> checklist, pinned above the "
+        "When Claude Code's to-do tool is on (older models have it by default, newer "
+        "ones need its opt-in), an agent's own checklist is pinned above the "
         "composer where Claude Code draws it, folded live from the ops.",
     ),
     (

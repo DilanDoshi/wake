@@ -19,6 +19,7 @@ package ui
 // and detailRow are cards_blocks.go's - and nothing else.
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -137,7 +138,7 @@ func (a App) rewindTargetsArrived(f rpc.Frame) App {
 		Session:  f.SessionID,
 		Prompts:  prompts,
 		UUIDs:    uuids,
-		LastSeen: f.RewindTargets[n-1].UUID,
+		LastSeen: cmp.Or(f.RewindLastSeen, f.RewindTargets[n-1].UUID),
 	}
 	return a
 }

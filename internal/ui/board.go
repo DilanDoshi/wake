@@ -509,7 +509,7 @@ func boardRow(ag Agent, done bool, nameW, stateW, width int, cursored bool) stri
 	// The row is one rendered line, so the whole of it takes the style.
 	style := identityRowStyle(ag, cursored)
 	// oneLine over the assembled row, because half of it is agent-authored -
-	// Doing is a TodoWrite activeForm, Tool an argument, LastLine prose - and
+	// Doing is a task item's label, Tool an argument, LastLine prose - and
 	// a control byte in any of them redraws or forges the row. mcp.oneLine's
 	// lesson, on the surface where a forged row impersonates a fleet state.
 	return style.MaxWidth(width).Render(ansi.Truncate(oneLine(head+boardDetail(ag)), width, ellipsis))
