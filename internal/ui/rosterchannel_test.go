@@ -258,8 +258,8 @@ func channelHeaderRow(t *testing.T, a App, header string) int {
 func TestClickingAHeaderPicksItsChannel(t *testing.T) {
 	a := channelRoom(t)
 	x := rosterLeft(a)
-	if y := channelHeaderRow(t, a, core.BroadcastName); y != 0 {
-		t.Errorf("all is on row %d, want the column's first", y)
+	if y := channelHeaderRow(t, a, core.BroadcastName); y != searchBarRows {
+		t.Errorf("all is on row %d, want the first under the search bar (%d)", y, searchBarRows)
 	}
 	y := channelHeaderRow(t, a, "backend")
 	a, _ = click(a, x, y-1)

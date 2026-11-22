@@ -179,7 +179,7 @@ func (a App) cursorAgent() (Agent, bool) {
 			return agent, true
 		}
 	}
-	agents := a.fleet.OnRoster()
+	agents := a.rosterAgents()
 	if len(agents) == 0 {
 		return Agent{}, false
 	}
@@ -199,8 +199,7 @@ func (a App) cursorAgent() (Agent, bool) {
 // operator never chose - the selection was left behind by the last conversation
 // they had open, on a sidebar that was not on screen.
 func (a App) pickAgent(delta int) App {
-	agents := a.fleet.OnRoster()
-	if len(agents) == 0 {
+	if len(a.fleet.OnRoster()) == 0 {
 		notice.Report("%s", noPaneAdvice)
 		return a
 	}
@@ -208,7 +207,7 @@ func (a App) pickAgent(delta int) App {
 		a.layout.ShowRoster = true
 		a = a.resizePanes()
 	}
-	a.roster = a.roster.Move(a.fleet.sectioned(agents), a.fleet.RunningTasks, delta)
+	a.roster = a.roster.Move(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, delta)
 	return a
 }
 
@@ -234,7 +233,8 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	return a.rosterDrawn().Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
+	// A row above the roster's own - the search bar's - is a negative row, which Hit refuses.
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.rosterAgents()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), y-a.searchRows())
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the
@@ -563,6 +563,17 @@ func (a App) drawn() []string {
 // nothing binds. Every pane is accented, not just the two that used to exist:
 // with a grid the unfocused ones are the majority.
 func (a App) withFocus(f string) App {
+	a = a.closeModalsExcept(f)
+	a.focus = f
+	return a.composersFocused()
+}
+
+// onlyTheBar is the pane no menu is drawn over: moving the keys to the search bar closes every one.
+const onlyTheBar = "\x00"
+
+// closeModalsExcept closes every menu and view drawn over a pane other than keep: left open it
+// would read keys undrawn, or come back over whatever the slot drew next.
+func (a App) closeModalsExcept(f string) App {
 	if a.picker.Open() && a.focus != f {
 		// A picker is drawn over the keys' pane only (pickerView); left open it
 		// would read ↓ and ↵ in the next pane undrawn - a team's quit among them.
@@ -593,8 +604,7 @@ func (a App) withFocus(f string) App {
 	if a.statusUI.Open() && a.statusUI.Pane != f {
 		a.statusUI = StatusView{} // and so does /status's
 	}
-	a.focus = f
-	return a.composersFocused()
+	return a
 }
 
 // composersFocused tells every composer whether it holds the keys and whether

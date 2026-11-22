@@ -38,6 +38,13 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-21 — the sidebar's search bar has no key, matches names only, and the caret stays lit
+
+The bar (`sidebarsearch.go`) is focused by a click alone: `⌃F` is the jump box and the owner chose not to give the bar a
+key. It matches names, as the jump box does (no team or directory). While it holds the keys the composer still draws its
+caret: dimming it needs `composersFocused` called on the bar's focus changes and a `Refocus` to re-arm its blink loop
+when the keys return. *Closes with:* the owner asking for any of the three.
+
 ## FOLLOW-UP, 2026-11-20 — the jump picker matches an agent's name only
 
 `⌃F` lists what the sidebar lists and matches their names. It does not match a **team** or a **directory** -
