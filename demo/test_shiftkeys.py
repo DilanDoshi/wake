@@ -167,6 +167,25 @@ class Gestures(unittest.TestCase):
         self.assertEqual(shiftkeys.load_gestures(""), {})
 
 
+class GesturePath(unittest.TestCase):
+    def test_a_bare_name_is_a_file_in_the_gestures_directory(self):
+        self.assertEqual(
+            shiftkeys.gesture_path("34-drag", "/d/gestures"), "/d/gestures/34-drag.json"
+        )
+
+    def test_a_path_is_kept_as_it_is(self):
+        self.assertEqual(
+            shiftkeys.gesture_path("/tmp/x.json", "/d/gestures"), "/tmp/x.json"
+        )
+
+    def test_no_name_is_no_file(self):
+        self.assertEqual(shiftkeys.gesture_path("", "/d/gestures"), "")
+
+    def test_a_name_with_no_directory_to_find_it_in_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "WAKE_GESTURES_DIR"):
+            shiftkeys.gesture_path("34-drag", "")
+
+
 class Route(unittest.TestCase):
     def test_the_shifted_arrows_are_unchanged(self):
         self.assertEqual(shiftkeys.route(b"\x07", {}), [(0, b"\x1b[1;2B")])

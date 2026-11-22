@@ -9,7 +9,8 @@ needs one runs Wake under this and types Ctrl+G / Ctrl+K, which never reach
 Wake as themselves. Each shifted arrow is written whole, so it arrives as one
 key. Everything else passes through untouched, both ways.
 
-VHS cannot send the mouse either. $WAKE_GESTURES names a JSON file that binds
+VHS cannot send the mouse either. $WAKE_GESTURES names a JSON file (a bare name is one in
+$WAKE_GESTURES_DIR) that binds
 ctrl+<key> names to steps (click, press, move, release, glide, wheel_up,
 wheel_down, shift_click, wait), cells counted from 0 on the screen; each bound
 key is written as the SGR mouse reports a terminal sends for it, with the pacing
@@ -139,6 +140,20 @@ def expand(steps: list[dict]) -> list[Event]:
     return events
 
 
+def gesture_path(name: str, directory: str) -> str:
+    """$WAKE_GESTURES as a file: a path stays one, a bare clip name is a file in
+    $WAKE_GESTURES_DIR. A tape exports the name before it sources the stage, which
+    is where `wake` first starts, and only the stage's own env.sh knows the directory.
+    """
+    if not name or "/" in name:
+        return name
+    if not directory:
+        raise ValueError(
+            f"{name!r} is a name, and WAKE_GESTURES_DIR says where its file is"
+        )
+    return os.path.join(directory, name + ".json")
+
+
 def load_gestures(path: str) -> dict[bytes, list[dict]]:
     """The file's ctrl+<key> names as the bytes they type, each gesture checked now
     so a bad file stops the take before the first key rather than mid-film."""
@@ -247,7 +262,12 @@ def main() -> int:
     if not os.isatty(sys.stdin.fileno()):  # no keys to turn: just run it
         os.execvp(sys.argv[1], sys.argv[1:])
     try:
-        gestures = load_gestures(os.environ.get("WAKE_GESTURES", ""))
+        gestures = load_gestures(
+            gesture_path(
+                os.environ.get("WAKE_GESTURES", ""),
+                os.environ.get("WAKE_GESTURES_DIR", ""),
+            )
+        )
     except (OSError, ValueError) as err:
         sys.exit(f"shiftkeys: {err}")
     pid, fd = pty.fork()
