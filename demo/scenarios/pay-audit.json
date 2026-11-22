@@ -1,0 +1,33 @@
+{
+  "_note": "One of the big fleet's agents (setup.sh's stage-fleet.tape), the one the finder, the search bar and the team boxes are filmed against. Blocked on an ask from its own start.",
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 260,
+    "steps": [
+      {
+        "after": 0.4,
+        "text": "Ready, in `api/`."
+      }
+    ]
+  },
+  "autostart": {
+    "at": 1.5,
+    "tokens": 1900,
+    "steps": [
+      {
+        "after": 0.6,
+        "text": "Reconciling refund rows against the processor's export before the sweeper runs."
+      },
+      {
+        "after": 0.9,
+        "ask": {
+          "tool": "Write",
+          "input": {
+            "file_path": "api/billing/reconcile.go",
+            "content": "package billing\n\n// Reconcile pairs each refund with the processor's row for it.\nfunc Reconcile(refunds []Refund, rows []Row) []Mismatch {\n\treturn nil\n}"
+          }
+        }
+      }
+    ]
+  }
+}
