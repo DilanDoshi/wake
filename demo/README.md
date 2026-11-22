@@ -7,7 +7,9 @@ say.
 
     ./setup.sh          # build the workspace: Harbor, the PATH shim, a scratch HOME
     ./record.sh tapes/03-broadcast.tape   # record one beat
+    WANT_AGENTS=22 ./record.sh tapes/33-jump.tape   # a beat on the big fleet
     ./build.sh          # caption, stitch, master out
+    python3 -m unittest discover -s .     # the relay's and the page's tests
 
 `record.sh` counts the fleet a take staged and then **ends it**: the daemon is detached and outlives
 `vhs`, so a bare `vhs tapes/…` leaves it, and its agents, running until `wake stop`.
@@ -49,10 +51,15 @@ manager that only *drew* those calls would be a lie on camera.
     agent/claude        the scripted `claude`, on a shim PATH
     agent/wakemcp.py    MCP client, so the manager's fan-out is real
     scenarios/*.json    one per cast member; `_pool.json` is the fallback
+    gestures/*.json     one per clip that needs the mouse: ctrl+<key> bound to clicks, drags, wheel
     harbor/             the fictional product, copied into a real git repo
     tapes/*.tape        one per beat; `_*.tape` are sourced helpers, never recorded
     shiftkeys.py        runs `wake` in a pty that turns Ctrl+G/Ctrl+K into ⇧↓/⇧↑, which VHS
-                        cannot send and the roster walks on
+                        cannot send and the roster walks on, and the keys a clip's
+                        gestures/ file binds into the mouse reports a terminal sends
+    test_shiftkeys.py   the relay's tests: the bytes, the pacing, the refusals, one real pty
+    test_page.py        the site's tests: what the front page leads with, that every clip has
+                        a tape, that no words describe a key the build has moved
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters
@@ -60,6 +67,29 @@ manager that only *drew* those calls would be a lie on camera.
                         sitemap.xml and favicon a search engine reads): `page.py <wake-landing>`
     pagecopy.py         its words — one entry per beat, the build notes, each page's title
                         and description
+
+## The mouse
+
+VHS cannot send a click, a drag or the wheel, so a take that needs one runs `wake` under
+`shiftkeys.py` with `WAKE_GESTURES` set to its clip's name (`export WAKE_GESTURES=34-drag` before
+the stage is sourced, which is where `wake` first starts). `gestures/34-drag.json` binds
+`ctrl+<letter>` to steps at screen cells counted from 0 — `click`, `press`, `move`, `release`,
+`glide` (from, to, steps, over), `wheel_up`, `wheel_down`, `wait` — and the tape types that key.
+The relay writes the same SGR reports a terminal does, so the binary sees a real mouse. Find a
+cell by recording with an `Output x.txt` (VHS writes the screen as text) and reading it; the
+terminal is 238×62 at this size, the sidebar's rule in column 214. Ctrl+G, K, C, H, I, J, M and
+Esc cannot be bound: the relay or the tape needs them.
+
+## The big fleet
+
+`setup.sh` also generates `stage-fleet.tape`: 21 agents and the manager in five teams, three of
+them blocked on an ask and six mid-tool for the length of a take (`scenarios/<name>.json`; the
+rest take a variant of `_pool.json`), which is what the agent finder, the sidebar's search bar,
+dragging an agent out of it and its team boxes are filmed against. A take on it is recorded with
+`WANT_AGENTS=22`, or `record.sh`'s count of 7 passes a half-staged fleet.
+
+A tape must end after a `Show`: VHS runs a tape that never calls it a second time, and the second
+pass types the whole staging into the room that the first one left running.
 
 `setup.sh` generates the staging tape rather than shipping one, because
 `/new <name> in <dir>` resolves a relative directory against the *session's*
