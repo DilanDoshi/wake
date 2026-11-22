@@ -6,10 +6,12 @@ package ui
 //
 // ⌃C parks the focused agent: the process stops, the transcript stays, and
 // `/resume` brings it back. `/quit` is the other ending, the one `wake stop` and
-// `/manager-stop` already spell - `rpc.FrameStop`, which closes stdin, lets the
-// in-flight turn finish, and releases the name back to the pool. Nothing brings
-// it back, which is why it is a typed verb rather than a key: a reflex must not
-// reach the one thing that cannot be undone.
+// `/manager-stop` already spell - `rpc.FrameStop`, which interrupts the agent as
+// Esc does, closes stdin, sweeps what it started and releases the name back to
+// the pool; the daemon kills only an agent that ignored both, once the grace has
+// run. The live agent does not come back - its transcript stays, and `/resume`
+// can reopen the conversation in a new process - which is why it is a typed verb
+// rather than a key: a reflex must not reach it.
 //
 // # Why removal is a client-side fold and not a daemon change
 //
@@ -26,10 +28,10 @@ package ui
 // # Why the drop waits for the report
 //
 // The keypress is the ask and the report is the answer, ⌃C park's own rule: a
-// stop lets the in-flight turn finish, so a working agent stays visible until the
-// ending lands. Dropping on the keypress would take a row away while its agent
-// was still finishing, and the daemon can still refuse (the session ended between
-// the read and the write). So awaitingQuit remembers the ask and departedQuit
+// stop takes a moment to land, so a working agent stays visible until the ending
+// does. Dropping on the keypress would take a row away while its agent was still
+// ending, and the daemon can still refuse (the session ended between the read and
+// the write). So awaitingQuit remembers the ask and departedQuit
 // acts on the confirming report, which is where the row leaves.
 
 import (
@@ -48,8 +50,8 @@ const (
 	// which command was typed rather than only what the socket said.
 	quitFailed = "quitting that agent"
 
-	// quitAsked is said on the keypress, colorAsked's reason: a stop lets the
-	// turn finish, so the row does not go at once, and the operator should know
+	// quitAsked is said on the keypress, colorAsked's reason: a stop takes a
+	// moment to land, so the row does not go at once, and the operator should know
 	// the command was read. The row leaving is the confirmation; this is the ask.
 	quitAsked = "quitting %s%s…"
 

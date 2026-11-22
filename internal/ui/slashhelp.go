@@ -32,7 +32,7 @@ var commandHelp = map[string]commandHelpLine{
 	taskCommand:            {"<what it is on>", "set the label beside a session's name"},
 	colorCommand:           {"<colour>", "an identity hue (" + strings.Join(rpc.ColorNames, " ") + "), or " + rpc.ColorNone + " to clear"},
 	teamCommand:            {"<name>", "group a session under a team - " + agentPrefix + "<name> then reaches them all - or " + rpc.TeamNone + " to clear"},
-	quitCommand:            {"", "end one session for good and drop its row, or every live one of a team after a confirm (irreversible)"},
+	quitCommand:            {"", "end one session and everything it started, and drop its row - its transcript stays for /resume - or every live one of a team after a confirm"},
 	parkCommand:            {"", "park one session, as ⌃C does, or every live one of a team; " + resumeVerb + " brings them back"},
 	adoptCommand:           {"[<id> ...]", "adopt a claude session this machine already has; bare lists them in the room"},
 	mcpCommand:             {"", "an agent's MCP servers: status, sign in, reconnect, turn on or off, tools"},

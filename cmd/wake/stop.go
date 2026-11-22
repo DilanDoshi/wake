@@ -16,7 +16,7 @@ import (
 
 // stopCeiling bounds the wait for the daemon to let go.
 //
-// The daemon bounds its own shutdown - a grace for in-flight turns, then a
+// The daemon bounds its own shutdown - a grace for interrupted turns to end, then a
 // group kill for whatever is left, then a bounded wait on its own goroutines -
 // and it closes every client unconditionally after all of that. So on a daemon
 // that is behaving, the end of this connection is guaranteed to arrive and
@@ -53,9 +53,10 @@ const (
 //
 // # Why it waits
 //
-// FrameQuit starts a graceful shutdown that lets every in-flight turn finish.
-// It does not signal anything. A `wake stop` that wrote the frame and exited
-// would return the shell prompt while 20 agents were still mid-Edit, and the
+// FrameQuit starts a shutdown that interrupts every agent, closes its stdin and
+// ends by force only what ignored both once the grace has run. A `wake stop`
+// that wrote the frame and exited would return the shell prompt while 20 agents
+// were still ending, and the
 // outgoing daemon holds its listener bound for the whole of that - so the next
 // `wake` in that window waits on a daemon that is on its way out, correctly
 // and without explanation. The wait is what makes the prompt mean something.
@@ -284,7 +285,7 @@ func waitForTheDaemonToLetGo(frames <-chan rpc.Frame, errs <-chan error, fleet s
 // can be said in time.
 func stoppingLine(st rpc.Status, err error) string {
 	if err != nil {
-		return "Stopping the fleet. Waiting for in-flight turns to finish…"
+		return "Stopping the fleet. Waiting for the agents to end…"
 	}
 	n, parked := runningCount(st), parkedCount(st)
 	switch {
@@ -293,9 +294,9 @@ func stoppingLine(st rpc.Status, err error) string {
 	case n == 0:
 		return fmt.Sprintf("Stopping the daemon and forgetting %s parked.", agents(parked))
 	case parked == 0:
-		return fmt.Sprintf("Stopping %s. Waiting for in-flight turns to finish…", agents(n))
+		return fmt.Sprintf("Stopping %s. Waiting for them to end…", agents(n))
 	default:
-		return fmt.Sprintf("Stopping %s and forgetting %s parked. Waiting for in-flight turns to finish…", agents(n), agents(parked))
+		return fmt.Sprintf("Stopping %s and forgetting %s parked. Waiting for them to end…", agents(n), agents(parked))
 	}
 }
 

@@ -219,7 +219,7 @@ Unchanged and still right. Reproduced here only where reality has moved:
 |---|---|
 | Daemon core with detach/reattach | **Built**, plus a reattach verb §17 did not anticipate |
 | Spawn / park / wake with UUIDs **and names** | Spawn and names built; **park and wake are not** — no `--resume` path exists yet |
-| Stop one agent · `wake stop` · `wake status` | **Built.** Stop closes stdin; hard kill is behind the daemon, not the CLI |
+| Stop one agent · `wake stop` · `wake status` | **Built.** Stop interrupts, closes stdin and sweeps; the daemon kills only what ignored both, after the grace |
 | DM at full Claude Code fidelity | **Built** — markdown, tool calls, diffs, scroll, interrupt |
 | Group chat, filtered | **Built** — the room, its filter, both sidebars |
 | `@name` routing, manager default, broadcast, mention toggle | **Built** — routing and broadcast in Phase 2, the manager in Task 15, the `⌃T` mention toggle 2026-08-12 |

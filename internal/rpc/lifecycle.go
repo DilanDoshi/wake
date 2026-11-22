@@ -53,8 +53,10 @@ const (
 	FrameInterrupt = "interrupt"
 
 	// FrameStop ends one session the way the spec says a session ends:
-	// close its stdin and let the in-flight turn finish. It does not
-	// signal, and it must never be routed to the kill path.
+	// interrupt it as Esc does, close its stdin and sweep what it started.
+	// Only a session that ignored both is killed, by the daemon once the grace
+	// has run (owner's 2026-11-22 ruling); the frame is never routed to the
+	// kill path itself.
 	FrameStop = "stop"
 
 	// FramePark stops one session's process and keeps everything else about
@@ -86,10 +88,10 @@ const (
 	// the daemon's memory and not a client's to supply.
 	FrameWake = "wake" // client → daemon: bring a parked session back
 
-	// FrameKill is the hard ending for an agent that has stopped
-	// behaving - SIGKILL to its whole process group, mid-tool, whatever it
-	// was writing. Separate from FrameStop precisely so it cannot happen by
-	// accident.
+	// FrameKill is the hard ending at once - SIGKILL to the agent's whole
+	// process group, mid-tool, whatever it was writing. Separate from FrameStop
+	// precisely so it cannot happen by accident; a stop's own kill is the
+	// daemon's, after the grace.
 	FrameKill = "kill"
 
 	// FrameQuit stops every session, then the daemon exits. It is what

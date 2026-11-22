@@ -49,7 +49,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room with the
   manager alone, spawning no agent (owner's 2026-10-16 ruling); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
-  (irreversible; a named fleet's directory goes with it, below), `fleets` (each fleet's state: `running`,
+  (ends every agent and forgets the park book; a named fleet's directory goes with it, below), `fleets` (each fleet's state: `running`,
   `parked`, `crashed` or `stopped`, read off the dial and the files, never a lock), `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
   one says how to install it (`core.claudeMissing`). `$WAKE_SOCKET` wins;
@@ -190,7 +190,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `ManagerClaude` and kept in the park record; a bare `manager` puts the fleet's back, and a variant
   claude answers with is the name it takes (`decisions.md`, 2026-10-15). While it is the fleet's own it
   follows a `/wake-name`, and a park books it under none (`recordOf`), so it wakes under the fleet's name then.
-- **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
+- **Park is recoverable; a stop ends the live agent.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket), naming every parked session it
   forgets (BUG-72). **A stopped named fleet is removed** (owner's 2026-11-11 ruling, BUG-21): under its own
   daemon lock, Wake's files one by one, the lock last, then the directory - never the tree - and every
@@ -214,12 +214,25 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   time (a listing it cannot read signals nothing). **A `⌃C` park inside a live daemon keeps them** (a woken
   session needs the world it spawned; held in memory, never on disk, the park book still holds no pid) and
   **every daemon exit sweeps them**: `wake stop`, `⌃Q⌃Q`, a SIGTERM or SIGINT, an empty daemon's exit. A
-  stopped agent that claude holds open for a running shell is ended once it is between turns - none open,
-  whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76). **Not every
+  stopped or parked agent that claude holds open for a running shell is ended once it is between turns - none
+  open, whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76; a stop's
+  interrupt frees claude from its shell first, so that is mostly a park's). **Not every
   process is reached**: a shell that exited before the ending leaves its child under launchd in a group of its
   own (`nohup cmd &` in a foreground Bash call, a hook's background command), and a SIGKILLed or crashed
   daemon leaves every group it noted - `deferred.md` carries both, with why. `internal/daemon/world.go`,
   `world_unix.go`, `worldsweep.go`, `heldopen.go`; `decisions.md` (2026-11-11).
+- **A stop interrupts first, then closes stdin, then sweeps; a hard kill fires automatically only on an agent
+  that ignored both, once `quitGrace` (30 s) has run** (owner's 2026-11-22 ruling, superseding #251). `/quit`, a
+  team's `/quit` and `/manager-stop` (all `FrameStop`, no new frame) and `wake stop` interrupt as Esc does - the
+  turn in flight ends now, what is queued behind it is cancelled, an outstanding ask is withdrawn, not denied
+  (so `/quit` refuses no blocked agent) - then close stdin, and retire sweeps what the agent started. `quitAgent`
+  notes the world, interrupts and stops on one goroutine and arms the grace on another, whatever becomes of the
+  interrupt, so an agent that reads nothing, with a full queue, is still ended; `endAfterGrace`, shared with
+  shutdown, waits on the agent's end (no poll), notes its world again so a group started during the grace is
+  caught, and kills. A normal `/quit` ends within a second or two; 30 s is for an agent that ignores the
+  interrupt. A second `/quit` starts nothing (`agent.quitting`, also the park-ready fence). The live agent and
+  what it was running are gone; its transcript stays and `/resume` can reopen the conversation in a new process.
+  `internal/daemon/shutdownstop.go`, `decisions.md` (2026-11-22).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`, and names what it drops — `parkdropped.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
@@ -249,8 +262,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   running background work running** (claude 2.1.319; owner's 2026-11-11 ruling): a running agent, shell or
   workflow keeps its sidebar row and backlog across a `/clear`, in the fleet and in the daemon's replay, its
   ending arrives under the new conversation and is named, and a finished one goes (`Fleet.keepRunning`).
-- `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
-  confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
+- `/quit` ends one agent (`FrameStop`: interrupted, stopped, swept, above) and drops its row **per window**
+  once the ending is confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - **A team's verbs** (owner's 2026-11-09 yes, `internal/ui/teamverbs.go`): `/park @team` parks its live
   members but a blocked one and confirms once for the team; `/resume <team>` wakes its parked ones, the
   book's included; `/quit @team` opens a Picker whose cursor starts on `never mind` (↓ ↵ quits), over
@@ -718,7 +731,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `world.go`/`world_unix.go`/`worldsweep.go`/`heldopen.go` (what an agent started, noted and swept; a held-open stop ended) · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (`⌃Q` or a signal interrupts, then stops) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `fleetend.go` (a fleet's end: when it is done, removing it, the listing's states) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `world.go`/`world_unix.go`/`worldsweep.go`/`heldopen.go` (what an agent started, noted and swept; a held-open stop ended) · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (every stop interrupts, then stops, then ends by force after the grace: `quitAgent`, `endAfterGrace`) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `fleetend.go` (a fleet's end: when it is done, removing it, the listing's states) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -984,7 +997,7 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
 WAKE_SOCKET=$(mktemp -d)/wake.sock go run ./cmd/wake status
 ```
 
-**`wake stop` is the only irreversible verb.** An agent once stopped the owner's fleet with it and
+**`wake stop` is the most final verb** (every live agent ends and the park book is forgotten; transcripts stay). An agent once stopped the owner's fleet with it and
 reported it had checked. **Look before a destructive verb, in the same command** — `wake status`
 first, and read it.
 

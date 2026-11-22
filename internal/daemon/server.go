@@ -201,7 +201,7 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 //
 // It sets a deadline rather than closing, and that is the whole of C1.
 // Closing a net.UnixListener *unlinks the socket file*, and shutdown then
-// takes up to quitGrace letting in-flight turns finish while the roster still
+// takes up to quitGrace letting interrupted turns end while the roster still
 // names every one of those agents. In that window `wake` finds no socket,
 // forks a second daemon, and its reaper reads that roster and SIGKILLs 15-30
 // agents mid-Edit - reached by the most ordinary motion there is, "quit, then

@@ -17,17 +17,20 @@ fleet changes; only your view of it goes away.
 
 Park pauses an employee. Detach is you going home while they keep working.
 
-## The four verbs
+## The verbs
 
 | | What it does | Recoverable |
 |---|---|---|
 | **`⌃C`** | Park the agent in front of you (`/park @who` or `/park @team` from the composer) | **Yes** — `/resume <name>` or `/resume <team>` |
 | **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake --fleet <name>` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
-| **`wake stop --fleet <name>`** | End every session and the daemon, forget the park book, remove the fleet | **No** |
+| **`/quit`** | End the conversation you are in, and everything it started | **No** — the live agent is gone; `/resume` can reopen its transcript |
+| **`wake stop --fleet <name>`** | End every session and the daemon, forget the park book, remove the fleet | **No** — the same, for every agent, and nothing is parked for later |
 
-`wake stop` is the only irreversible one. Nothing brings a *stopped* session back — that is exactly
-the gap park was built to close.
+`/quit` and `wake stop` end an agent for good: its `claude` process and everything it started are gone,
+and nothing parks it. What stays is the transcript on Claude's disk. `/resume` can find it and reopen the
+conversation in a new process — but not what was running when it ended. That is the gap park was built
+to close: a parked agent comes back as itself.
 
 ## Parking one agent
 
@@ -51,7 +54,7 @@ parked, the notice says `@backend is parked - /resume @backend brings it back`.
 **`/resume backend`** (or `@backend`) wakes every parked member of the team, whether you parked it
 in this daemon or it came back from a `⌃Q`.
 
-**`/quit @backend`** ends the team's live agents for good, so it asks first. A menu over the composer
+**`/quit @backend`** ends the team's live agents the way `/quit` ends one, so it asks first. A menu over the composer
 names who would end, with its cursor on **never mind**: `↓` then `↵` quits them, and `↵` alone or `esc`
 does nothing. Members already parked stay parked. Each row leaves your roster once its ending lands.
 
@@ -89,10 +92,17 @@ but you also leave 30 `claude` processes running, which is what park is for.
 
 ## Ending one agent
 
-`/quit` ends the conversation you are in for good — it stops the process, releases the name, and
-drops the row from your window. It is irreversible, which is the whole difference from `⌃C`: park
-pauses, `/quit` ends. Like `wake stop` it lets an in-flight turn finish first. `@who /quit` from the
-room ends that agent instead. The manager is refused and pointed at `/manager-stop`, its one ending.
+`/quit` ends the conversation you are in — it interrupts the agent as `esc` does, stops its process
+and everything it started, releases the name, and drops the row from your window. The turn in flight
+ends at once, what you had typed ahead of it is cancelled, and a question it was waiting on is
+withdrawn, not answered no — so `/quit` works on a blocked agent, where `⌃C` does not. A normal `/quit`
+is done within a second or two; only an agent that ignores both the interrupt and the stop is killed,
+and only after 30 seconds.
+
+That is the whole difference from `⌃C`: park pauses and `/resume` brings the agent back as itself;
+`/quit` ends the live agent. Its transcript stays on disk, so `/resume` can still find the conversation
+and open it in a new process. `@who /quit` from the room ends that agent instead. The manager is
+refused and pointed at `/manager-stop`, its one ending.
 
 ## Ending the fleet
 
@@ -100,8 +110,9 @@ room ends that agent instead. The manager is refused and pointed at `/manager-st
 wake stop
 ```
 
-Ends every session and the daemon. It waits for turns to finish rather than killing mid-thought,
-and it refuses to claim success unless it can prove the fleet is actually down.
+Ends every session and the daemon. Each agent is interrupted, then stopped, as `/quit` does it; only
+an agent that ignores both is killed, after the same 30 seconds. It refuses to claim success unless it
+can prove the fleet is actually down.
 
 **It also forgets the park book** — a deliberate ending ends the parked half too. So `wake stop`
 does not leave you a fleet to resume tomorrow. `⌃Q` does.

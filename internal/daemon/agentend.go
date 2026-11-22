@@ -89,8 +89,8 @@ func (a *agent) finished() bool {
 	return a.ended
 }
 
-// stop is the spec's stop verb: close stdin and let the in-flight turn
-// finish. It does not signal and it does not touch the agent's process group.
+// stop closes stdin and nothing else: it does not signal and it does not touch
+// the agent's process group. A park is this alone; a /quit is interrupted first.
 func (a *agent) stop() error {
 	a.mu.Lock()
 	a.stopped = true

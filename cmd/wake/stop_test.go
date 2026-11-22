@@ -59,7 +59,7 @@ func TestStopSaysWhatItIsWaitingFor(t *testing.T) {
 	if !strings.Contains(out.String(), "Stopping 2 agents") {
 		t.Errorf("stopFleet did not say what it was stopping: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "in-flight turns") {
+	if !strings.Contains(out.String(), "Waiting for them to end") {
 		t.Errorf("stopFleet did not say why it was waiting: %q", out.String())
 	}
 }
