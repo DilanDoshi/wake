@@ -2,6 +2,21 @@ package core
 
 import "testing"
 
+// A TaskCreate with only a subject - activeForm is optional - decodes to a create
+// op with the subject and an empty label, not to no op.
+func TestTaskCreateWithOnlyASubjectDecodesToACreateOpWithNoLabel(t *testing.T) {
+	op := toolChecklistOp("TaskCreate", map[string]any{
+		"subject":     "explore the code",
+		"description": "look around",
+	})
+	if op == nil {
+		t.Fatal("a TaskCreate with no activeForm decoded to no op")
+	}
+	if op.Update || op.Text != "explore the code" || op.ActiveForm != "" {
+		t.Errorf("create op = %+v, want the subject and no label", op)
+	}
+}
+
 // TaskCreate decodes to a create op carrying the subject and its present-tense
 // label, and no id - claude assigns that server-side and reports it in the
 // result text, so the fold reconstructs it from position.

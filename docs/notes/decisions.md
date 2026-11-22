@@ -8,6 +8,32 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-20 — the task tools follow Claude Code's default: Wake does not turn them on (the owner, via wake-orch)
+
+wake-orch's check of the task-label surfaces found the pinned checklist and the working label on the conversation
+line, the room line and the `/board` row never fire for a default agent.
+
+- **It is the model.** Claude Code's public docs ("Task tool availability", code.claude.com/docs/en/tools-reference)
+  offer `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` by default only on Opus 4.7, Sonnet 4.6, Haiku 4.5 and earlier,
+  and its CHANGELOG dates the change (2.1.233 took them off the newest models, 2.1.268 made it the allow-list). The
+  corpus fits: before 2.1.233 Sonnet 5 and Opus 5 inits list them (a `--tools`-restricted run lists none); from 2.1.233
+  on every init that lists them is Haiku 4.5 or Sonnet 4.5, and every Sonnet 5.x, Opus 5.5 and Haiku 5.5 init from
+  2.1.281 on lists none.
+- **The ruling: Wake does not export `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` to its agents** - not in `core.agentEnv`, not
+  anywhere - and follows Claude Code's own default, since claude is going that way. An operator who wants the list
+  exports the variable before the first `wake` of a fleet: Wake passes the environment through (`core.agentEnv`
+  scrubs only the nested-session and launcher variables) and a daemon starts its agents with the one it began with.
+  `docs/user_manual/02-the-room.md` says so.
+- **Why not forced.** Observed once, unrecorded (haiku-5-5, claude 2.1.328, tools on): a three-item job cost ten extra
+  tool calls - a `ToolSearch` to load the deferred tools, three `TaskCreate`, six `TaskUpdate` - and the tools'
+  definitions and reminders sit in every agent's context, times thirty agents. The docs say newer models keep track of
+  multi-step work without a written checklist.
+- **What goes with it.** With the tools on, the label of the item in flight is its `activeForm`, else its subject:
+  claude's CHANGELOG (2.1.69) made `activeForm` optional, and that same run sent none (observed once, unrecorded). The
+  fallback is held by `internal/ui/checklist_label_test.go`, and the airlock's decode of a subject-only `TaskCreate` by
+  `internal/core/checklist_op_test.go`. A blank label or subject is not a label. The fallback widens the known
+  subagent-commingling gap (`deferred.md`, 2026-08-26): an unlabelled subagent item can now reach a parent's line.
+
 ## 2026-11-18 — the room folds an agent's repeated "↻ resumed" lines into one counted line (the owner, via wake-orch)
 
 The owner's screenshot of a Singularity room: the same dozen agents' `↻ name resumed after the usage limit`, again
@@ -6559,8 +6585,8 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
   cancels); an agent already on screen, its pane focused - a drag never moves one; the bottom half of a pane
   `Grid.CanOpenBelow` allows and a column tall enough to split (`SplitRowsIn`), below that pane - in a split
   column that takes the lower slot, `Grid.OpenBelow`'s own rule, and the displaced conversation keeps its
-  transcript off screen; anywhere else, a new column. The bottom half of a lower pane is a new column, since
-  nothing sits under the bottom of a column.
+  transcript off screen; anywhere else, a new column *(the pane shown, in a window that carries one column:
+  2026-11-20 below)*. The bottom half of a lower pane is a new column, since nothing sits under the bottom of a column.
 - **Esc, any other key, a resize, a button-less motion and a drop on the sidebar's column cancel.** The column
   counts at every row, the awareness strip under it included. A button-less motion is what a terminal reports
   after a release that never arrived; one that reports none leaves the tag and outline drawn until the next key
@@ -6572,11 +6598,13 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
   report-shaped key is dropped (`strayReport`).
 - **It is drawn as a tag and an outline laid over the assembled frame**, the screen selection's mechanism
   (`overlayAgentDrag`): the agent's name in its hue at the pointer, and the zone's box where the agent will be -
-  a new column's own share once it holds the keys (the whole pane area in a window too narrow to sit beside
-  another), a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
+  a new column's own share once it holds the keys (the pane it replaces in a window that carries one column),
+  a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
   changes (a layout that changes mid-drag - a spawn, a `/quit` closing a pane - leaves the drawing stale until
   the zone does; the drop recomputes it), and the box is where the pane lands to the cell, held by
-  `TestAnOutlineIsExactlyWhereTheAgentLands` at five widths with up to five columns open. Only the splice is
+  `TestAnOutlineIsExactlyWhereTheAgentLands` at seven widths with up to five columns open and
+  `TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces` in a window that shrank, each checked by the pane's
+  laid-out size and the draw's own hit-testing, not by the code that places the outline. Only the splice is
   per motion, exact over wide characters (about 185 µs against the 245-280 µs a two-pane `View` already costs,
   `BenchmarkLiveDragOverlay`), and a frame with no live drag is returned as it came. Nothing re-lays out until
   the drop, as with a divider drag.
@@ -6620,8 +6648,14 @@ every click piled another column up behind it.
 - Held by `TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne`, `...FromAConversation...ReplacesIt`,
   `...FromTheRoomWithAConversationOpenTakesItsColumn`, `TestTenClicksInASingleColumnLayoutLeaveOneConversationColumn`
   and `TestTheSingleColumnLineIsTheLayoutsCapacity` (a window one column short of the takeover width replaces, one at
-  it adds). `fits`' floor of one is the invariant "a window carries a pane"; the constants keep it out of reach, so
-  a mutation of it is equivalent and `TestCapacityIsHowManyColumnsRegionsDraws` pins the invariant instead.
+  it adds). `fits` has no floor of one: a window at the takeover width carries three beside the roster, so the
+  floor was unreachable; `TestCapacityIsHowManyColumnsRegionsDraws` asserts a capacity of at least one at every
+  width (it follows `Regions`, so it cannot catch a wrong `Capacity` value - the hand-worked table in
+  `TestCapacityIsOneBelowTheTakeoverWidth` does), and a constant that broke the invariant fails there.
+- **One consequence, as `⌃D` has it.** From the room in a one-column window that still holds three or more columns
+  (a wide window that shrank), the click takes column 1 - a conversation off screen, which stays in its
+  transcript and the `⇥` ring. The room is the pane shown and is never replaced, so this is `openDMWith`'s rule, the
+  one the owner named; opening in a new rightmost column from there instead is the alternative, if he prefers.
 
 ## 2026-11-22 — a stop interrupts first, and a hard kill fires on its own after the grace (the owner, via wake-orch)
 

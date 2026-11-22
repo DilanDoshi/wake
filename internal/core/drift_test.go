@@ -50,10 +50,10 @@ func (d driftTally) report(t *testing.T, what string) {
 
 // driftAudit is one pass over the transcripts.
 type driftAudit struct {
-	misread, origins, sources, retyped, undecodable driftTally
-	marks                                           map[string]int
-	newest                                          string
-	lines, userLines, skipped                       int
+	misread, origins, sources, turnOrigins, wakeups, retyped, undecodable driftTally
+	marks                                                                 map[string]int
+	newest                                                                string
+	lines, userLines, skipped                                             int
 }
 
 // TestDrift reads every top-level transcript and fails on what the recorded
@@ -64,7 +64,8 @@ func TestDrift(t *testing.T) {
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no transcripts under %s (err=%v): this audit would assert nothing", driftRoot(t), err)
 	}
-	a := driftAudit{misread: driftTally{}, origins: driftTally{}, sources: driftTally{}, retyped: driftTally{}, undecodable: driftTally{}, marks: map[string]int{}}
+	a := driftAudit{misread: driftTally{}, origins: driftTally{}, sources: driftTally{}, turnOrigins: driftTally{}, wakeups: driftTally{},
+		retyped: driftTally{}, undecodable: driftTally{}, marks: map[string]int{}}
 	for _, f := range files {
 		a.skipped += driftLines(t, f, a.line)
 	}
@@ -76,6 +77,8 @@ func TestDrift(t *testing.T) {
 	a.misread.report(t, "claude's own lines that restore as the operator's turn")
 	a.origins.report(t, "origin kinds nothing has ruled on (injected_test.go's ruledOrigins)")
 	a.sources.report(t, "promptSource values nothing has ruled on (ruledPromptSources)")
+	a.turnOrigins.report(t, "turnOrigin values nothing has ruled on (ruledTurnOrigins)")
+	a.wakeups.report(t, "wakeupSource values nothing has ruled on (ruledWakeupSources)")
 	a.retyped.report(t, "user lines whose marks changed type")
 	a.undecodable.report(t, "user lines DecodeTranscriptLine refuses")
 }
@@ -101,6 +104,12 @@ func (a *driftAudit) line(line []byte) {
 	}
 	if _, ruled := ruledPromptSources[m.PromptSource]; m.PromptSource != "" && !ruled {
 		a.sources[redactedHead(m.PromptSource)]++
+	}
+	if _, ruled := ruledTurnOrigins[m.TurnOrigin]; m.TurnOrigin != "" && !ruled {
+		a.turnOrigins[redactedHead(m.TurnOrigin)]++
+	}
+	if _, ruled := ruledWakeupSources[m.WakeupSource]; m.WakeupSource != "" && !ruled {
+		a.wakeups[redactedHead(m.WakeupSource)]++
 	}
 	evs, err := DecodeTranscriptLine(line)
 	if err != nil {

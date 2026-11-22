@@ -130,7 +130,7 @@ func (a App) reattached(m reattachedMsg) (tea.Model, tea.Cmd) {
 	// unit test) is a no-op. Before the two corrections below, so they win:
 	// WithStatus re-stamps a working turn's clock and tokens, which ForgetTurns
 	// then clears.
-	a = a.applyStatus(m.fleet)
+	a = a.applyStatus(m.fleet).settleAll()
 	// Everything that happened while this client was gone happened without it,
 	// and the fleet report it comes back with carries no permission mode. A
 	// belief that survived the disconnection is one nothing can confirm - see

@@ -665,8 +665,9 @@ relabel `idle`, which is wrong the moment a task takes more than one turn.
 items going all-`completed` is the agent's *own* declaration that its self-tracked plan is finished —
 a semantic signal, per-agent, already decoded (`internal/ui/checklist.go`; `status` is
 `pending|in_progress|completed`). An "all items completed" derivation (which `checklist.go` does not
-expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (it is
-off unless `CLAUDE_CODE_ENABLE_TASKS`), so it is a signal *when present*, not a universal one.
+expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (the task
+tools are model-gated: a default Sonnet, Opus or Haiku 5.x agent has none, `decisions.md` 2026-11-20), so it is
+a signal *when present*, not a universal one.
 
 **Candidate approaches (none decided):**
 - **Derive "done" client-side from the checklist** — all items `completed` → a "done" annotation on the
@@ -1141,8 +1142,11 @@ excludes subagents, so the board is correct. The commingling only touches the wo
 subagent's *inline* forwarded list. A one-line `ev.Subagent == nil` guard in `Fleet.foldChecklist`
 would stop the pollution but also blank the subagent's inline list (its `Todos` comes from that very
 fold), so a real fix is a **per-subagent checklist** rather than a guard — new machinery, out of the
-board PR's scope. **Unverified whether subagents emit these ops at all** (no corpus fixture does), so
-this is latent until one is recorded.
+board PR's scope. **Live whenever the session has the tools:** Claude Code's tools reference ("Task-tracking
+tools in subagents and agent teams") says a subagent has them whenever its session does, whatever its model,
+though no corpus fixture records one using them. **Widened 2026-11-20:** `activeForm()` now falls back to an
+item's subject, so a subagent's in-progress item with no `activeForm` reaches the parent's `Doing` as a
+labelled one already did. The pinned board stays correct, so the working line can name an item it does not show.
 
 *Blocks:* nothing; correctness of a subagent's own inline checklist and the parent's working line, if
 subagents turn out to author task lists.
@@ -6569,3 +6573,31 @@ Left out:
   were drawn under `› you` before (one such record on the machine it was found on). Telling them apart means decoding
   the disk's `turnOrigin`, which wants a recorded transcript of a scheduled wakeup (`testdata/transcript` has none)
   and room in `protocol.go`, which is at the 800-line limit.
+
+## FROM `fix/loop-wakeup-turn-on-disk`, 2026-11-21
+
+A loop wakeup's non-meta record restores as a started turn (`core.claudeOwnMarks`). Left out:
+
+- **An `isMeta` wakeup gives a restored room no turn boundary.** 2.1.311-2.1.325 wrote only the meta record
+  (172 of the 173 marked ones on the recording machine), which still decodes to nothing, so after an `@all` the
+  reply to such a wakeup restores into the room as public. Unchanged by this fix. *Closes with:* starting a turn
+  from a meta record marked `turnOrigin:"scheduled"`, which a non-meta wakeup's own meta companion is not (it
+  carries `wakeupSource` alone), so no turn starts twice.
+- **A rewind after another turn claude started is unrecorded.** A background task's ending (a dropped
+  `task-notification` record) may be a later turn claude counts, as a wakeup is; the tip names only a started
+  turn. *Closes with:* a recording of a rewind after one.
+
+## FROM `fix/subagent-early-handback-ends-once`, 2026-11-20
+
+An agent's `completed` ending is held while a task it owns runs, and drawn if no restart comes
+(`internal/ui/taskhold.go`). Left out:
+
+- **A held ending has no time bound.** It is released by the session's next turn ending with nothing the agent
+  owns running, the agent ended or parked, or a reattach - never a timer. So an owned task that never ends (a dev
+  server a subagent handed back over), or an idle session whose owned task ends with no restart, draws no
+  ending line until one of those. The sidebar is right meanwhile. *Closes with:* a recording of claude's
+  behaviour for an owned task that never ends, and an idle-edge release if the wait is felt.
+- **The shape rests on one recording.** The restart is told by the agent's task id and a `task_started`; one under
+  another id, or seen only as `task_progress`, draws two lines as before. A turn ending between the shell's
+  ending and the restart (a `/context` reply is one) draws the early ending, and the restart a second line.
+  *Closes with:* a recording of either.

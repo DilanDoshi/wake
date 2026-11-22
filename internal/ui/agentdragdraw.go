@@ -127,15 +127,12 @@ func (a App) outlineOf(z dropZone, id string) []edit {
 // zoneRect is the cells the dropped agent's pane takes once the drop is done: the
 // pane in the grid the drop would produce, with the keys moved to it - the window
 // slides to the column that then holds them. It is the drop's own grid operation
-// (a new column, the replaced pane in a one-column window, the lower slot, the
-// agent's pane where it already is), so it is where the agent lands by construction.
+// (newColumnPlace, the lower slot, the agent's pane where it already is), so it is
+// where the agent lands by construction.
 func (a App) zoneRect(z dropZone, id string) (x, y, w, h int, ok bool) {
 	switch z.kind {
 	case zoneColumn:
-		if a.layout.Capacity() == 1 {
-			return a.landed(a.here(id)(a.grid), id)
-		}
-		return a.landed(a.grid.OpenEnd(id), id)
+		return a.landed(a.newColumnPlace(id)(a.grid), id)
 	case zoneBelow:
 		return a.landed(a.grid.OpenBelow(z.pane, id), id)
 	case zoneFocus:
@@ -151,20 +148,20 @@ func (a App) landed(g Grid, id string) (int, int, int, int, bool) {
 }
 
 // paneRect is the cells id's pane is drawn in under this App's layout and focus,
-// and false when it is not on screen.
+// and false when it is not on screen: its size is paneSize's, and it starts where
+// its column does, a lower pane under the rule below its column's upper one.
 func (a App) paneRect(id string) (x, y, w, h int, ok bool) {
-	r, col := a.regions(), a.columnOf(id)
-	if !a.grid.Has(id) || r.Cols[col] == 0 {
+	if !a.grid.Has(id) {
 		return 0, 0, 0, 0, false
 	}
-	upper, lower := a.layout.SplitRowsIn(col, a.paneHeight())
-	x, w = a.layout.PaneLeft(r, col), r.Cols[col]
-	switch a.grid.Cols[col].Bottom {
-	case "":
-		return x, 0, w, a.paneHeight(), true
-	case id:
-		return x, upper + dividerHeight, w, lower, lower > 0
-	default:
-		return x, 0, w, upper, true
+	w, h, ok = a.paneSize(id)
+	if !ok {
+		return 0, 0, 0, 0, false
 	}
+	col := a.columnOf(id)
+	if id != "" && a.grid.Cols[col].Bottom == id {
+		y, _ = a.rowsOf(col)
+		y += dividerHeight
+	}
+	return a.layout.PaneLeft(a.regions(), col), y, w, h, true
 }
