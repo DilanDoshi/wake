@@ -219,7 +219,7 @@ def page(active: str, body: str, head: str = "") -> str:
 <meta property="og:description" content="{description}">
 <meta property="og:url" content="{url}">
 <meta property="og:image" content="{SITE}/media/{SHOTS[0].clip}.jpg">
-<meta property="og:image:alt" content="Wake's room: one group chat with a fleet of Claude Code agents">
+<meta property="og:image:alt" content="Wake's ⌃F finder over the room: a few letters of a name and any agent in the fleet is one key away">
 <meta name="twitter:card" content="summary_large_image">{head}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -248,7 +248,8 @@ def hero() -> str:
       one group chat as the primary surface, <code>@name</code> to reach one, <code>@team</code> to
       reach a group, team channels that show one team's messages, a manager that acts on the fleet
       for you, a roster that ranks agents by whether they need you and marks the ones that are done,
-      and any agent openable as a full conversation at Claude&nbsp;Code fidelity. Wake V1 is out.</p>
+      <code>⌃F</code> to find any agent in a few letters of its name, drag-to-place panes, and any
+      agent openable as a full conversation at Claude&nbsp;Code fidelity. Wake V1 is out.</p>
     <div class="meta">
       <a class="pill" href="{LATEST}"><b>Download</b> — latest release&nbsp;→</a>
       <span class="pill req"><b>requires Claude&nbsp;Code</b> — installed and signed in</span>
@@ -437,6 +438,30 @@ def write_releases(dest: str, rels: list[dict]) -> None:
     )
 
 
+def index_page() -> str:
+    home = "".join(shot_section(s) for s in SHOTS if s.home) + friends_section()
+    return page(
+        "index.html",
+        hero()
+        + f'<main class="wrap">{home}{more_section()}{requirements_section()}{built_section()}</main>',
+        software_ld(),
+    )
+
+
+def features_page() -> str:
+    every = "".join(shot_section(s) for s in SHOTS)
+    return page(
+        "features.html",
+        subhead(
+            'features <span class="lbl">&lt;&gt; every recording</span>',
+            "Everything Wake does, recorded.",
+            "Each clip is the real <code>wake</code> binary in a real terminal, driving a "
+            "scripted fleet. Click one to watch it full screen.",
+        )
+        + f'<main class="wrap">{every}{friends_section()}{also_section()}</main>',
+    )
+
+
 def write_crawl_files(dest: str) -> None:
     """What a crawler reads before any page: where the pages are, and the icon."""
     urls = "".join(f"  <url><loc>{url_of(p)}</loc></url>\n" for p in META)
@@ -481,31 +506,8 @@ def main() -> None:
         total += size
         print("  %-18s %7.1f KB" % (friend.clip, size / 1024))
 
-    home = "".join(shot_section(s) for s in SHOTS if s.home) + friends_section()
-    write(
-        os.path.join(dest, "index.html"),
-        page(
-            "index.html",
-            hero()
-            + f'<main class="wrap">{home}{more_section()}{requirements_section()}{built_section()}</main>',
-            software_ld(),
-        ),
-    )
-
-    every = "".join(shot_section(s) for s in SHOTS)
-    write(
-        os.path.join(dest, "features.html"),
-        page(
-            "features.html",
-            subhead(
-                'features <span class="lbl">&lt;&gt; every recording</span>',
-                "Everything Wake does, recorded.",
-                "Each clip is the real <code>wake</code> binary in a real terminal, driving a "
-                "scripted fleet. Click one to watch it full screen.",
-            )
-            + f'<main class="wrap">{every}{friends_section()}{also_section()}</main>',
-        ),
-    )
+    write(os.path.join(dest, "index.html"), index_page())
+    write(os.path.join(dest, "features.html"), features_page())
     write_releases(dest, rels)
     write_crawl_files(dest)
 
