@@ -18,16 +18,13 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// quitGrace is how long a quitting daemon waits for stopped sessions to end
-// before it kills what is left: a parking quit's interrupted turns, and under
-// `wake stop` turns let run to their end.
-//
-// It is a compromise between two things Wake owes the operator and cannot owe
-// both of: an agent mid-Edit under `wake stop` must be allowed to finish, and the
-// daemon must not still be alive minutes after `wake stop`. Exiting early is
-// the worse failure of the two - it leaves process trees with nobody holding
-// a handle - so the grace is generous and the ending is a group kill rather
-// than a shrug.
+// quitGrace is how long a stop waits for an interrupted, stopped session to end
+// before it kills what is left, for a /quit and a quitting daemon alike. It is
+// the bound for an agent that ignores the interrupt: one that heeds it ends
+// within a second or two. Exiting early is the worse failure - it leaves process
+// trees with nobody holding a handle, and a kill mid-write can cut the
+// transcript /resume reads - so the grace is generous and the ending is a group
+// kill rather than a shrug.
 // It is a var only so tests can compress it; nothing outside a test assigns it.
 var quitGrace = defaultQuitGrace
 
@@ -317,10 +314,10 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, an in-flight turn allowed to finish under `wake stop` or, when
-// parking, ended as Esc ends it, by claude itself - because a daemon exit is not
-// leave to kill. Only what is still alive after the grace is killed, and it is
-// killed by process group, because an agent is a tree.
+// interrupted as Esc interrupts, then stdin closed, so claude ends its own turn
+// - because a daemon exit is not leave to kill. Only what is still alive after
+// the grace is killed, and it is killed by process group, because an agent is a
+// tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
 // stop is labelled a park on the way in, and what happens to the park book on
@@ -359,7 +356,7 @@ func (s *server) shutdown() error {
 			}
 			continue
 		}
-		s.stopForShutdown(a, parking)
+		s.stopForShutdown(a)
 	}
 	s.endAfterGrace(agents, quitGrace, parking)
 

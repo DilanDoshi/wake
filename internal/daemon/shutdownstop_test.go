@@ -179,3 +179,45 @@ func TestAParkingQuitWithdrawsAnOutstandingAskRatherThanDenyingIt(t *testing.T) 
 		})
 	}
 }
+
+// `wake stop` is a stop like any other (owner's 2026-11-22 ruling): every agent
+// is interrupted before its stdin closes, so a turn in flight ends at once rather
+// than running on until the grace's kill, and an ask is withdrawn, not denied.
+func TestWakeStopInterruptsABusyAgentSoItEndsInsideTheGrace(t *testing.T) {
+	log := interruptLog(t)
+	fakeClaudeOnPath(t, "busy")
+	grace := 4 * time.Second
+	shortQuitGrace(t, grace)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	busyAgent(t, c, idAlpha, "alex")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "and then the docs"})
+	c.awaitEvent(idAlpha, "queued")
+
+	start := time.Now()
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	d.waitForExit(t)
+
+	if n := interruptsIn(log); n != 1 {
+		t.Errorf("the busy agent was sent %d interrupts on `wake stop`, want 1", n)
+	}
+	if took := time.Since(start); took >= grace {
+		t.Errorf("`wake stop` took %v, the whole grace: the turn, or the message queued behind it, ran until the kill", took)
+	}
+}
+
+func TestWakeStopWithdrawsAnOutstandingAskRatherThanDenyingIt(t *testing.T) {
+	log := interruptLog(t)
+	fakeClaudeOnPath(t, "ask")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.pollState(idAlpha, rpc.StateBlocked)
+
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	d.waitForExit(t)
+
+	if n := interruptsIn(log); n != 1 {
+		t.Errorf("the blocked agent was sent %d interrupts before its stdin closed on `wake stop`, want 1: the ask died as a denial", n)
+	}
+}
