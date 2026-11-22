@@ -263,8 +263,9 @@ cell crossed, at whatever rate your hardware produces, which is the thing that c
       no column is added. At under 120 columns the window carries one pane, so the click **replaces** the pane on screen (a second click
       replaces that, the room's group chat is only a `⇥` away) and no columns pile up behind it.
 - [ ] **Drag an agent out of the sidebar.** A small tag in its colour follows the pointer with no lag;
-      the pane under it outlines its bottom half (open below) or the column strip beside the sidebar
-      (new column); the outline changes only when the zone does; nothing re-wraps until you let go.
+      the pane under it outlines its bottom half (open below), or the column strip beside the sidebar
+      (new column) - or, in a window under 120 columns, the pane the drop will replace; the outline
+      changes only when the zone does; nothing re-wraps until you let go.
       Let go: it lands where outlined. **Esc** mid-drag, and **letting go back on the sidebar**, both
       leave everything as it was, and esc does not interrupt the agent in the focused pane.
 - [ ] **A very slight wobble on a click is still a click** (under two cells); it does not start a drag.

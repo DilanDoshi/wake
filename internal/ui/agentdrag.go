@@ -5,8 +5,8 @@ package ui
 // A press arms the drag and takes no screen selection: that drag moves the agent
 // now. Motion past dragSlop makes it live, and it is drawn at the pointer
 // (agentdragdraw.go) with nothing laid out again until release - the divider
-// drags' rule. A click, which never went live, opens the agent in a new column
-// (openInNewPane); a Shift-click, where the terminal delivers one, opens it
+// drags' rule. A click, which never went live, opens the agent in a new column, or
+// in place of the pane shown where the window fits one (openInNewPane); a Shift-click, where the terminal delivers one, opens it
 // below the focused pane as ⌃B does. A live drag drops where dropZoneFor says,
 // and esc, any other key, a resize, a lost release or letting go back on the
 // sidebar leaves everything as it was.
@@ -21,7 +21,7 @@ const (
 	// dragVerb and dragKeys are the help's row for the drag: the gesture and the
 	// keys that end it.
 	dragVerb = "drag an agent from the sidebar"
-	dragKeys = "drop on a pane's lower half to open below it, anywhere else for a new column · esc cancels, and so does letting go on the sidebar"
+	dragKeys = "drop on a pane's lower half to open below it, anywhere else for a new column (in place of the pane shown, in a window that fits one) · esc cancels, and so does letting go on the sidebar"
 )
 
 // dragSlop is how many cells the pointer moves from the press before it is a
@@ -33,7 +33,7 @@ type zoneKind int
 
 const (
 	zoneNone   zoneKind = iota + 1 // the sidebar: letting go cancels; the zero value is no zone yet
-	zoneColumn                     // a new column at the grid's right end
+	zoneColumn                     // a new column at the grid's right end, or the pane shown in a one-column window
 	zoneBelow                      // under zone.pane, by Grid.OpenBelow's rules
 	zoneFocus                      // the agent is on screen already: its pane takes the keys
 )
@@ -115,7 +115,7 @@ func (a App) dropped(x, y int) App {
 		a = a.openBelow(d.id, d.name)
 	case d.live && zone.kind == zoneBelow:
 		a = a.withFocus(zone.pane).openBelow(d.id, d.name)
-	case !d.live || zone.kind != zoneNone: // a click, a new column, an open agent's pane
+	case !d.live || zone.kind != zoneNone: // a click, a new column (or the shown pane), an open agent's pane
 		a = a.openInNewPane(d.id, d.name)
 	default:
 		return a // back on the sidebar
@@ -157,7 +157,8 @@ func (a App) dragKey(m tea.KeyMsg) (App, bool) {
 // dropZoneFor is what a release at a cell would do with an agent. Over the
 // sidebar's rows it is nothing; an agent already on screen is focused wherever
 // else it is dropped; the bottom half of a pane that can split opens below it;
-// everything else is a new column, as a click is.
+// everything else is a new column (the pane shown, in a window that fits one), as
+// a click is.
 func (a App) dropZoneFor(id string, x, y int) dropZone {
 	r := a.regions()
 	region, col := a.layout.Hit(r, x)

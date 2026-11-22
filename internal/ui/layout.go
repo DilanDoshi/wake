@@ -232,10 +232,11 @@ func (l Layout) Capacity() int {
 // the window the operator sizes, so they are read against it, not the frame.
 func (l Layout) windowWidth() int { return l.Width + 2*SideMargin }
 
-// fits is how many columns of minPaneWidth the space carries, at least one.
-func fits(space int) int {
-	return max((space+dividerWidth)/(minPaneWidth+dividerWidth), 1)
-}
+// fits is how many columns of minPaneWidth the space carries. It has no floor of
+// one: the window it is asked for is at least dmTakeoverColumns wide, which carries
+// three beside the roster (TestCapacityIsHowManyColumnsRegionsDraws holds that
+// over every width, so a constant that broke it fails there rather than here).
+func fits(space int) int { return (space + dividerWidth) / (minPaneWidth + dividerWidth) }
 
 // window is the leftmost column drawn when not all of them fit.
 //

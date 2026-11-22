@@ -6557,8 +6557,8 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
   cancels); an agent already on screen, its pane focused - a drag never moves one; the bottom half of a pane
   `Grid.CanOpenBelow` allows and a column tall enough to split (`SplitRowsIn`), below that pane - in a split
   column that takes the lower slot, `Grid.OpenBelow`'s own rule, and the displaced conversation keeps its
-  transcript off screen; anywhere else, a new column. The bottom half of a lower pane is a new column, since
-  nothing sits under the bottom of a column.
+  transcript off screen; anywhere else, a new column *(the pane shown, in a window that carries one column:
+  2026-11-20 below)*. The bottom half of a lower pane is a new column, since nothing sits under the bottom of a column.
 - **Esc, any other key, a resize, a button-less motion and a drop on the sidebar's column cancel.** The column
   counts at every row, the awareness strip under it included. A button-less motion is what a terminal reports
   after a release that never arrived; one that reports none leaves the tag and outline drawn until the next key
@@ -6570,11 +6570,13 @@ onto the screen fast." Rulings, each held by `internal/ui/agentdrag_test.go`, `s
   report-shaped key is dropped (`strayReport`).
 - **It is drawn as a tag and an outline laid over the assembled frame**, the screen selection's mechanism
   (`overlayAgentDrag`): the agent's name in its hue at the pointer, and the zone's box where the agent will be -
-  a new column's own share once it holds the keys (the whole pane area in a window too narrow to sit beside
-  another), a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
+  a new column's own share once it holds the keys (the pane it replaces in a window that carries one column),
+  a drop below's lower slot, an open agent's own pane. The outline's cells are built when the zone
   changes (a layout that changes mid-drag - a spawn, a `/quit` closing a pane - leaves the drawing stale until
   the zone does; the drop recomputes it), and the box is where the pane lands to the cell, held by
-  `TestAnOutlineIsExactlyWhereTheAgentLands` at five widths with up to five columns open. Only the splice is
+  `TestAnOutlineIsExactlyWhereTheAgentLands` at seven widths with up to five columns open and
+  `TestTheNewColumnOutlineInAOneColumnLayoutIsThePaneItReplaces` in a window that shrank, each checked by the pane's
+  laid-out size and the draw's own hit-testing, not by the code that places the outline. Only the splice is
   per motion, exact over wide characters (about 185 µs against the 245-280 µs a two-pane `View` already costs,
   `BenchmarkLiveDragOverlay`), and a frame with no live drag is returned as it came. Nothing re-lays out until
   the drop, as with a divider drag.
@@ -6618,5 +6620,11 @@ every click piled another column up behind it.
 - Held by `TestAClickFromTheRoomInASingleColumnLayoutTakesColumnOne`, `...FromAConversation...ReplacesIt`,
   `...FromTheRoomWithAConversationOpenTakesItsColumn`, `TestTenClicksInASingleColumnLayoutLeaveOneConversationColumn`
   and `TestTheSingleColumnLineIsTheLayoutsCapacity` (a window one column short of the takeover width replaces, one at
-  it adds). `fits`' floor of one is the invariant "a window carries a pane"; the constants keep it out of reach, so
-  a mutation of it is equivalent and `TestCapacityIsHowManyColumnsRegionsDraws` pins the invariant instead.
+  it adds). `fits` has no floor of one: a window at the takeover width carries three beside the roster, so the
+  floor was unreachable; `TestCapacityIsHowManyColumnsRegionsDraws` asserts a capacity of at least one at every
+  width (it follows `Regions`, so it cannot catch a wrong `Capacity` value - the hand-worked table in
+  `TestCapacityIsOneBelowTheTakeoverWidth` does), and a constant that broke the invariant fails there.
+- **One consequence, as `⌃D` has it.** From the room in a one-column window that still holds three or more columns
+  (a wide window that shrank), the click takes column 1 - a conversation off screen, which stays in its
+  transcript and the `⇥` ring. The room is the pane shown and is never replaced, so this is `openDMWith`'s rule, the
+  one the owner named; opening in a new rightmost column from there instead is the alternative, if he prefers.
