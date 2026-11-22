@@ -315,3 +315,39 @@ func TestAParkingQuitDoesNotBookAnAgentThatIsBeingQuit(t *testing.T) {
 		t.Errorf("the park book holds %+v: ⌃Q parked an agent the operator had quit", recs)
 	}
 }
+
+// An interrupt frees claude from the shell that would hold it open (checked live
+// on 2.1.329), so a quit leaves it to exit by itself: the held-open backstop is a
+// park's, and a kill is only for an agent that ignored the interrupt and the stop.
+func TestAQuitLeavesAnAgentThatHeedsTheInterruptToExitByItself(t *testing.T) {
+	t.Setenv(fakeSlowEnv, "600ms")
+	logs := captureLog(t)
+	_, c, left := holdFleet(t)
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.awaitEvent(idAlpha, `echo: {`) // its turn ends with the shell still running
+	c.pollState(idAlpha, rpc.StateEnded)
+
+	left.wantGone(t, "a quit mid-turn with a shell running")
+	if got := logs.String(); strings.Contains(got, "held open") {
+		t.Errorf("an agent that heeded the interrupt was killed at its turn's end for the shell it ran:\n%s", got)
+	}
+}
+
+// The same for `wake stop`: every stop leaves an agent that heeds the interrupt to
+// exit by itself.
+func TestWakeStopLeavesAnAgentThatHeedsTheInterruptToExitByItself(t *testing.T) {
+	t.Setenv(fakeSlowEnv, "600ms")
+	logs := captureLog(t)
+	d, c, left := holdFleet(t)
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	d.waitForExit(t)
+
+	left.wantGone(t, "wake stop mid-turn with a shell running")
+	if got := logs.String(); strings.Contains(got, "held open") {
+		t.Errorf("an agent that heeded the interrupt was killed at its turn's end for the shell it ran:\n%s", got)
+	}
+}

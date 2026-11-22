@@ -343,6 +343,9 @@ func (s *server) shutdown() error {
 			// invariant true across this call.
 			a.beginPark()
 		}
+		if !parking {
+			a.markQuitting() // `wake stop` ends every agent as a /quit does
+		}
 		if a.reclaimingNow() {
 			// The grace exists so an in-flight turn can end. This agent
 			// has no process left to end one, so waiting is unnecessary.

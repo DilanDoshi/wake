@@ -218,8 +218,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   session needs the world it spawned; held in memory, never on disk, the park book still holds no pid) and
   **every daemon exit sweeps them**: `wake stop`, `⌃Q⌃Q`, a SIGTERM or SIGINT, an empty daemon's exit. A
   stopped or parked agent that claude holds open for a running shell is ended once it is between turns - none
-  open, whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76; a stop's
-  interrupt frees claude from its shell first, so that is mostly a park's). **Not every
+  open, whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76; a park's
+  backstop: a quit's interrupt frees claude from its shell, so claude exits by itself). **Not every
   process is reached**: a shell that exited before the ending leaves its child under launchd in a group of its
   own (`nohup cmd &` in a foreground Bash call, a hook's background command), and a SIGKILLed or crashed
   daemon leaves every group it noted - `deferred.md` carries both, with why. `internal/daemon/world.go`,

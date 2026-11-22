@@ -6687,12 +6687,15 @@ tool boundary the way Esc does, so by the time anything is killed the agent had 
 - **A blocked agent is quit like any other, and its ask is withdrawn.** `⌃C` still refuses one, because a park's
   stdin close reads as a denial that survives the wake. A stop has no wake, and its interrupt reaches the ask
   first and withdraws it as Esc does (`interrupt-pending-basic.jsonl`), so nothing is denied.
-- **`endIfHeldOpen` stays, as a park's and a turn-end's.** A stop's interrupt frees claude from the shell that
-  held it open (BUG-75/76: checked live on 2.1.322), so the stop no longer calls it after closing stdin. An agent
-  that ignores the interrupt, is held open by a shell and has no turn to end waits the grace and is killed - it is
-  the stuck one. A turn that ends after the stop still ends a held agent at once, with its world noted first
-  (`TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent`, now for an agent that ignored the
-  interrupt, since one that heeds it exits before a refresh could see its shell).
+- **`endIfHeldOpen` is a park's backstop, not a quit's.** A stop's interrupt frees claude from the shell that
+  held it open (BUG-75/76). Checked live on 2.1.329 with the backstop disabled in a scratch build: after a
+  `/quit` of a Haiku agent with a background shell, a running subagent and a foreground command in flight, claude
+  exited by itself 1.0 s later and took all of them, with no kill. So a stop does not call it, and its turn-end
+  refresh skips an agent being quit (`agent.quitting`, which `wake stop` sets on every agent too): with the
+  backstop on, the same take ended in the same 1.0 s but by a SIGKILL at the turn's end, a kill on an agent that
+  had ignored nothing. An agent that ignores the interrupt and is held by a shell waits for the grace and is
+  killed there, its world noted again (`TestAQuitEndsAnAgentThatIgnoredBothAndSweepsAGroupItStartedMeanwhile`);
+  the turn-end refresh stays for a park (`TestAShellStartedAfterTheParksListingIsSweptWhenItsTurnEndsTheAgent`).
 - **A second `/quit` starts nothing** (`agent.quitting`, which is also the park-ready fence the old `stopQueued`
   was: the record is dropped when the operator asks, so a crash in the grace does not park what was ended).
   **A quit beats a park, in either order** (found by review): `⌃C` on a busy agent closes its stdin, so a `/quit`
