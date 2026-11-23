@@ -1,6 +1,6 @@
 {
-  "_note": "36-boxes: a team's header is its box's top edge, a click on its label picks the channel (payments row 17, gateway row 25; the pinned all is row 3). ctrl+l, ctrl+n and ctrl+o click payments, gateway and all.",
-  "ctrl+l": [{"click": [222, 17]}],
+  "_note": "36-boxes: a team's header is its box's top edge, a click on its label picks the channel. The tape first moves triage into payments and scratch-spike into infra, which empties the loose box by two rows and grows infra and payments by one each, so payments' header is row 16 here (17 before the moves) while gateway's stays row 25 and the pinned all is row 3. ctrl+l, ctrl+n and ctrl+o click payments, gateway and all.",
+  "ctrl+l": [{"click": [222, 16]}],
   "ctrl+n": [{"click": [223, 25]}],
   "ctrl+o": [{"click": [225, 3]}]
 }
