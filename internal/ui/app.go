@@ -175,6 +175,8 @@ type App struct {
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 	help         helpState     // /wake-help's view and the shell usage it lists; see help.go
+	jumpPicker   JumpPicker    // ⌃F and /jump: a few letters of a name, ↵ opens the agent; see jumppicker.go
+	sideSearch   SideSearch    // the sidebar's search bar: its filter and whether it holds the keys; see sidebarsearch.go
 
 	// rewindAfterRestore is the session whose both just restored its files, until
 	// its conversation rewind answers. See rewindmenu.go's restoreReported.
@@ -351,7 +353,7 @@ type App struct {
 	ended bool
 
 	// pendingStarts are the sessions this client has asked the daemon to start
-	// and not seen arrive: a fork from ⌃F, a fresh agent from `/new`. It is how
+	// and not seen arrive: a fork from /fork, a fresh agent from `/new`. It is how
 	// either one opens its own conversation - the session does not exist until
 	// the daemon has started it, so each minted id is remembered and the next
 	// report that names one is the signal. A member leaves when it arrives and

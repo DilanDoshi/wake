@@ -123,10 +123,15 @@ func (a App) dropped(x, y int) App {
 	if !a.grid.Has(d.id) {
 		return a // refused: nothing opened, so the cursor stays where it was
 	}
-	// Both fields together, always: an opened agent must not keep the previous
-	// agent's dispatch.
-	a.roster.Selected, a.roster.SelectedTask = d.id, ""
-	return a.viewingPicked(d.id)
+	return a.selectOpened(d.id)
+}
+
+// selectOpened puts the sidebar's cursor on an agent just put on screen and shows
+// what its pane draws: a click's drop and the jump picker's ↵ both end here. Both
+// fields together, always: an opened agent must not keep the previous agent's dispatch.
+func (a App) selectOpened(id string) App {
+	a.roster.Selected, a.roster.SelectedTask = id, ""
+	return a.viewingPicked(id)
 }
 
 // strayReport is what an Esc leaves behind when the pump reads it and the next

@@ -7,9 +7,11 @@ Enter
 Sleep 14s
 Show
 Sleep 1500ms
-# ⌃F forks the roster's pick - maya, where its cursor starts - and the fork
-# opens beside her with her history so far.
-Ctrl+F
+# /fork @maya forks her conversation from the room, and the fork opens beside her
+# with her history so far.
+Type "/fork @maya"
+Sleep 600ms
+Enter
 Sleep 5s
 
 # The fork takes another approach; maya's own conversation is untouched.

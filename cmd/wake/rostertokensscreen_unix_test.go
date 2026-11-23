@@ -69,7 +69,8 @@ func TestTheSidebarShowsATokenCountWhileAnAgentIsWorking(t *testing.T) {
 // rowFor is the sidebar line naming one agent, or "" when no line does.
 func rowFor(s *screen, name string) string {
 	for _, line := range s.lines() {
-		if strings.Contains(line, name) && strings.Contains(line, "│") {
+		// The sidebar's own row: a conversation's header can sit beside a box edge.
+		if strings.Contains(line, name) && strings.Contains(line, "│") && !strings.ContainsAny(line, "╭╰") {
 			return line
 		}
 	}

@@ -539,11 +539,14 @@ func TestHeadersUnderTheWheel(t *testing.T) {
 	if _, ok := a.pickedHeader(); ok {
 		t.Fatalf("the infra header the wheel scrolled away (%v) still counts", drawnAgents(a))
 	}
-	// Nor does ⌃D or ⌃F open or fork an agent in its place.
-	for _, k := range []tea.KeyType{tea.KeyCtrlD, tea.KeyCtrlF} {
-		m, cmd, _ := a.key(tea.KeyMsg{Type: k})
+	// Nor does ⌃D or a bare /fork open or fork an agent in its place.
+	for name, press := range map[string]func(App) (tea.Model, tea.Cmd, bool){
+		"⌃D":    func(a App) (tea.Model, tea.Cmd, bool) { return a.key(tea.KeyMsg{Type: tea.KeyCtrlD}) },
+		"/fork": func(a App) (tea.Model, tea.Cmd, bool) { m, cmd := forkAsk(a); return m, cmd, true },
+	} {
+		m, cmd, _ := press(a)
 		if next := m.(App); next.focus != "" || len(writtenFrames(t, next, cmd)) > 0 {
-			t.Errorf("%v on a header out of view acted: focus %q", k, next.focus)
+			t.Errorf("%s on a header out of view acted: focus %q", name, next.focus)
 		}
 	}
 	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyEnter})
@@ -615,7 +618,7 @@ func TestNextBlockedOntoTheSelectionTheWheelHidShowsIt(t *testing.T) {
 	}
 }
 
-// A conversation holding the keys is on screen as its pane, so ⌃F forks it however
+// A conversation holding the keys is on screen as its pane, so /fork forks it however
 // the wheel scrolled its sidebar row away.
 func TestForkInAConversationWhoseRowTheWheelHid(t *testing.T) {
 	a := wheelFleet(t)
@@ -628,7 +631,7 @@ func TestForkInAConversationWhoseRowTheWheelHid(t *testing.T) {
 	if agentRowY(a, "agent04") >= 0 {
 		t.Fatalf("agent04 is still drawn: %v", drawnAgents(a))
 	}
-	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m, cmd := forkAsk(a)
 	var forked []string
 	for _, f := range writtenFrames(t, m.(App), cmd) {
 		if f.Kind == rpc.FrameFork {
@@ -636,7 +639,7 @@ func TestForkInAConversationWhoseRowTheWheelHid(t *testing.T) {
 		}
 	}
 	if !slices.Equal(forked, []string{"s4"}) {
-		t.Errorf("⌃F in agent04's conversation forked %v, want s4", forked)
+		t.Errorf("/fork in agent04's conversation forked %v, want s4", forked)
 	}
 }
 
@@ -672,14 +675,18 @@ func TestTheWheelLeavesTheRoomsMenusOnTheSelection(t *testing.T) {
 
 // A key refused for a selection out of view says so, not that nothing is selected.
 func TestARefusalForAHiddenSelectionSaysWhy(t *testing.T) {
-	for _, k := range []tea.KeyType{tea.KeyCtrlC, tea.KeyCtrlD, tea.KeyCtrlF} {
+	for name, press := range map[string]func(App){
+		"⌃C":    func(a App) { a.key(tea.KeyMsg{Type: tea.KeyCtrlC}) },
+		"⌃D":    func(a App) { a.key(tea.KeyMsg{Type: tea.KeyCtrlD}) },
+		"/fork": func(a App) { forkAsk(a) },
+	} {
 		a := wheelFleet(t)
 		a, _ = keyVia(a, tea.KeyShiftDown)
 		a = wheelSidebar(a, true, 1)
 		notice.Reset()
-		a.key(tea.KeyMsg{Type: k})
+		press(a)
 		if n, ok := notice.Latest(); !ok || n.Text != pickOutOfView {
-			t.Errorf("%v on a selection out of view said %q, want %q", k, n.Text, pickOutOfView)
+			t.Errorf("%s on a selection out of view said %q, want %q", name, n.Text, pickOutOfView)
 		}
 	}
 }

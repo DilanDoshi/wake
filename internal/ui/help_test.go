@@ -137,7 +137,7 @@ func TestWakeHelpWithAnArgumentOpensFiltered(t *testing.T) {
 	}
 }
 
-// Every key is the view's while it is up: none opens, arms, forks or reaches the
+// Every key is the view's while it is up: none opens, arms, jumps or reaches the
 // draft - the workflow view's own rule - and esc is the way out.
 func TestWakeHelpTakesEveryKeyWhileUp(t *testing.T) {
 	a, rec := helpRoom(t, 160, 40)
@@ -505,9 +505,9 @@ func TestTheFootKeepsEscCloseAtEveryWidth(t *testing.T) {
 // What a paste can put in the filter is bounded, and whitespace of any kind is a
 // space.
 func TestAPasteIsBoundedByTheQueryMax(t *testing.T) {
-	v := HelpView{}.typed(strings.Repeat("x", 3*helpQueryMax))
-	if got := len([]rune(v.Query)); got != helpQueryMax {
-		t.Errorf("a long paste left %d runes in the query, want %d", got, helpQueryMax)
+	v := HelpView{}.typed(strings.Repeat("x", 3*queryMax))
+	if got := len([]rune(v.Query)); got != queryMax {
+		t.Errorf("a long paste left %d runes in the query, want %d", got, queryMax)
 	}
 	if got := (HelpView{}).typed("a\n\tb \x07 c").Query; got != "a b c" {
 		t.Errorf("whitespace and control characters left the query %q, want %q", got, "a b c")

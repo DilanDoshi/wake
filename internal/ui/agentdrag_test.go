@@ -67,7 +67,7 @@ func TestAPressOnAnAgentRowArmsADragAndSelectsNothing(t *testing.T) {
 // Headers and blank cells keep drag-to-copy; only an agent row is a drag source.
 func TestAPressOnAHeaderStillTakesTheScreenSelection(t *testing.T) {
 	a := dragFleet(t)
-	a, _ = a.mouse(pressAt(sidebarX(a), 0)) // the pinned `all` header
+	a, _ = a.mouse(pressAt(sidebarX(a), searchBarRows)) // the pinned `all` header, under the search bar
 	if a.dragged.id != "" || !a.selecting || !a.sel.onScreen {
 		t.Errorf("a press on the all header: drag %+v, selecting %v, sel %+v", a.dragged, a.selecting, a.sel)
 	}

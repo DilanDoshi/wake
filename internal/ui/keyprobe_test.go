@@ -103,7 +103,7 @@ func TestTheKeysTheLegendNamesAreTheKeysBubbleteaReports(t *testing.T) {
 		{"⌃W", "\x17", "ctrl+w"},
 		{"⌃G", "\x07", "ctrl+g"},
 		{"⌃R", "\x12", "ctrl+r"},
-		{"⌃F, which branches the conversation and shadows the text area's CharacterForward", "\x06", "ctrl+f"},
+		{"⌃F, the jump picker, which shadows the text area's CharacterForward", "\x06", "ctrl+f"},
 		{"⌃O, which detaches now that ⌃C parks", "\x0f", "ctrl+o"},
 		{"⌃Q, which parks the fleet and closes Wake", "\x11", "ctrl+q"},
 		{"⌃T, which flips the mention mode and shadows the text area's TransposeCharacterBackward", "\x14", "ctrl+t"},

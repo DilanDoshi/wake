@@ -116,6 +116,10 @@ type Roster struct {
 	// channel is the picked channel ("" for all), set by Column for the draw.
 	channel string
 
+	// none is the row an empty column says, set on the drawn copy: what the search
+	// bar's filter found nothing to show. An empty fleet says nothing.
+	none string
+
 	// view is where the window stands, set on the drawn copy (App.rosterDrawn)
 	// and zero on the App's own, which the seam and stopIndex compare whole.
 	view rosterView
@@ -164,6 +168,9 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	rows := sectionRows(agents)
 	w := r.window(rows, itemHeights(rows, subs), height)
 	lines := make([]string, 0, height)
+	if len(agents) == 0 && r.none != "" {
+		lines = append(lines, moreRow(r.none, width))
+	}
 	for _, item := range rows[w.from:w.to] {
 		lines = append(lines, r.rowLines(item, subs, width)...)
 	}

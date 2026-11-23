@@ -4,7 +4,7 @@ package ui
 //
 // # Why one wait and not one per verb
 //
-// ⌃F and `/new` differ in exactly one thing — the frame they write — and agree
+// /fork and `/new` differ in exactly one thing — the frame they write — and agree
 // about everything after it. Both mint a UUID, because Wake originates identity
 // and `maySpawn` refuses anything that is not one; both hand the daemon a frame
 // and decide nothing else; both have to wait, because **the session does not
@@ -27,7 +27,7 @@ package ui
 // contains. The report already carries the answer: `SessionStatus.ParentID` is
 // written by `daemon.launch` and is the parent's id for a fork and empty for a
 // spawn. `startedNotice` is the one place that reads it. Today there is one
-// sentence, because ⌃F is the only verb in the set.
+// sentence, because /fork is the only verb in the set.
 
 import (
 	"maps"
@@ -45,7 +45,7 @@ import (
 // # Why a set rather than a slot
 //
 // Because two presses are the feature. Fork exists to explore two approaches
-// from one context (docs/notes/v1_goals.md), and two approaches is ⌃F ⌃F across
+// from one context (docs/notes/v1_goals.md), and two approaches is `/fork` twice across
 // a `claude` spawn that takes seconds - so a single slot drops the first fork on
 // exactly the input the key was built for. It ran, it had a roster row, and no
 // key reached it: not in dmOrder so ⇥ missed it, and ⌃D reopens dmTarget's,
@@ -120,7 +120,7 @@ func (a App) startArrived(st *rpc.Status) App {
 			// A fresh spawn - `/new`'s own arrival - has no conversation to
 			// open either, and opening one would replace whatever pane the
 			// operator was on for one that has said nothing yet (owner's
-			// ruling). ⌃F and `/adopt` always carry a ParentID and take the
+			// ruling). /fork and `/adopt` always carry a ParentID and take the
 			// arm below.
 			a = a.draftMention(s.Name)
 		default:
@@ -202,7 +202,7 @@ func (a App) startedNotice(s rpc.SessionStatus) string {
 // report that names it has produced no events at all, so a fork or an import
 // opens an empty transcript under a working-looking header, which is exactly
 // the thing `cmd/wake.reattach` exists to prevent - and the operator pressed
-// ⌃F or typed `/adopt` for a live conversation, not for one they have to
+// /fork or typed `/adopt` for a live conversation, not for one they have to
 // revive first. `/new` never opens a pane at all, but the same session is
 // behind the mention it would draft, so it stays excluded here too rather than
 // naming an agent that has already gone. So the cell stays false and the

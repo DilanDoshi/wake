@@ -260,7 +260,7 @@ func TestARoleThisBuildDoesNotKnowIsAnOrdinaryAgent(t *testing.T) {
 
 // The manager cannot be forked, and the refusal says why.
 //
-// `wake fork manager` and ⌃F in a manager DM both succeeded: names.claim refuses
+// `wake fork manager` and /fork in a manager DM both succeeded: names.claim refuses
 // the reserved word, so the fork got a pooled name - correct, there is one
 // manager - and what came back was a claude session that had **inherited the
 // manager's whole conversation**, its appended scope among it, with no MCP

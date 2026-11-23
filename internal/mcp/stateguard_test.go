@@ -7,7 +7,7 @@ package mcp
 //
 // A whole-branch review added a new member to rpc's state set, made
 // agent.stateLocked return it, and counted which guards demanded a verdict.
-// **Six did, across four packages** - the attention rank, ⌃F's arrival rule,
+// **Six did, across four packages** - the attention rank, /fork's arrival rule,
 // ⌃C's park rule, `wake fork`'s parent rule, bare `wake`'s front door and the
 // daemon's fork refusal. `go test ./internal/mcp` stayed green.
 //

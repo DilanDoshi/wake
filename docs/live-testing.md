@@ -57,7 +57,8 @@ pressing it on your machine produce anything at all?
 | `⌃R` | Toggle the right sidebar | Some shells bind `⌃R` to reverse-search; inside the alt screen it should reach Wake |
 | `⎋` | Interrupt the current turn | Watch for a delay — some terminals hold `⎋` briefly to see if an escape sequence follows |
 | `⎋⎋` | With something typed into a **conversation** pane, clear the draft. The legend under that box changes to `⎋ clear draft` after the first press | This is the key most exposed to the delay above: the two presses have to reach Wake as `esc esc` or as one `alt+esc`, and a terminal that inserts a long escape timeout between them will produce two *first* presses and never clear. **Try it fast and slow, and say which one failed** — the suite covers both spellings and can prove neither happens on your hardware |
-| `⌃F` | Fork the conversation the keys are on. The fork's own DM opens seconds later, when the daemon confirms it | Some terminals and readline bindings claim `⌃F` for forward-char; in a one-line composer that is `→`, so losing it costs nothing, but losing *fork* is the thing to notice |
+| *click the search bar* | The three rows atop the sidebar take the keys (accent border, caret); typing narrows the sidebar in place and counts `N/M`; `esc` clears and the composer types again | A terminal that reports the click as something else (no mouse mode) never focuses it; only a human at the real terminal can say the caret and the accent read right |
+| `⌃F` | Open the jump picker: a few letters of an agent's name, `↵` opens it in a new pane. (`/fork` is the fork: the fork's own DM opens seconds later, when the daemon confirms it) | Some terminals and readline bindings claim `⌃F` for forward-char; in a one-line composer that is `→`, so losing it costs nothing, but losing the *picker* is the thing to notice |
 | `⌃C` | **Park** the focused agent: its process stops, its transcript is kept, `/resume` brings it back | If it *detaches* instead, you are running an old binary. If it ends the session with no way back, that is a serious bug, not a nit |
 | `⌃O` | Arm a detach; `↵` finishes it. The legend under the box swaps to `↵ detach   …   ⌃O cancel` and stays that way | Some shells and editors bind `⌃O` (nano writes out, readline's `operate-and-get-next`); Wake takes it before the composer, so what to check is that it leaves the *terminal* alone. **Hold `⌃O` down** and let the terminal auto-repeat it: nothing may leave, at any count |
 | `⌃Q` | Park every agent, then close Wake | The one key here whose terminal behaviour is unproved — see the flow-control note below |
@@ -472,19 +473,19 @@ component that logs corrupts the frame it is drawing.
 
 ---
 
-## 9a. `⌃F` — the pane moves under you, and only a human can say whether that is right
+## 9a. `/fork` — the pane moves under you, and only a human can say whether that is right
 
-The confirming report arrives asynchronously, seconds after the keypress, and `forkArrived` opens
+The confirming report arrives asynchronously, seconds after the command, and `forkArrived` opens
 the fork's DM and gives it the keyboard. **That is the feature's payoff rather than a defect** —
 "branch this" that leaves you to go and find the branch is not what the words mean — but it is a
 focus change nobody asked for at the moment it happens, and no test has a human typing across it.
 Drafts survive (each conversation keeps its own composer), so nothing is lost; what cannot be
 measured here is whether it *feels* like theft.
 
-- [ ] Press `⌃F` on an idle agent, then keep typing into the parent's composer while the fork
+- [ ] Type `/fork` on an idle agent, then keep typing into the parent's composer while the fork
       starts. When the pane switches, check where your keystrokes went and whether the parent's
       half-typed draft is still there when you `⇥` back to it.
-- [ ] Press `⌃F` twice in a row. Both forks should open; the second one keeps the pane, and the
+- [ ] Send `/fork` twice in a row. Both forks should open; the second one keeps the pane, and the
       first is one `⇥` away. The notice row should read `forking @alex… (×2)`.
 - [ ] Read the confirmation line. It has to be legible at your terminal width — it is one truncated
       row, and the half that matters ("nothing @alex does next reaches it") is at the **end** of it.
