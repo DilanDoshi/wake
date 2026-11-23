@@ -123,30 +123,123 @@ func TestHiddenLinesCountTowardTheTrim(t *testing.T) {
 	assertSaidMatchesTr(t, r, "hidden lines trimmed")
 }
 
-// A restore, or a history that lands late among live lines, sheds whole chunks
-// by the same rule, so it never leaves more than the live room would hold.
-func TestALateHistoryMergeSharesTheTrim(t *testing.T) {
-	const restored = 400
-	base := time.Unix(1_700_000_000, 0)
-	var earlier []roomLine
-	for i := range restored {
-		earlier = append(earlier, restoredBroadcast(fmt.Sprintf("broadcast-%03d", i), base.Add(time.Duration(i)*10*time.Second))...)
+// restoredTurn is a broadcast and the n-1 lines one session says in answer to it:
+// n restored lines, all of them public, from at on.
+func restoredTurn(tag string, n int, at time.Time) []roomLine {
+	lines := restoredBroadcast(tag+" asked", at)
+	for i := 1; i < n; i++ {
+		lines = append(lines, roomLine{
+			ev: core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("%s said %04d", tag, i), At: at.Add(time.Duration(i+1) * time.Second)},
+			by: roomScaleAgent,
+		})
 	}
-	live := roomRetentionEvents - 100
-	r := retainedRoom(live).Before(earlier)
-	if want := live + restored - roomTrimEvents; len(roomEvents(r)) != want {
-		t.Fatalf("%d live and %d restored hold %d, want %d (one chunk shed)", live, restored, len(roomEvents(r)), want)
-	}
-	if r.trimmed != 0 {
-		t.Errorf("a merge owes %d trimmed messages: it names none, the marker draws", r.trimmed)
-	}
-	if got := roomEvents(r)[0].ev.MessageID; got != fmt.Sprintf("event-%05d", roomTrimEvents-restored) {
-		t.Errorf("the oldest retained event is %q: the restored history, being oldest, goes first", got)
-	}
+	return lines
+}
 
-	under := retainedRoom(roomRetentionEvents - restored - 1).Before(earlier)
-	if got, want := len(roomEvents(under)), roomRetentionEvents-restored-1+restored; got != want {
-		t.Errorf("a merge that stays under the cap holds %d, want all %d: nothing is shed", got, want)
+// A restore, or a history that lands late among live lines, sheds by the same
+// rule as the live room - whole chunks until under the cap - but only ever of the
+// history: the live lines were all seen, and a restore must not cost one.
+func TestALateHistoryMergeShedsOnlyHistory(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	broadcasts := func(n int) []roomLine {
+		var lines []roomLine
+		for i := range n {
+			lines = append(lines, restoredBroadcast(fmt.Sprintf("broadcast-%03d", i), base.Add(time.Duration(i)*10*time.Second))...)
+		}
+		return lines
+	}
+	for _, c := range []struct {
+		name         string
+		live         int
+		earlier      []roomLine
+		held         int  // what the room holds after
+		firstIsLive  bool // whether the oldest retained line is live event 0
+		wantReclaims bool
+	}{
+		{"history goes first, live stays", roomRetentionEvents - 100, broadcasts(400), roomRetentionEvents - 100, true, true},
+		{"a handful at the edge costs no live message", fullRoom, broadcasts(5), fullRoom, true, true},
+		{"under the cap nothing goes", 2_000, broadcasts(400), 2_400, false, false},
+		{"a chunk of a large history goes", 2_000, restoredTurn("big", 1_101, base), 2_000 + 1_101 - roomTrimEvents, false, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := retainedRoom(c.live).Before(c.earlier)
+			got := roomEvents(r)
+			if len(got) != c.held {
+				t.Fatalf("%d live and a restore hold %d, want %d", c.live, len(got), c.held)
+			}
+			if live0 := got[0].ev.MessageID == "event-00000"; live0 != c.firstIsLive {
+				t.Errorf("the oldest retained line is %q: live event 0 retained = %v, want %v", got[0].ev.MessageID, live0, c.firstIsLive)
+			}
+			if kept := slices.IndexFunc(got, func(l roomLine) bool { return l.ev.MessageID == fmt.Sprintf("event-%05d", c.live-1) }); kept != len(got)-1 {
+				t.Errorf("the newest live event is not the last line: a live message went")
+			}
+			if live := countLive(got); live != c.live {
+				t.Errorf("%d live lines retained, want all %d", live, c.live)
+			}
+			if r.reclaimed != c.wantReclaims || r.trimmed != 0 {
+				t.Errorf("reclaimed %v with %d owed, want %v and none: the line draws, no notice says it", r.reclaimed, r.trimmed, c.wantReclaims)
+			}
+			if r.said.count() >= roomRetentionEvents {
+				t.Errorf("the room holds %d after a restore, at the cap", r.said.count())
+			}
+		})
+	}
+}
+
+// countLive is how many of lines are the live events retainedRoom appended.
+func countLive(lines []roomLine) int {
+	return len(slices.DeleteFunc(slices.Clone(lines), func(l roomLine) bool { return !strings.HasPrefix(l.ev.MessageID, "event-") }))
+}
+
+// What a live trim let go of stays gone: Before re-derives history from every
+// restored transcript, and the trim leaves those alone, so without a watermark
+// the next restore brings the trimmed lines back above a live tail that has lost
+// the messages between.
+func TestTrimmedHistoryDoesNotComeBackWithALaterRestore(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	var seed []roomLine
+	for i := range 100 {
+		seed = append(seed, restoredBroadcast(fmt.Sprintf("seed-%03d", i), base.Add(time.Duration(i)*10*time.Second))...)
+	}
+	r := NewRoom().SetSize(80, 12).Before(seed)
+	live := roomRetentionEvents + 100
+	for i := range live {
+		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
+	}
+	if !r.reclaimed || countLive(roomEvents(r)) != r.said.count() {
+		t.Fatalf("the fixture's trim did not consume the restored history: %d held", r.said.count())
+	}
+	held := r.said.count()
+
+	r = r.Before(restoredBroadcast("late", base.Add(time.Hour)))
+	got := roomEvents(r)
+	if want := held + 1; len(got) != want {
+		t.Fatalf("a late restore of one line leaves %d, want %d: only that line comes", len(got), want)
+	}
+	if i := slices.IndexFunc(got, func(l roomLine) bool { return strings.HasPrefix(l.ev.Text, "seed-") }); i >= 0 {
+		t.Errorf("a line the trim dropped came back: %q", got[i].ev.Text)
+	}
+	if got[0].ev.Text != "late" {
+		t.Errorf("the oldest line is %q, want the late restore", got[0].ev.Text)
+	}
+	// A restore older than what the trim let go of stays out too.
+	if before := r.Before(restoredBroadcast("older", base)); len(roomEvents(before)) != len(got) {
+		t.Errorf("a restore older than what the trim dropped came back: %d lines, want %d", len(roomEvents(before)), len(got))
+	}
+}
+
+// Production mutation caught: leaving r.hist standing after a trim made the next
+// restore take that many live lines for history and drop them.
+func TestALiveTrimThatConsumesRestoredHistoryLeavesTheNextRestoreNoneOfItsLiveLines(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	r := NewRoom().SetSize(80, 12).Before(restoredBroadcast("early", base))
+	for i := range roomRetentionEvents + 100 {
+		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
+	}
+	live := countLive(roomEvents(r))
+	r = r.Before(restoredBroadcast("late", base.Add(time.Hour)))
+	if got := countLive(roomEvents(r)); got != live {
+		t.Errorf("a restore after a trim left %d live lines of the %d the room held", got, live)
 	}
 }
 
@@ -333,5 +426,60 @@ func TestATrimAllocatesPerDroppedEventNotPerWindow(t *testing.T) {
 	}
 	if len(roomEvents(sinkRoom)) != roomRetentionEvents-roomTrimEvents {
 		t.Fatalf("the append did not trim: the room holds %d", len(roomEvents(sinkRoom)))
+	}
+}
+
+// Every way the room gets the keys back says what it owes: ⌃W closes a
+// conversation without going through refocus.
+func TestTrimsOwedAreSaidWhenAConversationIsClosed(t *testing.T) {
+	a := roomWithHistoryAsked(t)
+	notice.Reset()
+	a.focus = "s1"
+	for range roomRetentionEvents {
+		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1", ""))
+	}
+	if strings.Contains(noticeNow(), "cleared the oldest") {
+		t.Fatalf("announced while a conversation held the keys: %q", noticeNow())
+	}
+	a = a.closeDM()
+	if got, want := noticeNow(), roomTrimNotice(roomTrimEvents); got != want {
+		t.Errorf("closing the conversation said %q, want %q", got, want)
+	}
+}
+
+// Production mutation caught: dropping the outer prune leaves a counted resume
+// line's count behind for a head a merge dropped with its chunk of history.
+func TestAMergeThatDropsARestoredRunsHeadForgetsItsCount(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	earlier := []roomLine{
+		{ev: resumeEvent("s1", base), by: foldSydney},
+		{ev: resumeEvent("s1", base.Add(time.Minute)), by: foldSydney},
+		{ev: resumeEvent("s1", base.Add(2*time.Minute)), by: foldSydney},
+	}
+	earlier = append(earlier, restoredTurn("big", 1_101, base.Add(time.Hour))...)
+	r := retainedRoom(2_000).Before(earlier)
+	if len(r.counts) != 0 {
+		t.Errorf("the run's head went with the oldest chunk but %d counts stayed: %v", len(r.counts), r.counts)
+	}
+	if got := rowsWith(r, "resumed after"); len(got) != 0 {
+		t.Errorf("the dropped run is still drawn: %q", got)
+	}
+}
+
+// Production mutation caught: dropping the prune leaves an opened reply's entry
+// behind when the merge that evicts it re-derives the history's ids.
+func TestAMergeThatDropsAnOpenedRestoredReplyForgetsItsOpen(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	turn := restoredTurn("big", 1_101, base)
+	turn[2].ev.Text = longRoomReply("OPENED")
+	r := retainedRoom(1_800).Before(turn) // 2,901: nothing goes yet
+	line, id := expandableLine(t, r)
+	r, _ = r.toggleLine(line)
+	if !r.expanded[id] {
+		t.Fatal("the click did not open the restored reply")
+	}
+	r = r.Before(restoredTurn("more", 200, base.Add(time.Hour))) // 3,100: the oldest chunk goes
+	if _, stale := r.expanded[id]; stale || len(r.expanded) != 0 {
+		t.Errorf("the open outlived the reply it opened: %v", r.expanded)
 	}
 }

@@ -43,7 +43,7 @@ func roomTrimNotice(n int) string { return fmt.Sprintf(roomTrimmedFmt, thousands
 // announceTrim says so once for every message trimmed since it last did, in an
 // ordinary notice that times out like every other. App.withRoom asks only while
 // the room holds the keys, so a trim that happens while a conversation does is
-// said as the room takes them back (App.refocus), the thousands added together.
+// said as the room takes them back (App.withFocus), the thousands added together.
 func (r Room) announceTrim() Room {
 	if r.trimmed > 0 {
 		notice.Report("%s", roomTrimNotice(r.trimmed))

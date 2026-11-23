@@ -513,12 +513,7 @@ func (a App) showRoom() App { return a.refocus("") }
 func (a App) refocus(next string) App {
 	was := a.drawnIDs()
 	a = a.withFocus(next).resizePanes()
-	a = a.left(was, a.drawnIDs())
-	if next == "" {
-		// A trim the room made while a conversation held the keys is owed now.
-		a.room = a.room.announceTrim()
-	}
-	return a
+	return a.left(was, a.drawnIDs())
 }
 
 // left marks every conversation drawn in was and not in now as left, and resumes
@@ -570,6 +565,10 @@ func (a App) drawn() []string {
 func (a App) withFocus(f string) App {
 	a = a.closeModalsExcept(f)
 	a.focus = f
+	if f == "" {
+		// A trim the room made while a conversation held the keys is owed now.
+		a.room = a.room.announceTrim()
+	}
 	return a.composersFocused()
 }
 

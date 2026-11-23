@@ -88,16 +88,20 @@ func TestLateHistoryAndLiveRoomEventsShareOneCapWithoutReorderingLive(t *testing
 	}
 	r = r.Before(earlier)
 
+	// The history is the oldest, so it is what goes - all of it, to bring the room
+	// under the cap - and not one live message with it, in the order they arrived
+	// whatever the restored timestamps say.
 	got := roomEvents(r)
-	if want := roomRetentionEvents - roomTrimEvents; len(got) != want {
-		t.Fatalf("combined room retains %d events, want %d", len(got), want)
+	if len(got) != live {
+		t.Fatalf("combined room retains %d events, want the %d live ones", len(got), live)
 	}
-	// The history is the oldest, so it goes first and the live tail is the rest,
-	// in the order it arrived, whatever the restored timestamps say.
 	for i, line := range got {
-		if want := fmt.Sprintf("event-%05d", roomTrimEvents-2+i); line.ev.MessageID != want {
+		if want := fmt.Sprintf("event-%05d", i); line.ev.MessageID != want {
 			t.Fatalf("retained event %d = %q, want %q; restored timestamps must not reorder the live tail", i, line.ev.MessageID, want)
 		}
+	}
+	if !r.reclaimed {
+		t.Error("the history that went left no reclaimed-history line")
 	}
 }
 
@@ -241,15 +245,19 @@ func TestRoomRetentionClampsAnEvictedViewportToTheOldestRetainedLine(t *testing.
 // Production mutation caught: renumbering retained transcript lines on trim
 // invalidates a selection that still points at retained content.
 func TestRoomRetentionKeepsARetainedSelectionAnchored(t *testing.T) {
-	a := NewRoomApp(nil, Stream{}, nil)
-	a.room = retainedRoom(fullRoom)
-	line := a.room.tr.lines.len() - 10
-	a.sel = selection{pane: "", anchor: point{line: line, col: 0}, head: point{line: line, col: 2}}
-	want := a.sel
+	// Ten rows from the end, and the newest row there is: the last row of what stays
+	// is the one a short count of the retained rows would lose.
+	for _, back := range []int{10, 1} {
+		a := NewRoomApp(nil, Stream{}, nil)
+		a.room = retainedRoom(fullRoom)
+		line := a.room.tr.lines.len() - back
+		a.sel = selection{pane: "", anchor: point{line: line, col: 0}, head: point{line: line, col: 2}}
+		want := a.sel
 
-	a = a.appendEvent(retainedRoomEvent(fullRoom))
-	if a.sel != want {
-		t.Errorf("retained selection moved or cleared: got %+v, want %+v", a.sel, want)
+		a = a.appendEvent(retainedRoomEvent(fullRoom))
+		if a.sel != want {
+			t.Errorf("selection %d rows from the end moved or cleared: got %+v, want %+v", back, a.sel, want)
+		}
 	}
 }
 
@@ -576,7 +584,7 @@ func TestMarkerSelectionMovesWithTheMarkerAcrossRepeatedReclamation(t *testing.T
 	for i := range 3 {
 		oldMarker := a.room.tr.first()
 		// A trim comes once per chunk: the events between leave the marker alone.
-		for a.room.tr.first() == oldMarker {
+		for range roomTrimEvents {
 			a = a.appendEvent(retainedRoomEvent(next))
 			next++
 		}
@@ -1114,7 +1122,7 @@ func TestRoomResizeRefreshesCachedAssistantRowCounts(t *testing.T) {
 // Production mutation caught: an append that grows with the retained window
 // (rebuilding the room, copying its lines) allocates far more in the fullest
 // room than in a short one. The samples stop short of the trim, which is the one
-// append whose cost is the chunk's (TestATrimAllocatesPerEvictedEventNotPerWindow).
+// append whose cost is the chunk's (TestATrimAllocatesPerDroppedEventNotPerWindow).
 func TestRoomAppendAllocationStaysBoundedAtTheRetentionCap(t *testing.T) {
 	short := roomBytesPerAppend(retainedRoom(scaleShort))
 	atCap := roomBytesPerAppend(retainedRoom(fullRoom - scaleSamples))

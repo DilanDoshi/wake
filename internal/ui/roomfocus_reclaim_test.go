@@ -54,14 +54,26 @@ func TestReclaimUnderFocusKeepsSaidAndTranscriptInSync(t *testing.T) {
 	}
 	assertSaidMatchesTr(t, r, "after hidden flood")
 
-	// Interleave shown and hidden while over the cap, so reclaim evicts a mix.
-	for i := 0; i < 500; i++ {
+	// Interleave shown and hidden past a whole chunk, so a second trim evicts a mix
+	// - the flood's own trim took hidden lines only. Each assertion re-renders the
+	// room, so it runs on the append that trimmed and on a sample of the rest.
+	first, trims := r.said.first(), 0
+	for i := 0; i < roomTrimEvents+500; i++ {
 		if i%3 == 0 {
 			shown(1000 + i)
 		} else {
 			hidden(1000 + i)
 		}
-		assertSaidMatchesTr(t, r, fmt.Sprintf("interleave i=%d", i))
+		if now := r.said.first(); now != first || i%100 == 0 {
+			if now != first {
+				trims++
+			}
+			first = now
+			assertSaidMatchesTr(t, r, fmt.Sprintf("interleave i=%d", i))
+		}
+	}
+	if trims != 1 {
+		t.Fatalf("the interleave trimmed %d times, want the one that evicts a mix of shown and hidden lines", trims)
 	}
 
 	if _ = r.View(80, 12); !r.tr.atBottom() {

@@ -67,7 +67,8 @@ func (a App) heldAsked() App {
 	return a
 }
 
-// sinceClear keeps restored lines written after the room was cleared.
+// sinceClear keeps restored lines written after the room was cleared, or after
+// the newest restored line a trim dropped.
 func (r Room) sinceClear(lines []roomLine) []roomLine {
 	if r.clearedAt.IsZero() {
 		return lines
