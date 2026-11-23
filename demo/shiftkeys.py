@@ -20,6 +20,7 @@ the steps ask for. demo/gestures/ holds one file per clip.
 import collections
 import fcntl
 import json
+import math
 import os
 import pty
 import select
@@ -28,7 +29,7 @@ import sys
 import termios
 import time
 import tty
-from typing import Callable
+from typing import Callable, Optional
 
 KEYS = {b"\x07": b"\x1b[1;2B", b"\x0b": b"\x1b[1;2A"}
 
@@ -38,10 +39,24 @@ SHIFT = 4
 WHEEL_UP = 64
 WHEEL_DOWN = 65
 CLICK_HOLD = 0.06  # seconds a click's button stays down
+# A key typed while a gesture plays goes out this long after it, in a write of its
+# own: an esc that shared a read with the gesture's first report would be alt+esc.
+GAP = 0.05
 
-# What a gesture may not take: the keys the relay turns, and the ones a tape
-# types as themselves (enter, tab, backspace, esc, ⌃C).
-RESERVED = {b"\x03", b"\x07", b"\x08", b"\x09", b"\x0a", b"\x0b", b"\x0d", b"\x1b"}
+# What a gesture may not take: the keys the relay turns, and the ones a tape or the
+# staging types as themselves (enter, tab, backspace, esc, ⌃C, ⌃W, ⌃Q).
+RESERVED = {
+    b"\x03",
+    b"\x07",
+    b"\x08",
+    b"\x09",
+    b"\x0a",
+    b"\x0b",
+    b"\x0d",
+    b"\x11",
+    b"\x17",
+    b"\x1b",
+}
 
 Event = tuple[float, bytes]
 
@@ -76,11 +91,28 @@ def glide(
     ]
 
 
+def seconds(value: object, what: str) -> float:
+    """A time of 0 or more. NaN or inf would stall the outbox, a negative one is
+    already past, and a bool or a string is a typo."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(
+            f"{what} is a finite time in seconds of 0 or more, not {value!r}"
+        )
+    return float(value)
+
+
 def cell(value: object) -> tuple[int, int]:
     if (
         not isinstance(value, list)
         or len(value) != 2
-        or not all(isinstance(n, int) and n >= 0 for n in value)
+        or not all(
+            isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in value
+        )
     ):
         raise ValueError(f"a cell is [column, row] counted from 0, not {value!r}")
     return value[0], value[1]
@@ -89,11 +121,10 @@ def cell(value: object) -> tuple[int, int]:
 def glide_events(spec: object) -> list[Event]:
     if not isinstance(spec, dict) or set(spec) != {"from", "to", "steps", "over"}:
         raise ValueError(f"glide takes from, to, steps and over, not {spec!r}")
-    steps, over = spec["steps"], spec["over"]
-    if not isinstance(steps, int) or steps < 1 or over < 0:
-        raise ValueError(
-            f"glide needs at least one step and a time of 0 or more, not {spec!r}"
-        )
+    steps = spec["steps"]
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError(f"glide needs at least one step, not {spec!r}")
+    over = seconds(spec["over"], "glide over")
     path = glide(cell(spec["from"]), cell(spec["to"]), steps)
     return [(over / steps, sgr(MOTION, x, y)) for x, y in path]
 
@@ -121,6 +152,8 @@ STEPS: dict[str, Callable[[object], list[Event]]] = {
 
 def expand(steps: list[dict]) -> list[Event]:
     """A gesture's steps as (seconds after the one before, bytes), in order."""
+    if not isinstance(steps, list):
+        raise ValueError(f"a gesture is a list of steps, not {steps!r}")
     events: list[Event] = []
     waited = 0.0
     for step in steps:
@@ -128,7 +161,7 @@ def expand(steps: list[dict]) -> list[Event]:
             raise ValueError(f"a step is one name and its argument, not {step!r}")
         ((name, arg),) = step.items()
         if name == "wait":
-            waited += float(arg)
+            waited += seconds(arg, "wait")
             continue
         if name not in STEPS:
             raise ValueError(
@@ -137,6 +170,10 @@ def expand(steps: list[dict]) -> list[Event]:
         for delay, data in STEPS[name](arg):
             events.append((waited + delay, data))
             waited = 0.0
+    if waited:
+        raise ValueError(
+            "a wait with nothing after it holds nothing: put it before a step"
+        )
     return events
 
 
@@ -161,12 +198,21 @@ def load_gestures(path: str) -> dict[bytes, list[dict]]:
         return {}
     with open(path, encoding="utf-8") as fh:
         spec = json.load(fh)
+    if not isinstance(spec, dict):
+        raise ValueError(
+            f"{path} is an object of ctrl+<letter> names, not a {type(spec).__name__}"
+        )
     gestures: dict[bytes, list[dict]] = {}
     for name, steps in spec.items():
         if name.startswith("_"):  # a note
             continue
         prefix, _, key = name.lower().partition("+")
-        if prefix != "ctrl" or len(key) != 1 or not 0x40 <= ord(key.upper()) <= 0x5F:
+        if (
+            prefix != "ctrl"
+            or len(key) != 1
+            or not key.isascii()
+            or not 0x40 <= ord(key.upper()) <= 0x5F
+        ):
             raise ValueError(f"{name!r}: a gesture binds ctrl+<letter> only")
         byte = bytes([ord(key.upper()) & 0x1F])
         if byte in RESERVED:
@@ -207,9 +253,11 @@ class Outbox:
         self._tail = 0.0
 
     def put(self, events: list[Event]) -> None:
-        due = max(self._clock(), self._tail)
-        for delay, data in events:
-            due += delay
+        now = self._clock()
+        behind = self._tail > now
+        due = max(now, self._tail)
+        for i, (delay, data) in enumerate(events):
+            due += max(delay, GAP) if behind and i == 0 else delay
             self._queue.append((due, data))
         self._tail = due
 
@@ -220,7 +268,7 @@ class Outbox:
             out += self._queue.popleft()[1]
         return out
 
-    def wait(self) -> float | None:
+    def wait(self) -> Optional[float]:
         """Seconds until the next event is due, or None with nothing queued."""
         if not self._queue:
             return None

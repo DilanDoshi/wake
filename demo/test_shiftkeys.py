@@ -7,6 +7,7 @@ wrong gesture without an error anywhere: these hold the bytes, the timing and
 the refusals, and one real pty pins that they arrive.
 """
 
+import ast
 import json
 import os
 import pty
@@ -110,6 +111,25 @@ class Steps(unittest.TestCase):
         self.assertAlmostEqual(events[0][0], 0.5)
         self.assertAlmostEqual(events[1][0], shiftkeys.CLICK_HOLD)
 
+    def test_a_wait_is_a_finite_time_of_zero_or_more(self):
+        for bad in (float("nan"), float("inf"), -1, "1", True, None):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "wait"):
+                shiftkeys.expand([{"wait": bad}, {"click": [1, 1]}])
+
+    def test_a_wait_with_nothing_after_it_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "wait"):
+            shiftkeys.expand([{"click": [1, 1]}, {"wait": 3}])
+
+    def test_a_glide_time_is_a_number(self):
+        for bad in ("1", -0.5, float("nan"), True):
+            spec = {"from": [0, 0], "to": [1, 1], "steps": 2, "over": bad}
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                shiftkeys.expand([{"glide": spec}])
+
+    def test_a_cell_is_not_a_bool(self):
+        with self.assertRaises(ValueError):
+            shiftkeys.expand([{"click": [True, 1]}])
+
     def test_an_unknown_step_is_refused_by_name(self):
         with self.assertRaisesRegex(ValueError, "teleport"):
             shiftkeys.expand([{"teleport": [1, 1]}])
@@ -151,6 +171,8 @@ class Gestures(unittest.TestCase):
             "ctrl+h",
             "ctrl+c",
             "ctrl+[",
+            "ctrl+w",
+            "ctrl+q",
         ):
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, "reserved"):
                 shiftkeys.load_gestures(self.write({key: [{"click": [1, 1]}]}))
@@ -163,8 +185,52 @@ class Gestures(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "teleport"):
             shiftkeys.load_gestures(self.write({"ctrl+l": [{"teleport": [1, 1]}]}))
 
+    def write_text(self, text):
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        self.addCleanup(os.unlink, fh.name)
+        fh.write(text)
+        fh.close()
+        return fh.name
+
+    def test_a_key_that_uppercases_to_two_letters_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "ctrl"):
+            shiftkeys.load_gestures(self.write({"ctrl+\u00df": [{"click": [1, 1]}]}))
+
+    def test_a_file_that_is_not_a_table_of_step_lists_is_refused(self):
+        for bad in ([], {"ctrl+l": 5}, {"ctrl+l": [5]}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                shiftkeys.load_gestures(self.write(bad))
+
+    def test_a_nan_in_the_file_is_refused_not_spun_on(self):
+        with self.assertRaisesRegex(ValueError, "wait"):
+            shiftkeys.load_gestures(
+                self.write_text('{"ctrl+l": [{"wait": NaN}, {"click": [1, 1]}]}')
+            )
+
     def test_no_path_means_no_gestures(self):
         self.assertEqual(shiftkeys.load_gestures(""), {})
+
+
+class Portability(unittest.TestCase):
+    def test_no_union_syntax_in_an_annotation_so_python_39_can_import_it(self):
+        # `float | None` is evaluated when the def runs and is a TypeError before 3.10;
+        # env.sh's wake() runs this file for every take, not only the mouse ones.
+        tree = ast.parse(
+            open(os.path.join(HERE, "shiftkeys.py"), encoding="utf-8").read()
+        )
+        annotations = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                annotations.append(node.returns)
+                annotations += [
+                    a.annotation for a in node.args.args + node.args.kwonlyargs
+                ]
+            elif isinstance(node, ast.AnnAssign):
+                annotations.append(node.annotation)
+        for annotation in filter(None, annotations):
+            for part in ast.walk(annotation):
+                if isinstance(part, ast.BinOp) and isinstance(part.op, ast.BitOr):
+                    self.fail(f"a | union in an annotation at line {part.lineno}")
 
 
 class GesturePath(unittest.TestCase):
@@ -241,19 +307,47 @@ class Outbox(unittest.TestCase):
         self.box.put([(0, b"typed")])
         self.assertEqual(self.box.ready(), b"press")
         self.clock.now = 0.2
-        self.assertEqual(self.box.ready(), b"releasetyped")
+        self.assertEqual(self.box.ready(), b"release")
+        self.clock.now = 0.2 + shiftkeys.GAP
+        self.assertEqual(self.box.ready(), b"typed")
 
     def test_a_second_gesture_keeps_its_own_pacing_behind_the_first(self):
         self.box.put([(0, b"a1"), (0.2, b"a2")])
         self.clock.now = 0.02
         self.box.put([(0, b"b1"), (0.1, b"b2")])
         self.clock.now = 0.2
-        self.assertEqual(self.box.ready(), b"a1a2b1")
+        self.assertEqual(self.box.ready(), b"a1a2")
+        self.assertAlmostEqual(self.box.wait(), shiftkeys.GAP)
+        self.clock.now = 0.2 + shiftkeys.GAP
+        self.assertEqual(self.box.ready(), b"b1")
         self.assertAlmostEqual(self.box.wait(), 0.1)
 
 
 class OnARealPty(unittest.TestCase):
     """The relay, run as a take runs it: a pty in front of it, `cat -v` behind."""
+
+    def relay(self, env_extra, command):
+        env = dict(os.environ, **env_extra)
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.execvpe(
+                sys.executable,
+                [sys.executable, os.path.join(HERE, "shiftkeys.py"), *command],
+                env,
+            )
+        self.addCleanup(self.reap, pid, fd)
+        return pid, fd
+
+    def read_until(self, fd, marker, seconds=5):
+        seen = b""
+        deadline = time.time() + seconds
+        while time.time() < deadline and marker not in seen:
+            if select.select([fd], [], [], 0.2)[0]:
+                try:
+                    seen += os.read(fd, 4096)
+                except OSError:
+                    break
+        return seen
 
     def test_a_gesture_key_arrives_as_a_click_and_the_shifted_arrow_as_one_key(self):
         gestures = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
@@ -261,42 +355,42 @@ class OnARealPty(unittest.TestCase):
         json.dump({"ctrl+l": [{"click": [140, 2]}]}, gestures)
         gestures.close()
 
-        env = dict(os.environ, WAKE_GESTURES=gestures.name)
-        pid, fd = pty.fork()
-        if pid == 0:
-            os.execvpe(
-                sys.executable,
-                [
-                    sys.executable,
-                    os.path.join(HERE, "shiftkeys.py"),
-                    "sh",
-                    "-c",
-                    "stty raw -echo; exec cat -v",
-                ],
-                env,
-            )
-        self.addCleanup(self.reap, pid, fd)
-        time.sleep(0.6)  # the child's own stty, before the first key
+        _, fd = self.relay(
+            {"WAKE_GESTURES": gestures.name},
+            ["sh", "-c", "stty raw -echo; echo READY; exec cat -v"],
+        )
+        self.assertIn(b"READY", self.read_until(fd, b"READY"))
         os.write(fd, b"\x0c\x07")
-        seen = b""
-        deadline = time.time() + 5
-        while time.time() < deadline and b"^[[1;2B" not in seen:
-            if select.select([fd], [], [], 0.2)[0]:
-                try:
-                    seen += os.read(fd, 4096)
-                except OSError:
-                    break
+        seen = self.read_until(fd, b"^[[1;2B")
         self.assertIn(b"^[[<0;141;3M", seen)
         self.assertIn(b"^[[<0;141;3m", seen)
         self.assertIn(b"^[[1;2B", seen)
         self.assertLess(seen.index(b"^[[<0;141;3m"), seen.index(b"^[[1;2B"))
+
+    def test_a_bad_gesture_file_stops_the_take_before_the_child_starts(self):
+        bad = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        self.addCleanup(os.unlink, bad.name)
+        bad.write('{"ctrl+l": [{"wait": NaN}, {"click": [1, 1]}]}')
+        bad.close()
+
+        pid, fd = self.relay(
+            {"WAKE_GESTURES": bad.name}, ["sh", "-c", "echo CHILD-RAN"]
+        )
+        seen = self.read_until(fd, b"never appears", seconds=2)
+        _, status = os.waitpid(pid, 0)
+        self.assertIn(b"shiftkeys:", seen)
+        self.assertNotIn(b"CHILD-RAN", seen)
+        self.assertNotEqual(os.waitstatus_to_exitcode(status), 0)
 
     def reap(self, pid, fd):
         try:
             os.kill(pid, 15)
         except ProcessLookupError:
             pass
-        os.waitpid(pid, 0)
+        try:
+            os.waitpid(pid, 0)
+        except ChildProcessError:
+            pass
         os.close(fd)
 
 
