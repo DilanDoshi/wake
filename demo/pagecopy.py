@@ -39,13 +39,19 @@ META = {
 # Where in a clip's cut (seconds in) its poster is taken, for a clip whose
 # three-fifths mark is not the frame that should stand for it. Names a clip in
 # SHOTS and falls inside its dur.
-POSTERS: dict[str, float] = {}
+POSTERS: dict[str, float] = {
+    # The finder open over the whole fleet, the agents waiting on you ranked first:
+    # the share card (og:image is the first clip's poster).
+    "33-jump": 3.2,
+    # Mid-drag: the agent's tag at the pointer and the drop zone outlined.
+    "34-drag": 6.6,
+}
 
 SHOTS = [
     Shot(
         "33-jump",
         1.0,
-        34.5,
+        34,
         "●",
         "you",
         "⌃F · blu",
