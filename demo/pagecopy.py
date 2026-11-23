@@ -45,7 +45,7 @@ SHOTS = [
     Shot(
         "33-jump",
         1.0,
-        30,
+        34.5,
         "●",
         "you",
         "⌃F · blu",
@@ -64,7 +64,7 @@ SHOTS = [
     Shot(
         "34-drag",
         1.0,
-        32,
+        18,
         "○",
         "gw-timeouts",
         "drag to place",
@@ -83,7 +83,7 @@ SHOTS = [
     Shot(
         "35-search",
         1.0,
-        30,
+        19,
         "●",
         "you",
         "sidebar › limits",
@@ -122,7 +122,7 @@ SHOTS = [
     Shot(
         "36-boxes",
         1.0,
-        30,
+        25.5,
         "▪",
         "the fleet",
         "five teams · 21 agents",
