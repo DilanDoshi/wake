@@ -114,6 +114,20 @@ parking anything. A click anywhere else or any
 key the bar does not read lets go of it and leaves the filter standing, lit, until you clear it. `⌃F` is the
 same search as a box over the composer; it never focuses the bar.
 
+Each section of the roster is drawn as a **box**: a team's name is the top edge, its agents stand between
+walls, and a closing row ends it; the agents above the first team sit in a box under the pinned `all`. A
+row is four columns narrower inside its box, so a long name is cut at the right wall and the figures at its
+end drop sooner. **Click an agent's row** and it opens in a new column at the right end of the grid, next to
+the sidebar (in a window under 120 columns it takes the place of the pane on screen, as `⌃D` does); an agent
+already on screen is only focused, and a click on a team's header still picks that channel. **Drag a row out
+of the sidebar** to place it: the agent's name follows the pointer and the pane it will become is outlined.
+Let go on the lower half of a pane and it opens below that pane (one split to a column, the room included);
+let go anywhere else and it opens in a new column. `esc`, any other key, a resize or letting go back on the
+sidebar cancels the drag, and `esc` is nothing else — it does not interrupt the agent in the pane with the
+keys. A **Shift-click** on a row opens it below the focused pane, as `⌃B` does, in a terminal that delivers
+one. A drag over a row's own name moves the agent instead of selecting its text; the headers and the blank
+sidebar cells still select.
+
 **Middle — the room**, and below it the composer, outlined in orange so you can find where you type.
 
 The box **grows as you type**. An empty one is a single row; it gains a row for every line the draft

@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.16 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.17 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -36,7 +36,8 @@ if `claude` is missing.
 **Upgrading:** `wake upgrade` installs the newest release over the one you have (a build older than
 the verb upgrades by re-running the install line). Wake checks when the room opens and again as you
 use it, even in a room left open for days: a newer release is announced once a day and named at the
-end of the strip (`↑ wake 0.1.9`) until you upgrade and reopen. `WAKE_NO_UPDATE_CHECK=1` turns that off.
+end of the strip (`↑ wake 0.1.9`), moving to a still newer one as it comes out, until you upgrade and
+reopen. `WAKE_NO_UPDATE_CHECK=1` turns that off.
 Fleets that are already running keep the old build until you `⌃Q⌃Q` and reopen them — see
 [the lifecycle chapter](docs/user_manual/04-lifecycle.md#upgrading).
 
@@ -75,6 +76,16 @@ roster instead — including a conversation's running subagents in the right sid
 opens the one the cursor is on. The roster's team headers are channels: `↵` or a click on one shows
 only that team's thread in the room, and `all` at the top shows everyone again. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
 While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` or `↵` completes.
+
+To get an agent on screen without walking the roster: `⌃F` (or `/jump [filter]`) opens a box where a few
+letters of a name narrow the fleet, blocked agents first, and `↵` opens the agent in a new column (`⌃B`
+below, `⌃D` in the focused pane). A click on an agent's row in the right sidebar opens it the same way
+(in a window under 120 columns it takes the place of the pane on screen), and you can drag a row out of
+the sidebar and drop it where you want it: on the lower half of a pane it opens below that pane, anywhere
+else in a new column, with `esc` to cancel; a Shift-click opens below the focused pane where your terminal
+delivers one. The search bar at the top of the sidebar filters the roster in place as you type, and each
+sidebar section is drawn as a box with its team as the top edge. `⌃F` used to fork a conversation; that is
+`/fork` now.
 
 A message to a working agent is read at its next tool boundary and pinned `⧗` until then; `↑` takes
 queued messages back, and `⌃]` takes them back and sends them now, with your draft. On an idle
@@ -118,7 +129,11 @@ Flags on the verbs that start a session (`new`, `manager`):
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/park`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter`,
-`/wake-name`, `/wake-help`, `/jump`, `/fork` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/park`, `/quit` and
+`/wake-name`, `/wake-help`, `/jump`, `/fork` and `/friends`; `/effort` and `/model` configure the session they are addressed to.
+`/jump [filter]` is `⌃F`, and `/fork [@who]` branches the conversation you are in (`@who /fork` from the room;
+a team is refused). `/quit` interrupts the agent as `esc` does, stops it and ends everything it started, within
+seconds, on a blocked agent too (its question is withdrawn, not answered no); the transcript stays for `/resume`,
+and `wake stop` interrupts first as well. `/park`, `/quit` and
 `/resume` take a team as well as one agent: `/park @backend` parks every live agent on the team (one waiting on a question is left, and named),
 `/quit @backend` ends them after a confirm, and `/resume backend` wakes the parked ones. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
@@ -144,7 +159,8 @@ recipient`) folds at three rows in the room and in a conversation; `⌃E` or a c
 draws its own agent's sends the same way. A question that takes several answers draws `[ ]` boxes you
 tick with `↵`, the option's digit or space, and Next or Submit walks on. When a usage limit stops agents,
 Wake resumes each once — when you sign in to another account anywhere, or at the reset the limit named —
-and draws it as `↻ resumed after the usage limit`, never as your words. A turn an unreachable API stopped (a
+and draws it as `↻ resumed after the usage limit`, never as your words; the room folds an agent's repeated
+resumes into one line (`×3`), and a room narrowed to one agent or team shows only that agent's own. A turn an unreachable API stopped (a
 lost connection, a machine asleep mid-reply) is resumed the same way once another agent's turn goes through or
 the network changes, drawn `↻ resumed after the connection came back`. While claude is still retrying
 one, the agent's working line says so (`⚠ API unreachable · retrying in 38s (attempt 3 of 10)`) and its
@@ -158,7 +174,12 @@ and `continue` pick it up, and prints the words of any message an agent had not 
 SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
 fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back. A `!cmd` typed in a
 conversation runs, and its output then reaches that agent as Claude Code's own `!` does; in the room,
-`@name !cmd` runs it in that agent's directory and sends it there.
+`@name !cmd` runs it in that agent's directory and sends it there, and the room folds what it printed under
+the line (three rows, `⌃E` or a click opens it). A message that opens with a skill (`/init-orch you are …`) is
+drawn as your own turn, whole, with the skill's name in the skill colour. A window the terminal reports as
+unfocused draws no caret and no focus colour, so it no longer claims "type here". A `/loop`'s wakeup is no
+longer drawn as your turn when a conversation is reopened, and a subagent that hands its report back early
+says "finished" once.
 
 ## Development
 
