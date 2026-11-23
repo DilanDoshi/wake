@@ -1108,13 +1108,14 @@ def main():
 
     # Work started with nobody typing — what makes the room look alive in a
     # cold open. Idle agents are what a fleet is most of the time, so this is
-    # opt-in per scenario rather than the default.
+    # opt-in per scenario rather than the default. It is posted to the inbox and
+    # run by the loop below, like any turn: run from a thread of its own, its ask
+    # waited on the same queue as the loop, which took the operator's answer and
+    # dropped it, so the card could be shown but never answered.
     auto = sc.get("autostart")
     if auto:
         threading.Thread(
-            target=lambda: (nap(auto.get("at", 1.0)),
-                            finish(run_steps(auto.get("steps", [])),
-                                   auto.get("tokens", 2400))),
+            target=lambda: (nap(auto.get("at", 1.0)), inbox.put(("autostart", auto))),
             daemon=True,
         ).start()
 
@@ -1125,6 +1126,12 @@ def main():
             return 0
         if kind == "interrupt":
             say_receipt(payload)
+            continue
+        if kind == "autostart":
+            interrupted.clear()
+            with TURN_LOCK:
+                ok = run_steps(payload.get("steps", []))
+                finish(ok, payload.get("tokens", 2400))
             continue
         if kind != "turn":
             continue
