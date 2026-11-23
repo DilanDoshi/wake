@@ -1,5 +1,5 @@
 {
-  "_note": "34-drag: cells are screen cells from 0 on the 238x62 terminal; agent names sit at column 219 in the sidebar. It drags the agents that are working, because they keep their rows (blocked first, then working) where the idle ones swap places between stagings: pay-ledger row 19, gw-timeouts 28, web-usage-panel 36, docs-changelog 43. ctrl+l opens one by a click, ctrl+n drags one onto the lower half of the second pane, ctrl+o onto the room's upper half, ctrl+x then esc then ctrl+y is a drag that esc cancels.",
+  "_note": "34-drag: cells are screen cells from 0 on the 62-row terminal; agent names sit at column 219 in the sidebar. It drags the agents that are working, because they keep their rows (blocked first, then working) where the idle ones swap places between stagings: pay-ledger row 19, gw-timeouts 28, web-usage-panel 36, docs-changelog 43. ctrl+l opens one by a click, ctrl+n drags one onto the lower half of the second pane, ctrl+o onto the room's upper half, ctrl+x then esc then ctrl+y is a drag that esc cancels.",
   "ctrl+l": [{"click": [225, 19]}],
   "ctrl+n": [
     {"press": [225, 28]},

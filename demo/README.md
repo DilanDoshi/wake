@@ -58,8 +58,12 @@ manager that only *drew* those calls would be a lie on camera.
                         cannot send and the roster walks on, and the keys a clip's
                         gestures/ file binds into the mouse reports a terminal sends
     test_shiftkeys.py   the relay's tests: the bytes, the pacing, the refusals, one real pty
-    test_page.py        the site's tests: what the front page leads with, that every clip has
-                        a tape, that no words describe a key the build has moved
+    test_page.py        the site's tests: what the front page leads with, that every clip has a
+                        tape that ends after a Show and a gesture file that matches it, that a cut
+                        never runs past its recording, that no sentence a review proved false
+                        has come back
+    test_fleet.py       the big fleet's table in setup.sh against its scenarios
+    test_agent.py       the stand-in `claude`, run as Wake runs it (an autostarted ask is answerable)
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters
@@ -77,8 +81,10 @@ the stage is sourced, which is where `wake` first starts). `gestures/34-drag.jso
 `glide` (from, to, steps, over), `wheel_up`, `wheel_down`, `wait` — and the tape types that key.
 The relay writes the same SGR reports a terminal does, so the binary sees a real mouse. Find a
 cell by recording with an `Output x.txt` (VHS writes the screen as text) and reading it; the
-terminal is 238×62 at this size, the sidebar's rule in column 214. Ctrl+G, K, C, H, I, J, M and
-Esc cannot be bound: the relay or the tape needs them.
+terminal is 62 rows tall at this size, the sidebar's rule in column 214 and an agent's name from
+column 219. Ctrl+G, K, C, H, I, J, M, W, Q and Esc cannot be bound: the relay, the staging or the
+tape needs them. A cell is only as good as the roster it was read from: idle agents swap rows
+between stagings, so a gesture grabs an agent that is blocked or working, which keep theirs.
 
 ## The big fleet
 

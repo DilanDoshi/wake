@@ -36,6 +36,11 @@ META = {
     ),
 }
 
+# Where in a clip's cut (seconds in) its poster is taken, for a clip whose
+# three-fifths mark is not the frame that should stand for it. Names a clip in
+# SHOTS and falls inside its dur.
+POSTERS: dict[str, float] = {}
+
 SHOTS = [
     Shot(
         "33-jump",
@@ -44,7 +49,7 @@ SHOTS = [
         "●",
         "you",
         "⌃F · blu",
-        "Fifty agents. Type three letters.",
+        "Find any agent in three letters.",
         "<code>⌃F</code> opens a finder over the composer. Type a few letters of an "
         "agent's name — its start, a run inside it, or its letters in order — and the "
         "box narrows to the agents that match. A better match always comes first, and "
@@ -65,14 +70,14 @@ SHOTS = [
         "drag to place",
         "Drag an agent out of the sidebar. Drop it where you want it.",
         "Click an agent in the sidebar and it opens in a new column at the right end. "
-        "Press and drag instead and its name follows the pointer in its own colour "
+        "Press and drag instead and its name follows the pointer as a small tag "
         "while the drop zone is outlined where the pane will land, to the cell: on the "
         "lower half of a pane that can still split it opens <em>below</em> that pane, "
         "anywhere else in a new column. An agent already open is focused, never moved. "
         "<code>esc</code>, any other key, or letting go back on the sidebar cancels — "
         "and <code>esc</code> is nothing else there, so it never interrupts the agent "
-        "you are working with. In a window one column wide a click replaces the pane "
-        "on screen instead of piling columns off its edge.",
+        "you are working with. In a window one column wide a click shows the agent "
+        "in place of what is on screen instead of piling columns off its edge.",
         True,
     ),
     Shot(
@@ -81,16 +86,18 @@ SHOTS = [
         30,
         "●",
         "you",
-        "sidebar › pay",
+        "sidebar › limits",
         "Search the sidebar in place.",
         "Click the bar at the top of the sidebar and type a few letters of a name. "
         "The roster narrows to the agents that match, in its own order and inside "
         "their team boxes; a team with no match drops out, and the bar counts what "
-        "is left. <code>↑↓</code> walk the matches, a team header is a stop, and "
-        "<code>↵</code>, <code>⌃B</code> and <code>⌃D</code> open the cursored agent "
-        "exactly as a click on its row does. Click anywhere else and the bar lets go "
-        "but the filter stands, lit with its count, until <code>esc</code> clears it. "
-        "It is the in-place half of <code>⌃F</code>, on the same matcher.",
+        "is left. <code>↑↓</code> walk the matches and a team header is a stop. "
+        "<code>↵</code> opens the cursored agent in a new column, as a click on its "
+        "row does; <code>⌃B</code> opens it below the pane you are in and "
+        "<code>⌃D</code> in that pane. Once you open one the bar lets go but the "
+        "filter stands, lit with its count, until you click the bar again and press "
+        "<code>esc</code>. It is the in-place half of <code>⌃F</code>, on the same "
+        "matcher.",
         True,
     ),
     Shot(
@@ -102,7 +109,8 @@ SHOTS = [
         "maya · nora · alex",
         "Name a team. Talk to all of it.",
         "<code>/team</code> files an agent under a name you choose. The roster "
-        "draws each team as a box, the board shelves them the same way, and "
+        "draws each team as a box, the board sets them apart under their own "
+        "dividers, and "
         "<code>@backend</code> reaches every live member at once — only they "
         "receive it. A lone <code>@backend</code> in the composer narrows the room "
         "to the team's thread while you write to it. A team is a tag, not a "
@@ -124,9 +132,8 @@ SHOTS = [
         "the first team are a box of their own under the pinned <code>all</code>. A "
         "box wears its channel's state — accent while that team's channel is picked, "
         "muted otherwise — so which team the room is showing reads without a word. "
-        "A fleet taller than the sidebar scrolls under the wheel, a header never "
-        "parted from its first agent, and the count row says how many are above and "
-        "below. Click a header to pick the channel.",
+        "<code>/team</code> moves an agent from one box to another, and a click on a "
+        "header picks that team's channel.",
         False,
     ),
     Shot(
@@ -410,13 +417,14 @@ FRIENDS = [
 ALSO = [
     (
         "A blurred window goes dark",
-        "A window the terminal reports as out of focus draws no caret and no focus "
-        "colour, so the one that is listening is the only one lit.",
+        "In a terminal that reports focus, a window that has lost it draws no caret "
+        "and no focus colour on its composer, so the window that is listening is the "
+        "only one lit.",
     ),
     (
         "Repeated resumes fold",
-        "When the same agent is resumed again and again after a usage limit or a "
-        "dropped connection, the room folds the repeats into one line with a count.",
+        "When the same agent is resumed again and again with nothing said in "
+        "between, the room folds the repeats into one line with a count.",
     ),
     (
         "A skill call is your turn",
@@ -425,8 +433,9 @@ ALSO = [
     ),
     (
         "!cmd in the room folds",
-        "A room <code>@who !cmd</code> shows its output folded under the message, "
-        "three rows and a pointer; <code>⌃E</code> or a click opens it.",
+        "A room <code>@who !cmd</code> shows its output folded under the message "
+        "once it runs past three rows, with a pointer; <code>⌃E</code> or a click "
+        "opens it.",
     ),
     (
         "A narrowed room stays on its subject",
@@ -441,17 +450,18 @@ ALSO = [
     (
         "Task labels",
         "An agent's in-progress task is labelled by its working form, or by its "
-        "title when it has none.",
+        "subject when it has none.",
     ),
     (
         "Loop wakeups",
-        "A <code>/loop</code>'s wakeup turn is drawn as Claude's own, never as "
-        "something you typed.",
+        "A reopened conversation no longer draws a <code>/loop</code>'s wakeup turn "
+        "as something you typed.",
     ),
     (
         "One finish per subagent",
-        "A subagent that hands back early and then finishes again draws one "
-        "finished line, not two.",
+        "A subagent that hands back while a background task it started is still "
+        "running, and finishes again when that ends, draws one finished line, not "
+        "two.",
     ),
     (
         "/wake-name",
@@ -526,8 +536,9 @@ ALSO = [
     (
         "Drag, double- and triple-click",
         "Wake owns the mouse, so it owns selection: a drag, a word or a whole row, "
-        "copied on release, on every surface but an agent's own row in the sidebar, "
-        "where a press starts the drag that places it.",
+        "copied on release, on every surface but two: an agent's own row in the "
+        "sidebar, where a press starts the drag that places it, and the search bar "
+        "above it, where a press focuses the bar.",
     ),
     (
         "esc esc rewind",

@@ -1,5 +1,4 @@
 {
-  "_note": "35-search: the search bar is the sidebar's top three rows (rows 0-2, a click at column 225, row 1). ctrl+l clicks the bar, ctrl+n clicks in the room's composer to let go of it.",
-  "ctrl+l": [{"click": [225, 1]}],
-  "ctrl+n": [{"click": [100, 54]}]
+  "_note": "35-search: the search bar is the sidebar's top three rows (rows 0-2, a click at column 225, row 1). ctrl+l clicks the bar.",
+  "ctrl+l": [{"click": [225, 1]}]
 }

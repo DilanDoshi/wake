@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+from typing import Callable
 
 from pagecopy import (
     ALSO,
@@ -24,6 +25,7 @@ from pagecopy import (
     FRIENDS_HEADING,
     FRIENDS_PROSE,
     META,
+    POSTERS,
     SHOTS,
     Friend,
     Shot,
@@ -52,8 +54,60 @@ INSTALL = (
 AUTO_CHANGELOG = "## Changelog"
 
 
+# A recording may fall this many seconds short of a cut: VHS rounds a take's length.
+CUT_TOLERANCE = 0.25
+
+
 def run(args: list[str]) -> None:
     subprocess.run(args, check=True)
+
+
+def poster_at(clip: str, dur: float) -> float:
+    """Where in the cut clip its poster frame is taken: the frame pagecopy names for
+    it, else three fifths in. A poster is all a visitor sees until the clip plays."""
+    return POSTERS.get(clip, dur * 0.6)
+
+
+def recorded_length(clip: str) -> float:
+    """A recording's length in seconds, as ffprobe reads it."""
+    out = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "csv=p=0",
+            os.path.join(OUT, clip + ".mp4"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return float(out)
+
+
+def short_cuts(length_of: Callable[[str], float]) -> list[str]:
+    """The cuts a recording cannot cover: ffmpeg would write a short clip and no
+    poster frame, or leave an old poster in place, and the page would not say."""
+    cuts = [(s.clip, s.start, s.dur) for s in SHOTS]
+    cuts += [(f.clip, f.start, f.dur) for f in FRIENDS]
+    problems = []
+    for clip, start, dur in cuts:
+        try:
+            have = length_of(clip)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            problems.append(
+                f"{clip}: no recording at {os.path.join(OUT, clip + '.mp4')}"
+            )
+            continue
+        if start + dur > have + CUT_TOLERANCE:
+            problems.append(
+                f"{clip}: the cut wants {start + dur:.1f}s ({start} + {dur}) "
+                f"but the recording is {have:.1f}s"
+            )
+    return problems
 
 
 def encode(clip: str, start: float, dur: float, media: str, crop: str = "") -> int:
@@ -97,7 +151,7 @@ def encode(clip: str, start: float, dur: float, media: str, crop: str = "") -> i
             "-v",
             "error",
             "-ss",
-            str(dur * 0.6),
+            str(poster_at(clip, dur)),
             "-i",
             dst,
             "-frames:v",
@@ -248,7 +302,7 @@ def hero() -> str:
       one group chat as the primary surface, <code>@name</code> to reach one, <code>@team</code> to
       reach a group, team channels that show one team's messages, a manager that acts on the fleet
       for you, a roster that ranks agents by whether they need you and marks the ones that are done,
-      <code>⌃F</code> to find any agent in a few letters of its name, drag-to-place panes, and any
+      <code>⌃F</code> to find any agent on the roster in a few letters of its name, drag-to-place panes, and any
       agent openable as a full conversation at Claude&nbsp;Code fidelity. Wake V1 is out.</p>
     <div class="meta">
       <a class="pill" href="{LATEST}"><b>Download</b> — latest release&nbsp;→</a>
@@ -493,6 +547,10 @@ def main() -> None:
         write_releases(dest, rels)
         print("releases: %s/releases.html — %d releases" % (dest, len(rels)))
         return
+
+    problems = short_cuts(recorded_length)
+    if problems:
+        sys.exit("recordings that do not cover their cuts:\n  " + "\n  ".join(problems))
 
     media = os.path.join(dest, "media")
     os.makedirs(media, exist_ok=True)

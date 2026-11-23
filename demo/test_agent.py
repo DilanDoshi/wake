@@ -56,7 +56,8 @@ class Agent:
             env=env,
         )
         self.frames: "queue.Queue[dict]" = queue.Queue()
-        threading.Thread(target=self.read, daemon=True).start()
+        self.reader = threading.Thread(target=self.read, daemon=True)
+        self.reader.start()
 
     def read(self) -> None:
         for line in self.proc.stdout:
@@ -85,6 +86,9 @@ class Agent:
     def close(self) -> None:
         self.proc.kill()
         self.proc.wait()
+        self.reader.join(timeout=2)
+        self.proc.stdin.close()
+        self.proc.stdout.close()
         self.home.cleanup()
         self.scenarios.cleanup()
 

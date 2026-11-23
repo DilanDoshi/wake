@@ -215,9 +215,8 @@ class Portability(unittest.TestCase):
     def test_no_union_syntax_in_an_annotation_so_python_39_can_import_it(self):
         # `float | None` is evaluated when the def runs and is a TypeError before 3.10;
         # env.sh's wake() runs this file for every take, not only the mouse ones.
-        tree = ast.parse(
-            open(os.path.join(HERE, "shiftkeys.py"), encoding="utf-8").read()
-        )
+        with open(os.path.join(HERE, "shiftkeys.py"), encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
         annotations = []
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

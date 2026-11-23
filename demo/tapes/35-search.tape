@@ -1,8 +1,9 @@
 # BEAT 35 — the sidebar's search bar. A click on it, a few letters, and the roster
 # narrows in place inside its team boxes, a team with no match dropping out; ↓
-# walks the matches and ↵ opens one; a click elsewhere lets go of the bar and the
-# filter stands, with its count, until esc clears it. The click is a mouse report
-# written by shiftkeys.py (gestures/35-search.json). Record it with WANT_AGENTS=22.
+# walks the matches and ↵ opens one, which lets go of the bar while the filter
+# stands, with its count; a click on the bar and esc clear it. The click is a mouse
+# report written by shiftkeys.py (gestures/35-search.json). Record it with
+# WANT_AGENTS=22.
 Output .work/out/35-search.mp4
 Source .work/head.tape
 Hide
@@ -21,17 +22,14 @@ Set TypingSpeed 220ms
 Type "limits"
 Sleep 3500ms
 
-# Walk the matches (a team header is a stop) and open one.
+# Walk the matches (a team header is a stop) and open one: the bar lets go and
+# the filter stands, lit with its count.
 Down
 Sleep 1s
 Down
 Sleep 1s
 Enter
-Sleep 4s
-
-# A click elsewhere lets go of the bar; the filter stands.
-Ctrl+N
-Sleep 3500ms
+Sleep 5s
 
 # Back to the bar, and esc clears the filter.
 Ctrl+L
