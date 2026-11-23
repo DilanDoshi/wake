@@ -95,12 +95,13 @@ WezTerm and Terminal.app are not known to).
 ## Stopping
 
 Read [chapter 4](04-lifecycle.md) before you stop anything, because the four ways to stop are
-genuinely different and one of them cannot be undone. The short version:
+genuinely different, and two of them end an agent for good. The short version:
 
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
 - **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake --fleet <name>` offers it back.
-- **`wake stop --fleet <name>`** — end the fleet, forget what it had parked, and remove its directory. **Not recoverable.**
+- **`/quit`** — end the conversation you are in and what it started. The live agent is gone; its transcript stays, and `/resume` can reopen it.
+- **`wake stop --fleet <name>`** — end the fleet, forget what it had parked, and remove its directory. **Not recoverable** as a fleet; the transcripts stay for `/resume`.
 
 ## Where your conversations actually live
 

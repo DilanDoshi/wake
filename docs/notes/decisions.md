@@ -1130,6 +1130,8 @@ product intent from the original brief. What changed instead: every spawn site m
 **Stop closes stdin; it does not signal.** An agent killed mid-`Edit` leaves a half-written file,
 and Wake is not entitled to do that to someone's repo. A hard kill exists for a wedged agent,
 behind a confirmation, and is never what `stop` does. Group-kill belongs on the cancel path only.
+*Amended 2026-11-22: a stop interrupts first and the daemon kills what ignored both, after the grace - see the
+last entry below.*
 
 **`Raw` does not cross the wire** (`json:"-"` on `core.Event`). Measured at **6.83×** — 85.4% of
 the event stream — for a field the receiving side is forbidden to read, since parsing it outside
@@ -6732,3 +6734,64 @@ every click piled another column up behind it.
   (a wide window that shrank), the click takes column 1 - a conversation off screen, which stays in its
   transcript and the `⇥` ring. The room is the pane shown and is never replaced, so this is `openDMWith`'s rule, the
   one the owner named; opening in a new rightmost column from there instead is the alternative, if he prefers.
+
+## 2026-11-22 — a stop interrupts first, and a hard kill fires on its own after the grace (the owner, via wake-orch)
+
+The owner's design, in his words: "interrupt, stop, sweep; force-kill only if truly stuck", with the kill automatic.
+It amends spec §5 ("stop does not signal; a hard kill is behind a confirmation and never the default") and the
+"Stop closes stdin; it does not signal" entry under Settled, and it supersedes #251's bounded 30 s kill, which
+the spec forbade and which skipped the grace for an agent whose queue was full. The reasoning that stood in the
+spec's way - a kill mid-`Edit` leaves a half-written file - is met by the order: the interrupt ends the turn at a
+tool boundary the way Esc does, so by the time anything is killed the agent had the grace to finish.
+
+- **One rule for every stop.** `/quit`, a team's `/quit` and `/manager-stop` (all `rpc.FrameStop`: no new frame,
+  so no `managerVerbs` verdict and no mixed-build break) and `wake stop`, with `⌃Q` and a signal as before, all
+  interrupt (`InterruptAll`: the turn in flight ends now, what is queued behind it is cancelled), then close stdin,
+  then leave `retire`'s sweep to end what the agent started. `wake stop` used to let turns run to the end of the
+  grace; the owner included it so the spec states the rule once.
+- **`quitAgent` is that, on two goroutines.** One notes the world while claude lives, interrupts and stops
+  (`interruptThenStop`, shared with shutdown's `stopForShutdown`); the other waits the grace (`endAfterGrace`). They
+  are separate because a stdin write can block - an agent that reads nothing, with a full queue, is exactly the
+  agent the kill exists for - so the grace is armed whatever becomes of the interrupt and whether or not a queue
+  would have taken the stop. A stop is not queued behind what the agent was sent any more: the queue was where a
+  wedged agent's stop used to wait forever or be refused.
+- **`endAfterGrace` is the one grace-and-kill, shared with shutdown.** It waits on `a.gone` against one timeout
+  (no poll: `waitForAgents`' 20 ms loop is gone), and for an agent still there at the end notes the world again
+  before the kill, so a group started during the grace is swept with it - the case #251 left running (a group
+  started 400 ms after the stop, no task event: `TestAQuitEndsAnAgentThatIgnoredBothAndSweepsAGroupItStartedMeanwhile`).
+  The grace is the existing `quitGrace`: it is the stuck bound, not the normal path. A heeded interrupt ends an
+  agent within a second or two, and shortening it would also shorten `⌃Q`'s, which needs the time for a turn to
+  reach a clean stop and write its transcript.
+- **A blocked agent is quit like any other, and its ask is withdrawn.** `⌃C` still refuses one, because a park's
+  stdin close reads as a denial that survives the wake. A stop has no wake, and its interrupt reaches the ask
+  first and withdraws it as Esc does (`interrupt-pending-basic.jsonl`), so nothing is denied.
+- **`endIfHeldOpen` is a park's backstop, not a quit's.** A stop's interrupt frees claude from the shell that
+  held it open (BUG-75/76). Checked live on 2.1.329 with the backstop disabled in a scratch build: after a
+  `/quit` of a Haiku agent with a background shell, a running subagent and a foreground command in flight, claude
+  exited by itself 1.0 s later and took all of them, with no kill. So a stop does not call it, and its turn-end
+  refresh skips an agent being quit (`agent.quitting`, which `wake stop` sets on every agent too): with the
+  backstop on, the same take ended in the same 1.0 s but by a SIGKILL at the turn's end, a kill on an agent that
+  had ignored nothing. An agent that ignores the interrupt and is held by a shell waits for the grace and is
+  killed there, its world noted again (`TestAQuitEndsAnAgentThatIgnoredBothAndSweepsAGroupItStartedMeanwhile`);
+  the turn-end refresh stays for a park (`TestAShellStartedAfterTheParksListingIsSweptWhenItsTurnEndsTheAgent`).
+- **A second `/quit` starts nothing** (`agent.quitting`, which is also the park-ready fence the old `stopQueued`
+  was: the record is dropped when the operator asks, so a crash in the grace does not park what was ended).
+  **A quit beats a park, in either order** (found by review): `⌃C` on a busy agent closes its stdin, so a `/quit`
+  after it cannot interrupt, and the turn ending inside the grace would have completed the park under a quit the
+  operator typed. The quit withdraws a park in flight (a session ended by a quit is never a parked one, as a kill
+  already said), a `⌃C` of an agent being quit is refused, and `⌃Q` does not book one. Interrupt first with `esc`
+  and park second, or just `/quit`.
+  A message typed ahead and not yet written when stdin closes is reported as unwritten to its sender; the
+  interrupt would have cancelled it.
+- **What stays true, and what is claimed.** The transcript stays on claude's disk and `/resume` can reopen a quit
+  session's conversation in a new process (`TestAQuitSessionCanBeResumedFromItsTranscript`), including one the grace
+  killed: a `--resume` closes a turn a kill cut, as `resume-killed.jsonl` records. The live agent and what it was
+  running are gone. So `/quit` is no longer called "irreversible" in the docs, nor is `wake stop`
+  the "only irreversible verb": it is the most final one, since it also forgets the park book.
+- **Measured live (claude 2.1.329, Haiku, a scratch daemon, a project under /tmp).** An agent mid-turn with a
+  background shell, a subagent's `sleep` and a foreground command, then `/quit`: on `origin/main` it was still
+  working 60 s later with all of its processes alive (the turn runs to its end); on this branch the agent ended in
+  1.0 s and every process of the take was gone by then, claude having exited by itself.
+- Held by `internal/daemon/quit_unix_test.go`, `shutdownstop_test.go`, `crashpark_unix_test.go` and
+  `world_unix_test.go`, each checked by a mutation that turns it red (no re-note, no grace goroutine, a grace armed
+  behind the interrupt, no interrupt, no once-guard, no fence, no note before the stop).

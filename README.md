@@ -99,7 +99,7 @@ wake upgrade            install the newest release over this one
 wake --version          which build you have
 wake manager            start the manager from a shell (the room seats one by default)
 wake status             what is running, and each agent's team (`--team <name>`: one team's members)
-wake stop               stop every session and the daemon, forget what was parked, and remove the fleet — the one irreversible verb
+wake stop               stop every session and the daemon, forget what was parked, and remove the fleet — the most final verb
 ```
 
 Flags on the verbs that start a session (`new`, `manager`):

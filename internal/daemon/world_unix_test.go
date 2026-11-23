@@ -426,25 +426,26 @@ func TestAParkInATurnTheAgentStartedItselfLetsTheTurnFinish(t *testing.T) {
 	}
 }
 
-// A message typed before the stop is the stop's to finish: it is queued behind
+// A message typed before a park is the park's to finish: it is queued behind
 // the turn in flight, and that turn's end is not the end of what was given.
-func TestAMessageQueuedBeforeTheStopIsAnsweredEvenWithAShellRunning(t *testing.T) {
+func TestAMessageQueuedBeforeTheParkIsAnsweredEvenWithAShellRunning(t *testing.T) {
 	t.Setenv(fakeSlowEnv, "600ms")
-	_, c, left := holdFleet(t)
+	_, c, _ := holdFleet(t)
 
 	for _, text := range []string{"first", "second"} {
 		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: text, MessageID: uuid.NewString()})
 	}
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
 	c.awaitEvent(idAlpha, "second")
-	c.pollState(idAlpha, rpc.StateEnded)
-
-	left.wantGone(t, "a stop after two messages")
+	c.awaitState(idAlpha, rpc.StateParked)
 }
 
-// A shell that starts after the stop's listing, in the turn the stop lets run,
-// is noted before claude is ended for it, or nothing would ever reach it.
-func TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent(t *testing.T) {
+// A shell that starts after a park's listing, in the turn the park lets run, is
+// noted before claude is ended for it, or nothing would ever reach it once the
+// daemon exits. (A quit's interrupt frees claude from its shell, so the refresh
+// at a turn's end is a park's; a quit's late group is the grace's, see
+// quit_unix_test.go.)
+func TestAShellStartedAfterTheParksListingIsSweptWhenItsTurnEndsTheAgent(t *testing.T) {
 	pidfile := filepath.Join(t.TempDir(), "pids")
 	t.Setenv(fakePidfileEnv, pidfile)
 	t.Setenv(fakeTaskEnv, "1")
@@ -458,9 +459,9 @@ func TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent(t *test
 	c.awaitEvent(idAlpha, "ready")
 
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha}) // lists before the shell exists
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha}) // lists before the shell exists
 	c.awaitEvent(idAlpha, `echo: {`)
-	c.pollState(idAlpha, rpc.StateEnded)
+	c.awaitState(idAlpha, rpc.StateParked)
 	d.stop(t)
 
 	left := leftovers{shell: waitForPid(t, pidfile), shellChild: waitForPid(t, pidfile+".gc"), own: waitForPid(t, pidfile+".own")}
@@ -469,7 +470,7 @@ func TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent(t *test
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
 	})
-	left.wantGone(t, "a stop whose turn started a shell")
+	left.wantGone(t, "a park whose turn started a shell")
 }
 
 // ⌃Q interrupts before it closes stdin, which is what lets claude go while its

@@ -611,8 +611,9 @@ measured, and the one thing below that a laptop will actually notice.
 
 ## 12. `wake stop` against a real fleet
 
-- [ ] `wake stop` with agents **mid-turn**. It should let turns finish, then exit non-zero only if
-      something is genuinely still alive.
+- [ ] `wake stop` with agents **mid-turn**. It should interrupt them as Esc does and finish within a
+      second or two, killing only an agent that ignores the interrupt, after the grace, and exit
+      non-zero only if something is genuinely still alive.
 - [ ] Immediately start Wake again. This blocks for the length of the shutdown by design — it
       should eventually succeed, not fail.
 - [ ] Kill the daemon rudely (`kill -9`) and then run `wake status`. It should report orphans it can

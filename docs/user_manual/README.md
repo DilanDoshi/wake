@@ -46,6 +46,7 @@ Named here so you do not go looking:
 
 ## A warning worth reading once
 
-**`wake stop` is the only irreversible verb.** It ends every session, and nothing brings a
-*stopped* session back — that is precisely why park exists. If you want to shut down and come
-back, use `⌃Q`.
+**`wake stop` is the most final verb.** It ends every session — each interrupted, then stopped — and
+forgets the park book, so nothing is offered back next time. The transcripts stay, and `/resume` can
+reopen a conversation in a new process, but what was running is gone; that is precisely why park
+exists. If you want to shut down and come back, use `⌃Q`.

@@ -68,7 +68,7 @@ quietly starts the agent in the shared tree, because that is the one outcome ask
 was meant to rule out.
 
 **Wake never removes one.** A worktree holds uncommitted work, so removing it on park, on `⌃Q` or on
-`wake stop` would be a second irreversible verb in a product whose whole lifecycle chapter turns on
+`wake stop` would be a second final verb in a product whose whole lifecycle chapter turns on
 there being exactly one. `git worktree remove` when you are done with it.
 
 **An agent can also move itself.** `EnterWorktree` and `ExitWorktree` are ordinary tools every agent
@@ -120,7 +120,8 @@ agent on one). An agent that has `wake` on its `PATH` can run it too, which is h
 team; each ordinary agent starts with a short note saying so. The report also names what Claude
 sessions know the manager as, `manager-<fleet>`.
 
-**`wake stop` is irreversible.** See [chapter 4](04-lifecycle.md).
+**`wake stop` is the most final verb:** every agent ends and the park book is forgotten, though the
+transcripts stay for `/resume`. See [chapter 4](04-lifecycle.md).
 
 **`wake upgrade`** replaces this binary with the newest release; running fleets keep their build
 until you restart them. See [chapter 4](04-lifecycle.md#upgrading).
@@ -138,7 +139,7 @@ command that ships without a line here fails the build; `/wake-help` draws the s
 /color [@who] <colour>|none         an identity hue — seven named colours, or none to clear
 /team [@who] <name>|none            group a session under a named team, or none to clear
 /park [@who|@team]                  park one session, as ⌃C does, or every live one of a team
-/quit [@who|@team]                  end one session for good and drop its row, or a team's after a confirm (irreversible)
+/quit [@who|@team]                  end one session and what it started and drop its row (transcript stays for /resume), or a team's after a confirm
 /adopt                              adopt a claude session this machine already has, from the room
 /manager                            the switch: start one, wake a parked one, or park a running one
 /manager-stop                       end the manager for good (a fresh /manager starts a new one)

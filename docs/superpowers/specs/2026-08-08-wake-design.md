@@ -211,9 +211,13 @@ is how a fleet becomes unstoppable or a laptop becomes a graveyard of orphaned p
 > rewritten, because a dated spec is a record — but a stale table is what the next reader builds on,
 > which is why the correction is here and not only over there.
 
-**Stop closes stdin and lets the in-flight turn finish.** It does not signal. An agent killed
-mid-`Edit` leaves a half-written file, and Wake is not entitled to do that to someone's repo.
-A hard kill exists for a wedged agent, behind a confirmation, and is never the default.
+**Stop interrupts first, then closes stdin, then sweeps what the agent started.** The interrupt is
+Esc's: the turn in flight ends now, what is queued behind it is cancelled, and an outstanding ask is
+withdrawn rather than denied. Every stop works so - one agent's, `⌃Q`'s, a signal's and `wake stop`'s.
+A hard kill fires automatically, and only on an agent that ignored both the interrupt and the stop,
+after the grace (owner's 2026-11-22 ruling, amending the original "stop does not signal; a hard kill is
+behind a confirmation"). A heeded interrupt ends an agent within a second or two, so the grace is for
+the stuck one alone, and a kill is not a risk to a half-written file the agent had time to finish.
 
 **`wake status`** reports whether a daemon is running and how many sessions it holds. A
 background process the user cannot see or stop is a liability, not a feature — and at 20 agents
@@ -626,8 +630,8 @@ built-in slash commands survive stream-json mode. Roughly 80 lines, one day.
 
 - Daemon core with detach/reattach
 - Spawn, park, wake sessions with assigned UUIDs and names
-- **Stop one agent; `wake stop` to quit the fleet; `wake status` to see it** — stop closes stdin
-  and lets the turn finish, hard kill is behind a confirmation
+- **Stop one agent; `wake stop` to quit the fleet; `wake status` to see it** — stop interrupts,
+  closes stdin and sweeps; a hard kill fires on its own only for an agent that ignored both
 - Group chat, filtered
 - DM view at full Claude Code fidelity
 - Bounded grid: columns, split-down, solo, board

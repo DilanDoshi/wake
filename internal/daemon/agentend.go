@@ -89,8 +89,8 @@ func (a *agent) finished() bool {
 	return a.ended
 }
 
-// stop is the spec's stop verb: close stdin and let the in-flight turn
-// finish. It does not signal and it does not touch the agent's process group.
+// stop closes stdin and nothing else: it does not signal and it does not touch
+// the agent's process group. A park is this alone; a /quit is interrupted first.
 func (a *agent) stop() error {
 	a.mu.Lock()
 	a.stopped = true
@@ -126,9 +126,9 @@ func (a *agent) stop() error {
 // is Wake's own proof that the process is gone: a signal sent after it cuts
 // nothing, and the transcript --resume reads is the one the agent finished
 // writing. Clearing the label there would withdraw a park whose process ended
-// on its own, and it is reachable - shutdown's grace samples `finished()` on a
-// 20ms tick and kills whatever had not ended by the last look, so a session
-// that ends in that gap gets a kill it did not need. Both fields are under this
+// on its own, and it is reachable - endAfterGrace looks at `finished()`, notes
+// the fleet's world (a `ps`) and only then kills, so a session that ends in that
+// gap gets a kill it did not need. Both fields are under this
 // lock, so the test is atomic with the clear rather than a check-then-act.
 func (a *agent) endForShutdown(preserveReclaimPark bool) bool {
 	a.mu.Lock()

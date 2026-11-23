@@ -154,7 +154,7 @@ var quitStates = map[string]struct {
 	why  string
 }{
 	rpc.StateIdle:    {kind: rpc.FrameStop, why: "a process between turns: stdin is open and there is something to end"},
-	rpc.StateWorking: {kind: rpc.FrameStop, why: "mid-turn. The daemon closes stdin and lets the in-flight turn finish, which is what stop has meant here"},
+	rpc.StateWorking: {kind: rpc.FrameStop, why: "mid-turn. The daemon interrupts the agent, closes stdin and sweeps what it started, which is what stop means here"},
 	rpc.StateSilent:  {kind: rpc.FrameStop, why: "a guess about a working agent that has not spoken, not a state of the process. Its stdin is open, so a stop reaches it"},
 	rpc.StateBlocked: {kind: rpc.FrameStop, why: "park refuses this because the denial nobody made survives the wake. A stop has no wake, and refusing would leave the operator unable to end it"},
 	rpc.StateEnded:   {kind: "", why: "already over, and nothing is lost, so this is silent - interrupt's own trade for an ended session"},

@@ -23,9 +23,13 @@ func (a *agent) stopWorld() error {
 // owed, and no message Wake wrote still to run. endProcess, not kill, so a park's
 // label survives for completePark. refresh notes the world once more first: from a
 // turn's end, a shell may have started after the stop's listing.
+//
+// It is a park's backstop, not a quit's: an agent being quit was interrupted, which
+// frees claude from its shell (checked live on 2.1.329), so it exits by itself and
+// only the grace's kill is for one that does not.
 func (a *agent) endIfHeldOpen(refresh bool) {
 	a.mu.Lock()
-	held := a.stopped && !a.ended && !a.owed && !a.turnOpen && len(a.unstarted) == 0 && a.runsShellLocked()
+	held := a.stopped && !a.quitting && !a.ended && !a.owed && !a.turnOpen && len(a.unstarted) == 0 && a.runsShellLocked()
 	a.mu.Unlock()
 	if !held {
 		return

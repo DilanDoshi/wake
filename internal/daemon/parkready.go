@@ -173,13 +173,26 @@ func loadParkReady(path string) map[string]parkedRecord {
 // purpose, so its roster row is going or gone. A parking agent that has ended is
 // not departed: its roster row stays until completePark removes it.
 func (a *agent) departedLocked() bool {
-	return (a.ended && !a.parking) || a.parked || ((a.stopped || a.stopQueued) && !a.parking)
+	return (a.ended && !a.parking) || a.parked || ((a.stopped || a.quitting) && !a.parking)
 }
 
-func (a *agent) markStopQueued(queued bool) {
+// markQuitting marks a /quit under way and reports whether this call began it.
+// A park in flight is withdrawn: the operator said this agent is not to come
+// back, and a session ended by a quit is never a parked one.
+func (a *agent) markQuitting() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.stopQueued = queued
+	if a.quitting {
+		return false
+	}
+	a.quitting, a.parking = true, false
+	return true
+}
+
+func (a *agent) isQuitting() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.quitting
 }
 
 func (a *agent) departed() bool {

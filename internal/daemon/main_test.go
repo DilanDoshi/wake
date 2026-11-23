@@ -447,6 +447,10 @@ func fakeNoisyExit(sid string) int {
 	return 3
 }
 
+// fakeInstantControlEnv makes fakeSlowTurns answer control requests (an
+// interrupt) without its delay, as a real claude does.
+const fakeInstantControlEnv = "WAKE_FAKE_INSTANT_CONTROL"
+
 // fakeSlowTurns takes its time over a turn, which is what makes stop and kill
 // distinguishable at all: stop has something to wait for, and kill has
 // something to interrupt.
@@ -458,7 +462,11 @@ func fakeSlowTurns(sid string) int {
 	emitText(sid, "ready")
 	emitResult(sid)
 	for line := range stdinLines() {
-		time.Sleep(delay)
+		// A real claude answers a control request at once; the knob lets a test have
+		// that, where the default keeps every line as slow as the turns.
+		if os.Getenv(fakeInstantControlEnv) != "1" || !strings.Contains(line, `"type":"control_request"`) {
+			time.Sleep(delay)
+		}
 		emitText(sid, "echo: "+line)
 		emitResult(sid)
 	}

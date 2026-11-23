@@ -18,24 +18,17 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// quitGrace is how long a quitting daemon waits for stopped sessions to end
-// before it kills what is left: a parking quit's interrupted turns, and under
-// `wake stop` turns let run to their end.
-//
-// It is a compromise between two things Wake owes the operator and cannot owe
-// both of: an agent mid-Edit under `wake stop` must be allowed to finish, and the
-// daemon must not still be alive minutes after `wake stop`. Exiting early is
-// the worse failure of the two - it leaves process trees with nobody holding
-// a handle - so the grace is generous and the ending is a group kill rather
-// than a shrug.
+// quitGrace is how long a stop waits for an interrupted, stopped session to end
+// before it kills what is left, for a /quit and a quitting daemon alike. It is
+// the bound for an agent that ignores the interrupt: one that heeds it ends
+// within a second or two. Exiting early is the worse failure - it leaves process
+// trees with nobody holding a handle, and a kill mid-write can cut the
+// transcript /resume reads - so the grace is generous and the ending is a group
+// kill rather than a shrug.
 // It is a var only so tests can compress it; nothing outside a test assigns it.
 var quitGrace = defaultQuitGrace
 
 const defaultQuitGrace = 30 * time.Second
-
-// agentSettle is how often shutdown re-checks whether the sessions it
-// stopped have actually ended.
-const agentSettle = 20 * time.Millisecond
 
 // shutdownWait bounds the last wait of all: everything this server started,
 // after every session has ended or been killed. Short, because by this point
@@ -208,7 +201,7 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 //
 // It sets a deadline rather than closing, and that is the whole of C1.
 // Closing a net.UnixListener *unlinks the socket file*, and shutdown then
-// takes up to quitGrace letting in-flight turns finish while the roster still
+// takes up to quitGrace letting interrupted turns end while the roster still
 // names every one of those agents. In that window `wake` finds no socket,
 // forks a second daemon, and its reaper reads that roster and SIGKILLs 15-30
 // agents mid-Edit - reached by the most ordinary motion there is, "quit, then
@@ -321,10 +314,10 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, an in-flight turn allowed to finish under `wake stop` or, when
-// parking, ended as Esc ends it, by claude itself - because a daemon exit is not
-// leave to kill. Only what is still alive after the grace is killed, and it is
-// killed by process group, because an agent is a tree.
+// interrupted as Esc interrupts, then stdin closed, so claude ends its own turn
+// - because a daemon exit is not leave to kill. Only what is still alive after
+// the grace is killed, and it is killed by process group, because an agent is a
+// tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
 // stop is labelled a park on the way in, and what happens to the park book on
@@ -350,6 +343,9 @@ func (s *server) shutdown() error {
 			// invariant true across this call.
 			a.beginPark()
 		}
+		if !parking {
+			a.markQuitting() // `wake stop` ends every agent as a /quit does
+		}
 		if a.reclaimingNow() {
 			// The grace exists so an in-flight turn can end. This agent
 			// has no process left to end one, so waiting is unnecessary.
@@ -363,14 +359,9 @@ func (s *server) shutdown() error {
 			}
 			continue
 		}
-		s.stopForShutdown(a, parking)
+		s.stopForShutdown(a)
 	}
-	remaining := waitForAgents(agents, quitGrace)
-	s.noteFleet(remaining) // what started during the grace, before its kill
-	for _, a := range remaining {
-		logf("wake: session %s did not end within %v of being stopped; ending its process group", a.id, quitGrace)
-		a.endForShutdown(parking)
-	}
+	s.endAfterGrace(agents, quitGrace, parking)
 
 	// The park book's two arms are in different places, and the asymmetry is
 	// the rule rather than an accident: **an entry that must exist has to be
@@ -487,23 +478,6 @@ func (s *server) takeAgents() []*agent {
 	return out
 }
 
-// waitForAgents returns the agents that had not ended within grace.
-func waitForAgents(agents []*agent, grace time.Duration) []*agent {
-	deadline := time.Now().Add(grace)
-	for {
-		var alive []*agent
-		for _, a := range agents {
-			if !a.finished() {
-				alive = append(alive, a)
-			}
-		}
-		if len(alive) == 0 || !time.Now().Before(deadline) {
-			return alive
-		}
-		time.Sleep(agentSettle)
-	}
-}
-
 func (s *server) closeClients() {
 	s.mu.Lock()
 	clients := make([]*client, 0, len(s.clients))
@@ -596,12 +570,13 @@ func (s *server) reconsiderEmptyExit() {
 // frame. So they are handed to the agent's own input goroutine and this
 // returns immediately.
 //
-// Stop goes through that same queue, and the ordering is the reason. Stop
-// means "finish what I have given you, then end", so it has to arrive behind
-// the messages already queued for that agent - applied here it would overtake
-// them, and a client that typed one last thing and then hit stop would watch
-// its message be refused by the session it just closed. That happened; this
-// comment is the fix.
+// Stop is the exception, and it is the daemon's own (submit, quitAgent): it
+// does not go through the queue. A stop is an interrupt, which cancels what is
+// queued behind the turn anyway, so arriving behind the messages already sent
+// would only make it wait; and the agent it exists for is the one that stopped
+// reading its stdin, whose queue is full and whose stop would wait there for
+// ever. A message typed just before it may find stdin closed and be reported as
+// not written, which is true.
 //
 // Park goes through the queue for both of Stop's reasons and they are the same
 // reasons. It is a write to the agent's stdin - it *is* a stop, with a label

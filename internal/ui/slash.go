@@ -314,8 +314,9 @@ const jumpCommand = "jump"
 const jumpVerb = SlashPrefix + jumpCommand // for resumeVerb's reason
 
 // quitCommand ends one agent and removes it from this window - `/manager-stop`
-// for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
-// back, and unlike ⌃C park it is not recoverable.
+// for an ordinary session. It writes `rpc.FrameStop`, which interrupts, stops and
+// sweeps the agent, and unlike ⌃C park it does not keep the process: the live
+// agent is gone, and its transcript stays for `/resume`.
 //
 // **The word is safe to take on the evidence `new` and `manager` are:** the
 // recorded corpus carries 133 commands claude advertises on its `init` frames

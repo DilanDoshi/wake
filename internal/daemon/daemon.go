@@ -30,14 +30,14 @@
 //     and parkbook.go is what makes a parked session outlive this daemon.
 //   - detach - the TUI exits and every session keeps running. Reaches the
 //     daemon as nothing at all: the client just disconnects.
-//   - stop - FrameStop. Closes the agent's stdin and lets the in-flight turn
-//     finish. It does not signal. An agent killed mid-Edit leaves a
-//     half-written file, and Wake is not entitled to do that to a repo.
+//   - stop - FrameStop. Interrupts the agent as Esc does, closes its stdin and
+//     sweeps what it started. Only an agent that ignored both is killed, once
+//     the grace has run (quitAgent; the owner's 2026-11-22 ruling).
 //   - quit - FrameQuit. Stops every session, then the daemon exits.
 //
-// FrameKill is the fifth thing and is deliberately not one of the four: it is
-// for an agent that has already stopped behaving, and it is a separate verb
-// so it cannot happen by accident.
+// FrameKill is the fifth thing and is deliberately not one of the four: it is a
+// hard kill at once, and a separate verb so it cannot happen by accident. It has
+// no producer; a stop's own kill is automatic and waits out the grace.
 //
 // FrameParkAll is the sixth, and it is the only one that is about the *fleet*:
 // ⌃Q parks every session and then exits, so the next start can offer them back.
@@ -197,7 +197,7 @@ func Serve(ctx context.Context, socket string) error {
 		return err
 	}
 	// Closing the listener unlinks the socket file, so it must happen *after*
-	// shutdown has finished letting in-flight turns end - while the binding
+	// shutdown has finished ending the agents - while the binding
 	// stands, a second daemon started by mistake finds a live socket and
 	// refuses, and clients keep finding a daemon on the path for the whole
 	// grace. See stopAcceptingOnStop.
