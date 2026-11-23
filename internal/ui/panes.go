@@ -515,8 +515,8 @@ func (a App) refocus(next string) App {
 	a = a.withFocus(next).resizePanes()
 	a = a.left(was, a.drawnIDs())
 	if next == "" {
-		// A reminder the room passed while a conversation held the keys is owed now.
-		a.room = a.room.remind()
+		// A trim the room made while a conversation held the keys is owed now.
+		a.room = a.room.announceTrim()
 	}
 	return a
 }

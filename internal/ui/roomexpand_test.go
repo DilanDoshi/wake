@@ -252,7 +252,7 @@ func TestCollapsingFromDeepInsideStaysWithTheReply(t *testing.T) {
 }
 
 // The expand set is bounded by what the room retains, not by every reply ever
-// clicked: an opened reply that ages out of the 20,000-event cap leaves no entry
+// clicked: an opened reply that ages out of the room's cap leaves no entry
 // behind, and pruning it does not mutate an older Room that still holds it.
 func TestExpandSetIsPrunedWhenAnOpenedReplyIsReclaimed(t *testing.T) {
 	r := NewRoom().SetSize(80, 12)
@@ -264,7 +264,7 @@ func TestExpandSetIsPrunedWhenAnOpenedReplyIsReclaimed(t *testing.T) {
 	}
 	held := r // an older Room, sharing the expand set until a prune copies it
 
-	for i := range wantRoomRetention + 5 {
+	for i := range roomRetentionEvents {
 		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
 	}
 
@@ -342,7 +342,7 @@ func TestExpandingARoomIsImmutable(t *testing.T) {
 // through the expand toggles rather than only through a history merge.
 func TestExpandingWorksAfterTheRoomHasReclaimed(t *testing.T) {
 	r := NewRoom().SetSize(80, 12)
-	for i := range wantRoomRetention + 5 {
+	for i := range roomRetentionEvents {
 		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
 	}
 	if !r.reclaimed {

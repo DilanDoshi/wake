@@ -6,7 +6,7 @@ func (a App) withRoom(room Room) App {
 	moves := room.lineMoves
 	room.lineMoves = nil
 	if a.focus == "" {
-		room = room.remind()
+		room = room.announceTrim()
 	}
 	a.room = room
 	if moves != nil && a.clicks.kept.pane == "" && !a.clicks.kept.inComposer && !a.clicks.kept.onScreen {

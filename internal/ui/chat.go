@@ -29,7 +29,6 @@ import (
 // is the one visible difference from the DM's header.
 const (
 	roomTitle            = "group chat"
-	roomRetentionEvents  = 20_000
 	roomReclaimedHistory = "… older room history reclaimed"
 )
 
@@ -164,11 +163,12 @@ type Room struct {
 	menu string
 
 	// clearedAt is when /clear last emptied this room: restored history older
-	// than it stays out. reminded is the thousands the room has said it holds,
-	// and earlier is ↑'s prompts from before the clear. See roomclear.go.
+	// than it stays out, and earlier is ↑'s prompts from before the clear. See
+	// roomclear.go. trimmed is how many messages the room has dropped to stay
+	// small and not yet said so. See roomtrim.go.
 	clearedAt time.Time
-	reminded  int
 	earlier   []string
+	trimmed   int
 
 	// chrome is what chromeHeight returned when the transcript was last sized,
 	// which is DM.chrome's rule read for this pane.
@@ -377,8 +377,9 @@ func (r Room) appendLine(line roomLine) Room {
 		r.said = r.said.append(line)
 	}
 	r.runs = runs
-	if drop := r.said.count() - roomRetentionEvents; drop > 0 {
+	if drop := roomTrimCount(r.said.count()); drop > 0 {
 		r = r.reclaimOldest(drop)
+		r.trimmed += drop
 	}
 	if following {
 		r.tr = r.tr.toBottom()
@@ -429,7 +430,7 @@ func (r Room) Before(earlier []roomLine) Room {
 	live := held[min(r.hist, len(held)):]
 	liveStart := r.liveLineStart(held)
 	combined := append(append(make([]roomLine, 0, len(hist)+len(live)), hist...), live...)
-	drop := max(len(combined)-roomRetentionEvents, 0)
+	drop := roomTrimCount(len(combined))
 	liveDrop := max(drop-len(hist), 0)
 	combined = append([]roomLine(nil), combined[drop:]...)
 	r.hist = max(len(hist)-drop, 0)
