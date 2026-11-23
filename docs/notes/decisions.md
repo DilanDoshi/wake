@@ -8,6 +8,48 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-23 — the room trims its oldest thousand at three thousand messages (the owner, via wake-orch)
+
+The owner's ask: "clear the first 1000 for 3k message". When the group chat holds 3,000 messages it drops the
+oldest 1,000, so it swings between 2,000 and 2,999 and never grows past that. It replaces the 20,000-line cap that
+dropped one line per message and the `/clear` reminder, which asked the operator to do by hand what the room now does.
+
+- **A message is a line of the room's canonical store** (`Room.said.count()`): the unit the reminder counted and the
+  old cap capped, so a line a focus or channel hides is one too. The trim is on that store and not per channel: a
+  narrowed room holds as many lines as a whole one and loses the same chunk.
+- **It trims on the 3,000th message**, not the 3,001st: the room is never drawn holding the cap. `roomRetentionEvents`
+  (3,000) and `roomTrimEvents` (1,000) are the owner's two numbers, pinned by `TestTheRoomsCapAndChunkAreTheOwnersRuling`;
+  every other test derives from them.
+- **One rule, `roomTrimCount`**: none under the cap, then whole chunks until under it. A live append reaches the cap one
+  message at a time, so it is always exactly one chunk. `Room.Before` applies the same rule to the merged history and
+  live lines, so a restore can never leave more than the live room would hold (2,500 stays 2,500; 3,300 becomes 2,300;
+  10,000 becomes 2,000). A fresh window's restore is already bounded by `roomRawEvents` (1,600), so the rule bites a
+  history that lands late among a full tail.
+- **It extends `reclaimOldest`** and adds no mechanism: whole blocks leave `said` and the transcript with no re-wrap
+  and no render (`TestATrimRendersNothingAgain`), one reclaimed-history line stands at the new top, a reader inside what
+  stays keeps their rows, one inside the chunk is put at the oldest line left, and a selection follows or clears
+  (`lineMoves`). Chunking is not a re-wrap saving - the gains are the 3,000-line window a resize re-wraps and one selection
+  invalidation per 1,000 messages. A trim allocates by the chunk it drops, about 2 KiB an event
+  (`TestATrimAllocatesPerDroppedEventNotPerWindow`, budgeted at the 6 KiB the `Before` guard uses).
+- **A run of an agent's resumes survives it** (the risk a 1,000-line drop adds to a one-line one): a run whose head went
+  in the chunk is not folded into, the next resume heads a new line and its count went with it; a run whose head stays
+  keeps folding into it, its row redrawn in place (`TestAThousandDropAcrossAnOpenRunHeadStartsANewRun`,
+  `TestAThousandDropLeavesARunWhoseHeadStaysFolding`).
+- **The notice** is `cleared the oldest 1,000 group-chat messages — agents untouched`, the reminder's own plumbing: a
+  field (`Room.trimmed`, the messages dropped and not yet said), said by `announceTrim` when the room holds the keys, so
+  a trim that happens in a conversation is owed until the room takes them back and then says the thousands together
+  (`oldest 2,000`). An ordinary notice that times out. A trim that comes with a restore draws the reclaimed-history
+  line and no notice: the operator saw no lines go.
+- **Retires the 2026-10-19 reminder**; a bare `/clear` stays, and now also resets what is owed. A session resumed after a
+  trim brings its own older history back under the reclaimed-history line, and the merge sheds by the same rule.
+- **The per-event allocation guard measures a slope** (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`): the 6 KiB
+  figure is unchanged, but it is now what one more retained event costs between a half room and the fullest, since a
+  `Before` has a fixed cost that a room of 20,000 events spread to nothing and one of 3,000 does not (main sat 5 bytes
+  under 6 KiB; dividing the total at 2,999 events came to 2 bytes over it). 6,117 B an event.
+- Checked by mutation, each red: the trigger a message late, a per-message shed, no trim in `Before`, no owed count, a
+  fold into an evicted head, a count kept past its head, an announcement while a conversation holds the keys, a `/clear`
+  that forgets nothing, a trim that re-renders, a notice that ignores what accumulated.
+
 ## 2026-11-21 — the sidebar's search bar (D1 of the jump picker's mockups), PR2
 
 The owner picked D with the jump box (A): a search bar atop the sidebar for the agent you want to *see in place*, where
@@ -5266,7 +5308,7 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   which is acceptable because the cost being relieved is this window holding the lines. Restored
   history older than the clear stays out of this window (`Room.sinceClear`), and ↑ keeps the prompts
   typed before it (Claude Code's prompt history outlives its `/clear` too).
-- **The reminder** is `the room holds N,000 messages — /clear to lighten it`, once per thousand the
+- **The reminder** (retired 2026-11-23: the room trims itself, see above) is `the room holds N,000 messages — /clear to lighten it`, once per thousand the
   room holds, counted from the last clear, as an ordinary notice that times out (the owner asked that
   it be temporary). The room caps itself at `roomRetentionEvents`, so the last reminder is at that cap.
   **It waits for the room to hold the keys** (code review): `/clear` typed in a conversation clears that

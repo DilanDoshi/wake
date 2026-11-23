@@ -48,7 +48,7 @@ func (r Room) admits(l roomLine) bool {
 // addressed to (or "" for a broadcast) and the channel it was typed in. Only this
 // path carries either - an agent's own lines are told apart by session id. The
 // channel is kept beside the lines (Room.typedIn), not on them, because the
-// 20,000-line cap prices every byte a line carries; copied on write, pruned with
+// cap's worth of lines prices every byte a line carries; copied on write, pruned with
 // the expand set.
 func (r Room) appendUser(ev core.Event, to, sentIn string) Room {
 	line := roomLine{ev: ev, to: to}

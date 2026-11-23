@@ -145,7 +145,7 @@ can no longer be the same list. The chosen strategy keeps the delicate geometry 
   already plays for restored history to the live tail as well). `Append` adds to the canonical
   backing always and to `said`/`tr` only when `focusAdmits` passes; a focus change rebuilds `said`
   from the canonical backing through the filter and re-renders.
-- The 20k `roomRetentionEvents` cap applies to the canonical backing; the visible subset is never
+- The `roomRetentionEvents` cap (3,000, trimmed a chunk at a time: `roomtrim.go`) applies to the canonical backing; the visible subset is never
   larger. Memory stays bounded by the existing cap.
 
 The alternative — deriving `visible` on the fly and letting `said`/`tr` desync — was rejected because

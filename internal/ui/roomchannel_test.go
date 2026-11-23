@@ -232,7 +232,7 @@ func TestAChannelKeepsAScrolledReadersPlaceAsItsMembersChange(t *testing.T) {
 
 // A report that changes who is on the channel re-renders the room, so a selection
 // anchored to its lines goes; one that changes nothing renders nothing - a report
-// arrives on every state change, and the room is up to 20,000 lines.
+// arrives on every state change, and the room is up to 3,000 lines.
 func TestAReportReRendersAChannelOnlyWhenItsMembersChange(t *testing.T) {
 	a := channelRoom(t).selectChannel("backend")
 	renders := 0
