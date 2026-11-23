@@ -185,8 +185,9 @@ func TestLateHistoryInsertionKeepsTheRestoredSelectionContent(t *testing.T) {
 	}
 }
 
-// Production mutation caught: an evicted restored block can be replaced at
-// the same absolute line number, so bounds checks alone retain a stale anchor.
+// Production mutation caught: leaving the viewport or the selection of evicted
+// restored history where it was. The rows a merge hands to other lines are the
+// next test's.
 func TestLateHistoryEvictionClampsViewportAndClearsSelection(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0)
 	r := NewRoom().SetSize(80, 8).Before(restoredBroadcast("history A", base))
@@ -208,6 +209,37 @@ func TestLateHistoryEvictionClampsViewportAndClearsSelection(t *testing.T) {
 	}
 	if top := ansi.Strip(a.room.View(80, 8)); !strings.Contains(top, wantReclaimedLine) {
 		t.Errorf("evicted history viewport did not clamp to the reclamation marker:\n%s", top)
+	}
+}
+
+// Production mutation caught: an evicted restored block can be replaced at the
+// same absolute line number, so bounds checks alone retain a stale anchor. A merge
+// of a thousand restored lines evicts the oldest chunk, history A with it, and the
+// lines it keeps are laid up to the live tail - over the rows A had.
+func TestALateHistoryThatTakesTheRowsOfEvictedHistoryMovesTheSelectionOffThem(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	r := NewRoom().SetSize(80, 8).Before(restoredBroadcast("history A", base))
+	for i := range 1_898 { // with A and the 1,101 below, three thousand
+		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
+	}
+	aLine := roomTextLine(r, "history A")
+	r.tr.scroll = aLine
+	a := NewRoomApp(nil, Stream{}, nil)
+	a.room = r
+	a.sel = selection{pane: "", anchor: point{line: aLine, col: 0}, head: point{line: aLine, col: 3}}
+
+	a = a.withRoom(a.room.Before(restoredTurn("B", 1_101, base.Add(time.Minute))))
+	if a.room.said.count() != 2_000 || roomTextLine(a.room, "history A") >= 0 {
+		t.Fatalf("the merge held %d lines, and A is still drawn at %d: it did not evict A", a.room.said.count(), roomTextLine(a.room, "history A"))
+	}
+	if aLine < a.room.tr.first() {
+		t.Fatalf("A's row %d is above the new top %d: this fixture proves nothing", aLine, a.room.tr.first())
+	}
+	if a.sel != (selection{}) {
+		t.Errorf("the selection on A's rows survived on whatever took them: %+v", a.sel)
+	}
+	if a.room.tr.scroll != a.room.tr.first() {
+		t.Errorf("the viewport that was on A stayed at %d, want the top %d", a.room.tr.scroll, a.room.tr.first())
 	}
 }
 
@@ -245,19 +277,27 @@ func TestRoomRetentionClampsAnEvictedViewportToTheOldestRetainedLine(t *testing.
 // Production mutation caught: renumbering retained transcript lines on trim
 // invalidates a selection that still points at retained content.
 func TestRoomRetentionKeepsARetainedSelectionAnchored(t *testing.T) {
-	// Ten rows from the end, and the newest row there is: the last row of what stays
-	// is the one a short count of the retained rows would lose.
-	for _, back := range []int{10, 1} {
-		a := NewRoomApp(nil, Stream{}, nil)
-		a.room = retainedRoom(fullRoom)
-		line := a.room.tr.lines.len() - back
-		a.sel = selection{pane: "", anchor: point{line: line, col: 0}, head: point{line: line, col: 2}}
-		want := a.sel
+	// The newest row is the one a short count of the retained rows would lose, and
+	// only the trim alone leaves it the newest: an append adds rows after it.
+	for _, c := range []struct {
+		name string
+		back int
+		trim func(App) App
+	}{
+		{"ten rows from the end, by an append", 10, func(a App) App { return a.appendEvent(retainedRoomEvent(fullRoom)) }},
+		{"the newest row, by the trim alone", 1, func(a App) App { return a.withRoom(a.room.reclaimOldest(roomTrimEvents)) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a := NewRoomApp(nil, Stream{}, nil)
+			a.room = retainedRoom(fullRoom)
+			line := a.room.tr.lines.len() - c.back
+			a.sel = selection{pane: "", anchor: point{line: line, col: 0}, head: point{line: line, col: 2}}
+			want := a.sel
 
-		a = a.appendEvent(retainedRoomEvent(fullRoom))
-		if a.sel != want {
-			t.Errorf("selection %d rows from the end moved or cleared: got %+v, want %+v", back, a.sel, want)
-		}
+			if a = c.trim(a); a.sel != want {
+				t.Errorf("retained selection moved or cleared: got %+v, want %+v", a.sel, want)
+			}
+		})
 	}
 }
 

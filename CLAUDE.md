@@ -82,7 +82,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   2026-11-23 ruling, `roomtrim.go`): the moment it holds `roomRetentionEvents` (3,000) messages - lines of its
   canonical store, a focus-hidden one included - it drops the oldest `roomTrimEvents` (1,000) at once, so it swings
   between 2,000 and 2,999; this window's view only, behind the one reclaimed-history line, announced in an ordinary
-  timed notice once the room holds the keys. A restore sheds by the same rule (`roomTrimCount`). Everything else passes to the agent byte
+  timed notice once the room holds the keys. A restore sheds by the same count (`roomTrimCount`) but only history, and
+  history a trim dropped stays gone. Everything else passes to the agent byte
   for byte. `@who /cmd` in the room aims a target-command at that agent (`/fork` among them), and `@who !cmd` a bang; `@team /park`
   and `@team /quit` fold into `/park @team` and `/quit @team`, and every other target-command refuses a team
   (`teamTargetCommands`). A spaced `/team` or `/name` argument is hyphenated.
