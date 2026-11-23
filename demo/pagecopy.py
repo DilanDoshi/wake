@@ -567,8 +567,11 @@ ALSO = [
     ),
     (
         "/quit · /login",
-        "End one agent and drop its row from this window; check auth status and "
-        "hand sign-in to a terminal.",
+        "<code>/quit</code> interrupts the agent as <code>esc</code> does, then stops "
+        "it and sweeps what it started, and drops its row from this window: a normal "
+        "quit ends in about a second, and only an agent that ignored both is killed, "
+        "after thirty seconds. <code>wake stop</code> interrupts first too. "
+        "<code>/login</code> checks auth status and hands sign-in to a terminal.",
     ),
     (
         "Peer messages",
