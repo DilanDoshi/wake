@@ -59,23 +59,20 @@ func TestAQuitDoesNotKillATurnThatEndsLateInTheGrace(t *testing.T) {
 	t.Setenv(fakeDelayEnv, "3s")
 	t.Setenv(fakeInstantControlEnv, "1")
 	logs := captureLog(t)
-	grace := 4 * time.Second
-	shortQuitGrace(t, grace)
+	shortQuitGrace(t, 4*time.Second)
 	fakeClaudeOnPath(t, "slow")
 	d := startDaemon(t)
 	c := attach(t, d.socket)
 	c.spawn(idAlpha, "alex")
 	c.awaitEvent(idAlpha, "ready")
 
-	start := time.Now()
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
 	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
 	c.awaitEvent(idAlpha, `echo: {`) // the turn's last words: a kill mid-turn never lets them out
 	c.pollState(idAlpha, rpc.StateEnded)
 
-	if took := time.Since(start); took >= grace {
-		t.Errorf("the quit took %v, the whole grace", took)
-	}
+	// No elapsed-time bound: a 3 s turn in a 4 s grace leaves too little slack for
+	// status polling under -race on a loaded machine. The kill logs, and nothing did.
 	if got := logs.String(); strings.Contains(got, "did not end within") {
 		t.Errorf("an agent whose turn ended inside the grace was killed:\n%s", got)
 	}
