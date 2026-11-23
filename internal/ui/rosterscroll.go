@@ -122,12 +122,12 @@ func (a App) rosterDrawn() Roster {
 }
 
 // rosterRows is the rows the roster's agents have, under the pinned all.
-func (a App) rosterRows() int { return a.rosterHeight() - allRows }
+func (a App) rosterRows() int { return a.rosterListHeight() - allRows }
 
 // rosterWindow is the sidebar's items as drawn, their heights, and the window
 // over them - each worked out once.
 func (a App) rosterWindow() ([]rosterItem, heights, span) {
-	rows := sectionRows(a.fleet.sectioned(a.fleet.OnRoster()))
+	rows := sectionRows(a.fleet.sectioned(a.rosterAgents()))
 	h := itemHeights(rows, a.fleet.RunningTasks)
 	return rows, h, a.rosterDrawn().window(rows, h, a.rosterRows())
 }
@@ -191,13 +191,19 @@ func (a App) rosterLetGo(top int) App {
 func (a App) rosterPickHidden() bool {
 	r := a.roster
 	inPane := a.focus != "" && r.Selected == a.focus && r.SelectedTask == ""
-	return a.rosterView.held && !a.rosterView.shown && r != (Roster{}) && !inPane
+	if inPane || r == (Roster{}) {
+		return false
+	}
+	return a.rosterView.held && !a.rosterView.shown || a.cursorFilteredOut()
 }
 
 // unseenOr is a key's no-target notice: why, when the selection is out of view.
 func (a App) unseenOr(advice string) string {
-	if a.rosterPickHidden() {
-		return pickOutOfView
+	switch {
+	case !a.rosterPickHidden():
+		return advice
+	case a.cursorFilteredOut():
+		return pickFilteredOut
 	}
-	return advice
+	return pickOutOfView
 }

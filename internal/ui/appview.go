@@ -81,7 +81,14 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.rosterDrawn().WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
+		listed, roster := a.rosterOf(agents), a.rosterDrawn().WithRetrying(a.retrying)
+		if len(listed) == 0 && a.activeQuery() != "" {
+			roster.none = searchNoMatch
+		}
+		side := roster.Column(a.fleet.sectioned(listed), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), a.room.channel)
+		if a.searchBarShown() {
+			side = a.searchBar(r.Roster-dividerWidth, len(listed), len(agents)) + "\n" + side // the filter over it; see sidebarsearch.go
+		}
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
@@ -425,6 +432,7 @@ func (a App) menuBlock(id string, width, height int) string {
 func (a App) menuAround(card, id string, width, height int) string {
 	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
 	stack = above(stack, a.resumeView(id, width, height, stack))
+	stack = above(stack, a.jumpView(id, width, height, stack))
 	stack = above(stack, a.mcpView(id, width, height, stack))
 	stack = above(stack, a.statusView(id, width, height, stack))
 	return above(stack, a.completionView(width, id))

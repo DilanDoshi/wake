@@ -52,13 +52,13 @@ func forkSession(socket, who, name string, out io.Writer) error {
 // announceFork says, on the notice row of the conversation this verb is about
 // to open, that a fork is a snapshot.
 //
-// **Both fork surfaces say it or neither does.** ⌃F says it from
+// **Both fork surfaces say it or neither does.** /fork says it from
 // ui.startArrived; this is the other half, and the sentence itself is
 // ui.SnapshotNotice so there is one spelling rather than two - the claim has
 // already been written into artefacts more times than it has been implemented,
 // and a second copy of the words is how that happens again.
 //
-// Said on the *confirmation* and not on the request, for the reason ⌃F waits: a
+// Said on the *confirmation* and not on the request, for the reason /fork waits: a
 // refused fork must not be told it is a snapshot of anything. openSession calls
 // this only after awaitSpawn has returned a session.
 //

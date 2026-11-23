@@ -127,7 +127,7 @@ func TestASessionClearedTwiceIsWokenIntoItsLastConversationAcrossADaemon(t *test
 	recalled(t, back, last)
 }
 
-// ⌃F after a /clear forks the conversation the parent is writing, not the one
+// /fork after a /clear forks the conversation the parent is writing, not the one
 // the clear left behind; the fork still names the parent's own id as its parent.
 func TestAForkOfAClearedParentCopiesTheConversationItIsWriting(t *testing.T) {
 	fakeClaudeOnPath(t, "argv")

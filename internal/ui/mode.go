@@ -8,7 +8,7 @@ package ui
 // than fixed. A key that cycled a label reached no process, and it failed in the
 // unsafe direction: the label that appeared to *tighten* permissions was the one
 // that did nothing. So the key writes a frame, the daemon's answer is the
-// confirmation, and modeOf changes when the answer arrives - ⌃F's pattern.
+// confirmation, and modeOf changes when the answer arrives - /fork's pattern.
 //
 // It is not belt-and-braces. `manual` is accepted by the CLI and silently
 // normalizes to `default`, so a label built on the string that was sent is wrong

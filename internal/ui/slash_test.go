@@ -638,7 +638,7 @@ func TestABareResumeListsAParkBookNothingElseNames(t *testing.T) {
 //
 // # Why the report and not the keypress
 //
-// parkArrived's reason, and ⌃F's before it: the daemon refuses a wake for real
+// parkArrived's reason, and /fork's before it: the daemon refuses a wake for real
 // reasons — something already holds the id, the record carries no directory —
 // and a sentence about a conversation that has come back is a lie until it has.
 func TestAWokenConversationSaysItHasBeenResumed(t *testing.T) {

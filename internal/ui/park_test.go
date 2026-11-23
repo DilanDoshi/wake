@@ -1084,7 +1084,7 @@ func TestCtrlQCarriesForwardExactlyWhatTheTableSays(t *testing.T) {
 // The reachable domain, derived from agent.stateLocked rather than from rpc's
 // constant block, and asserted in both directions.
 //
-// Rung 4, and the same scan forkguard_test.go runs for ⌃F — reused rather than
+// Rung 4, and the same scan forkguard_test.go runs for /fork — reused rather than
 // re-spelled, because the two keys read the same producer. StateOrphaned is
 // excused there with the producer that makes it unreachable, and the excuse is
 // the same one here, so this reads that map rather than restating it.
@@ -1187,7 +1187,7 @@ func TestCtrlCDoesWhatTheTableSaysInEveryStateAReportCanCarry(t *testing.T) {
 // does not hold - and the refusal arrives *afterwards*, so the operator reads a
 // confident sentence and then a contradiction of it.
 //
-// ⌃F settled this shape already and CLAUDE.md states it: **the report is the
+// /fork settled this shape already and CLAUDE.md states it: **the report is the
 // confirmation and the keypress is not.** This is that rule applied one key
 // over. The keypress names the ask; the fleet report naming the session as
 // parked is what earns the sentence with `/resume` in it.

@@ -7,10 +7,10 @@ Enter
 Sleep 14s
 Show
 Sleep 1500ms
-# /fork @maya forks her from the room (⌃F is the agent finder now), and the fork
-# opens beside her with her history so far.
+# /fork @maya forks her conversation from the room, and the fork opens beside her
+# with her history so far.
 Type "/fork @maya"
-Sleep 800ms
+Sleep 600ms
 Enter
 Sleep 5s
 

@@ -708,7 +708,7 @@ func (a App) acceptCompletion() (App, tea.Cmd) {
 // completionView is the menu if it belongs to this pane and still describes its
 // draft, and "" otherwise. pickerView's shape and its reason.
 func (a App) completionView(width int, id string) string {
-	if a.focus != id || !a.completionUp() {
+	if a.focus != id || !a.completionUp() || a.jumpPicker.Open() { // the jump box owns the keys
 		return ""
 	}
 	return a.completion.View(width)
