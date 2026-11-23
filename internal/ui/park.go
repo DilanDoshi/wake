@@ -82,7 +82,7 @@ const (
 	// parkConfirmed is said when a fleet report first names the session as
 	// parked, and it is the only place the promise is made.
 	//
-	// The split is ⌃F's rule one key over, and CLAUDE.md states it: **the
+	// The split is the fork's rule, and CLAUDE.md states it: **the
 	// report is the confirmation and the keypress is not.** The daemon refuses
 	// a park for real reasons - a session already ended, one it does not hold -
 	// and the refusal arrives after the keypress, so a sentence promising
@@ -426,7 +426,7 @@ func (a App) parkAllSettled(err error) (App, tea.Cmd) {
 //
 // What it does not prove is in this file's header and in deferred.md: launch
 // confirms every spawn, fork and wake with the same FrameStatusReply, so a
-// /new, ⌃F or /resume still in flight when ⌃Q is pressed has a reply of its own
+// /new, /fork or /resume still in flight when ⌃Q is pressed has a reply of its own
 // coming, and this cannot tell the two apart. The window is one round trip wide
 // on a connection that is provably alive, and the failure needs the daemon to
 // die inside it; the alternative - a correlator on the frame - is a daemon

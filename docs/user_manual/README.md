@@ -40,7 +40,7 @@ detach is about you.**
 Named here so you do not go looking:
 
 - **A key or a `+` button that creates an agent.** `/new` creates one, `wake new` does it from the
-  shell, and `⌃F` forks the conversation you are in; `⌃D` opens a conversation rather than creating one.
+  shell, and `/fork` forks the conversation you are in; `⌃D` opens a conversation rather than creating one.
 - **A queue past the cap.** A spawn past `--max-agents` is refused rather than held until there is
   room; park an agent with `⌃C` first ([chapter 6](06-commands.md)).
 

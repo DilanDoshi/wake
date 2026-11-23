@@ -167,7 +167,7 @@ CAPTIONS = {
             "Branch a conversation mid-thought.",
             "Two agents, one history, separate from here.",
         ],
-        "^F",
+        "/fork",
     ),
     "manager": (
         [

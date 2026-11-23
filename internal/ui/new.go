@@ -12,7 +12,7 @@ package ui
 //
 // # What it decides, which is almost nothing
 //
-// The same division ⌃F makes, for the same reason: this view never touches a
+// The same division /fork makes, for the same reason: this view never touches a
 // process. `/new` mints a UUID — Wake originates identity, and `maySpawn`
 // refuses anything that is not one because the reaper's only proof of a process
 // group is that id in an argv — resolves the directory, and writes one
@@ -120,7 +120,7 @@ func startedLine(name, label string) string {
 	return fmt.Sprintf(startedFormat, agentPrefix, name, label)
 }
 
-// newAgent asks the daemon to start an agent, and waits for it the way ⌃F waits
+// newAgent asks the daemon to start an agent, and waits for it the way /fork waits
 // for a fork.
 //
 // It reports the ask on the keypress and the arrival on the report, which is

@@ -148,7 +148,7 @@ func (a App) labelAgent(arg string) (App, tea.Cmd) {
 // across: a DM names its recipient in its own header, so a bare command there
 // is unambiguous, and the room is not one conversation and does not guess. It
 // is deliberately **not** dmTarget's rule, which falls back to the roster
-// cursor - ⌃F may open a pane over the wrong agent and be closed, and a rename
+// cursor - /fork may open a pane over the wrong agent and be closed, and a rename
 // changes where the next message goes.
 func (a App) displayTarget(arg, usage, noTarget string) (Agent, string, bool) {
 	who, value := "", strings.TrimSpace(arg)

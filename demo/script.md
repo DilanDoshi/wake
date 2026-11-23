@@ -43,7 +43,7 @@ Both are shot as they really behave.
 | 6 | **The answer** | `a` `↵` | Settled in the pane that raised it, turn still on screen | Answered in the pane that asked. |
 | 7 | **A conversation** | `⌃D` `/` | Status bar, folded tool run, the session's own commands | Open one and you're in Claude Code. |
 | 8 | **The grid** | `⌃Y` `⌃B` | Three columns, the third split once; the room is column zero | Columns, each split once. |
-| 9 | **Fork** | `⌃F` | A new agent carrying the conversation so far | Branch a conversation mid-thought. |
+| 9 | **Fork** | `/fork` | A new agent carrying the conversation so far | Branch a conversation mid-thought. |
 | 10 | **The manager** | `@manager` | A rollup: working, blocked, done, and what waits on you | Every room seats a manager. |
 | 11 | **Fan-out** | `@manager` | It lists the fleet, filters, and sends to each match — for real | "Tell the agents working on the api…" |
 | 12 | **The board** | `/board` | The whole fleet, one row each, state and last line | Thirty agents don't fit in panes. |

@@ -71,16 +71,16 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   queued takes them back) · `⇧↑↓` pick agent or channel · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
-  over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
-  `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
+  over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⌃F` jump to an agent by name · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
+  `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
   lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/park`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, `/wake-help`, `/friends`, plus bare `/effort`/`/model` menus, and in the room alone a
+  `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, `/wake-help`, `/jump`, `/fork`, `/friends`, plus bare `/effort`/`/model` menus, and in the room alone a
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
-  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang; `@team /park`
+  for byte. `@who /cmd` in the room aims a target-command at that agent (`/fork` among them), and `@who !cmd` a bang; `@team /park`
   and `@team /quit` fold into `/park @team` and `/quit @team`, and every other target-command refuses a team
   (`teamTargetCommands`). A spaced `/team` or `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
@@ -134,6 +134,44 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   Esc closes; `↑↓` `⇞⇟` and the wheel scroll; typing narrows; a drag copies. Nothing is written, so nothing
   enters an agent's context. `internal/ui/help.go`, `helpcontent.go`, `helpdraw.go`, `slashhelp.go`, `decisions.md`
   (2026-10-27). A bare `/help` is not claimed (the option, in `decisions.md`).
+- **`⌃F` and `/jump [filter]`** (owner's 2026-11-20 picks: option A of the mockups, on ⌃F) open a box over the
+  composer: a filter line, a rule, and up to eight agents (`jumpRows`) with their hue, team and tool line, or
+  `waiting for you`. A few letters of a name narrow what the sidebar lists (`agentfind.go`: its start, a run in
+  it, then its letters in order; case and spaces ignored) in attention order, **blocked first**
+  (`Fleet.OnRoster`, not the sidebar's section order); a better match comes before attention, so a blocked
+  agent found only by scattered letters does not outrank the name typed. `↵` opens the cursored agent through
+  `openInNewPane`, as a click on its row does, and both finish in `selectOpened`; `⌃B` opens it below
+  (`openBelow`, which refuses from a lower pane and leaves the box up), `⌃D` in the focused pane
+  (`openDMWith`); an agent already drawn is only focused, whichever key it was; `esc`/`⌃F` close it and `⌃C` closes it and parks the agent in front of you. It is a modal
+  search box in the resume picker's shape: read above the card, it owns every key, it is drawn over the pane it
+  was opened in and closes on a focus change (`withFocus`), and a pane with no row for it (a card counts)
+  refuses to open it and closes it on the next key, since a box nobody can see must not take `↵`; a card's page
+  the wheel moved away is brought home by the key, which does nothing else. **The cursor is an agent's id,
+  not a row**, pinned from the first look, so a report that re-ranks the fleet cannot move `↵` onto another
+  agent. `internal/ui/jumppicker.go`, `agentfind.go`.
+- **The sidebar's search bar** (owner's 2026-11-20 pick, D1 of the mockups): three rows atop the roster, over the pinned
+  `all`, drawn only where the sidebar has room for it and a list under it (`searchBarShown`). A click focuses it, closing
+  whatever else read the keys (`closeModalsExcept`, the one list `withFocus` shares); any other left press lets go
+  (`App.press`). Typing, space and `⌫` edit the filter with the
+  jump picker's matcher and the sidebar narrows **in place** - the roster's own order, a team with no match gone, `all`
+  drawn as a rule over no box when no loose agent is under it (a filter's doing, and a roster of teams alone's) - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
+  `⌃D` open the cursored agent through `openedBy`, the jump box's one opener (an agent already drawn is only
+  focused; a header picks its channel; a dispatch row opens its agent showing that dispatch), `esc` clears the
+  filter and gives the keys back, and **`⌃C` only lets go of it** - the habit that cancels a search must not park the
+  agent the cursor homed on; the next `⌃C` parks as ever. **It is no modal:** a key
+  it does not read lets go of it and goes on to do its own job (`⌃F` opens the jump box, never focuses the bar), and
+  the filter stands after, with its accent and count. One `rosterAgents` feeds the sidebar's draw, click, window
+  and cursor, so none can disagree with what is drawn. **A selection the filter hides takes no key and says why**
+  (`rosterPickHidden`, the wheel's ruling, extended: `pickFilteredOut`), typing homes the cursor on the first
+  match when its own is filtered out, and an edit lets go of the wheel's held window. The strip, the board and the
+  jump box count the whole roster. `internal/ui/sidebarsearch.go`.
+- **`/fork [@who]`** (owner's 2026-11-20 ruling: ⌃F is the finder, fork is a command) branches a conversation,
+  as `⌃F` did: bare is `commandTarget`'s, as `/status`'s is (the conversation you are in; in the room, the roster's
+  pick, and with none an ask for one - never a guess at the first agent), `/fork @who` is that agent, `@who /fork`
+  aims it from the room, and a team is refused. A typed command never branches an agent it was not aimed at: with a
+  conversation open, the roster's cursor on another agent changes nothing. One `forkOf` writes the one `FrameFork`;
+  the daemon's refusals are unchanged. Like `/status`, it clears the draft it was typed in, a refusal included.
+  `internal/ui/fork.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`, the count when the pair fits the row's 19 columns). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
@@ -260,7 +298,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   launch-time snapshot only a wake has, and nothing re-sends it. Read-only: it names no other `wake` verb and starts no turn; the manager keeps its own scope.
 - **A `/clear` moves an agent onto a new claude conversation** (`a.claudeID`, via
   `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
-  (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
+  (clients follow via `rpc.SessionStatus.Conversation`), and `/fork` forks it. `resumeSafe` cannot see
   it — the process's argv still names the spawn id — so `conversationRow` is the only fence, and
   `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`. **It leaves
   running background work running** (claude 2.1.319; owner's 2026-11-11 ruling): a running agent, shell or
@@ -403,7 +441,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Over the right sidebar the wheel scrolls the roster** (owner's 2026-11-06 ask), only one taller than
   its column; one that fits takes no wheel. An item a notch (an agent with its gap and team header, so a
   header never parts from its member), held where the wheel left it: the selection never moves, and one
-  the held window does not draw takes no key - ⌃C, esc, ↵, ⌃D/⌃Y/⌃B/⌃F, bare `/status`/`/mcp` - until it
+  the held window does not draw takes no key - ⌃C, esc, ↵, ⌃D/⌃Y/⌃B, bare `/status`/`/mcp`/`/fork` - until it
   is drawn again, and says so (`rosterPickHidden`, the one place that rule lives, decided in Update's seam
   on a change, never per frame; nothing selected hides nothing, and the conversation holding the keys is
   on screen as its pane). Any selection change, and ⌃X, lets go of the hold from where the window was
@@ -748,13 +786,13 @@ yet says so in bold.**
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `jumppicker.go` (`⌃F` and `/jump`; pty test `cmd/wake/jumpscreen_unix_test.go`) · `fork.go` (`/fork`) · `agentfind.go` (finding an agent by its name) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) · `roomresumefold.go` (an agent's repeated resumes, folded) · `roomlinemoves.go` (where each line's rows sit, and how a rebuild moves them) · pty test `cmd/wake/roomresumefoldscreen_unix_test.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `previewrows.go` (the answer's rows under the transcript's last line) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) · `turnoutcome.go` (how the last turn ended: `notDone`, the failed bit) |
-| Roster, strip, status bar | `internal/ui/roster.go` · `rosterscroll.go` (the window, the wheel over the sidebar; pty test `cmd/wake/sidebarwheelscreen_unix_test.go`) · `rostersubs.go` · `tasktree.go` (running dispatches as a tree) · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Roster, strip, status bar | `internal/ui/roster.go` · `sidebarsearch.go` (the search bar over the roster: its filter, keys and the one `rosterAgents`) · `rosterscroll.go` (the window, the wheel over the sidebar; pty test `cmd/wake/sidebarwheelscreen_unix_test.go`) · `rostersubs.go` · `tasktree.go` (running dispatches as a tree) · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionwindow.go` (the window, its rows, the key line) · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty tests `cmd/wake/atmenuscreen_unix_test.go`, `completionscrollscreen_unix_test.go` (the window) · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `taskhold.go` (an agent's early ending, held) · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
@@ -1002,7 +1040,7 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/protocol.go` at 798 and `internal/core/wire.go` at 797 — derived by
+  `internal/core/protocol.go` at 798 and `internal/core/vocabulary.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

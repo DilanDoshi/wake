@@ -160,17 +160,18 @@ func TestMoreClicksSelectInTheQueryBox(t *testing.T) {
 func TestMoreClicksSelectInTheRoster(t *testing.T) {
 	frozenClock(t)
 	a := rosterApp(t)
-	line := frameRow(a, 0)
+	all := searchBarRows // the pinned all sits under the search bar
+	line := frameRow(a, all)
 	rest := line[strings.LastIndex(line, "│")+len("│"):]
 	word := strings.Fields(strings.NewReplacer("─", " ", "╭", " ", "╮", " ").Replace(rest))[0] // the loose box's top edge
 	x := len([]rune(line[:strings.Index(line, rest)])) + len([]rune(rest[:strings.Index(rest, word)])) + 1
 
-	a, _ = click(a, x, 0)
-	a, _ = click(a, x, 0)
+	a, _ = click(a, x, all)
+	a, _ = click(a, x, all)
 	if got := selectedNow(a); got != word {
 		t.Errorf("a double-click on the roster selected %q, want the word %q", got, word)
 	}
-	a, _ = click(a, x, 0)
+	a, _ = click(a, x, all)
 	if got := selectedNow(a); !strings.Contains(got, word) || a.clicks.n != 3 {
 		t.Errorf("a triple-click on the roster selected %q (run %d), want the header row %q", got, a.clicks.n, word)
 	}

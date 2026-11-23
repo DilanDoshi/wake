@@ -67,7 +67,7 @@ come back.
 | `⌃C` park | `⌃Q⌃Q` quit & park all | `⇥` next chat | `⇧⇥` permissions |
 | `↑↓` prompt history | `⇧↑↓` pick agent or channel | `⇧←→` move focus | `⌃X` next blocked |
 | `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
-| `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |
+| `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` jump to an agent |
 | `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | `⌃]` send now |
 
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
@@ -118,7 +118,7 @@ Flags on the verbs that start a session (`new`, `manager`):
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/park`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter`,
-`/wake-name`, `/wake-help` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/park`, `/quit` and
+`/wake-name`, `/wake-help`, `/jump`, `/fork` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/park`, `/quit` and
 `/resume` take a team as well as one agent: `/park @backend` parks every live agent on the team (one waiting on a question is left, and named),
 `/quit @backend` ends them after a confirm, and `/resume backend` wakes the parked ones. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the

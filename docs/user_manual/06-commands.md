@@ -147,6 +147,8 @@ command that ships without a line here fails the build; `/wake-help` draws the s
 /status [@who]                      an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
 /workflows [@who]                   a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
 /wake-name [<name>]                 rename this fleet; bare says its name
+/jump [<filter>]                    find an agent by a few letters of its name and open it in a new pane; ⌃F is the same (see below)
+/fork [@who]                        branch a conversation: a new agent with its history so far; bare is the one with the keys, or in the room the one the sidebar has picked
 /wake-help [<filter>]               every key and command Wake has, narrowed as you type; read-only (see below)
 /friends [skip|ollie|bo|puff|none]  the friend on the usage bar; bare opens a picker that previews in the corner
 /groupchat-filter [on|off]          whether a lone @name narrows the room by default (bare reports)
@@ -199,6 +201,31 @@ One consequence: if you have your own `.claude/commands/resume.md`, Wake's `/res
 
 Note `/clear` **changes the session id**, which Wake tracks — the conversation continues under a new
 id and the roster follows it.
+
+## `/jump` — find an agent by name
+
+```
+/jump          the box, every agent in it
+/jump blu      the same, with `blu` already typed
+```
+
+`⌃F` opens the same box from anywhere there is a composer: a filter line, a rule, and up to eight agents
+under it, each with its colour, its team and what it is doing (its tool line, or `waiting for you`).
+Type a few letters of a name — `blu` finds `web-blur` and `infra-blue-green` by the run of letters, and
+`docs-bulk-upload` by the same letters further apart; a name's own start ranks first, then a run inside it, then its letters in order, and
+within each anyone **blocked on you comes first**. With nothing typed the box is the fleet in attention order. `↑↓` move
+(no wrap), the border counts what is above and below the window, and `↵` opens the cursored agent **in a new
+column** exactly as a click on its sidebar row does. `⌃B` opens it below the focused pane (from a pane that is
+already the bottom of its column it says so and the box stays up) and `⌃D` opens it in the focused pane,
+never replacing the room. `⎋` or a second `⌃F` closes it, and `⌃C` closes it and parks the agent in front of
+you, as it does from every menu.
+
+The box is a search box, so it owns the keyboard while it is up: a key it has no use for is swallowed rather
+than moving the keys to another pane under it. It lists what the sidebar lists, so an agent parked in this run is there too; a session
+parked in an earlier run is still `/resume`'s.
+
+`/fork` is what `⌃F` was before it became the finder. It branches the conversation you are in, `/fork @alex` branches
+that agent's from anywhere, and `@alex /fork` is the same aimed from the room; see [chapter 5](05-forking.md).
 
 ## `/wake-help` — the list, inside Wake
 

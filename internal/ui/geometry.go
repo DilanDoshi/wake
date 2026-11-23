@@ -182,7 +182,11 @@ func (a App) resizePanes() App {
 	}
 	// The workflow view's agent level is laid out per width too, and so is the
 	// session bar under the roster.
-	return a.relaidAgent().withUsageRows().windowed()
+	a = a.relaidAgent().withUsageRows().windowed()
+	if a.sideSearch.Focus && !a.searchBarShown() {
+		a.sideSearch.Focus = false // the bar went with the room it was in: no later room revives its hold
+	}
+	return a
 }
 
 // sizePane re-lays one conversation. "" is the room, the same convention the

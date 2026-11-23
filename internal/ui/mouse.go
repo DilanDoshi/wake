@@ -131,9 +131,10 @@ func (a App) rowsOf(col int) (top, bottom int) {
 // workspaces sidebar still answers nothing: a workspace is not a conversation and
 // there is no verb for one yet.
 func (a App) press(x, y int) App {
-	a.rosterHit = rosterHit{} // a fresh press; only a roster press below re-arms it
-	a.dragged = agentDrag{}   // and no agent is held until a roster press says so
-	a.selecting = false       // and a new gesture: a drag whose release was lost is over
+	a.rosterHit = rosterHit{}  // a fresh press; only a roster press below re-arms it
+	a.dragged = agentDrag{}    // and no agent is held until a roster press says so
+	a.selecting = false        // and a new gesture: a drag whose release was lost is over
+	a.sideSearch.Focus = false // the search bar holds the keys only while a press lands on it
 	r := a.regions()
 	switch region, at := a.layout.Hit(r, x); region {
 	case RegionDivider:

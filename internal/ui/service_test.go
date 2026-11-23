@@ -148,7 +148,7 @@ var managerFrameStates = map[string]struct {
 
 // The verdict is total over the states a running daemon can report.
 //
-// Rung 4, reusing the scan ⌃C, ⌃F and service() already run: the domain is
+// Rung 4, reusing the scan ⌃C, /fork and service() already run: the domain is
 // agent.stateLocked's own range, so a seventh state is a build failure here
 // until somebody says whether a manager in it should be started, woken or left
 // alone.

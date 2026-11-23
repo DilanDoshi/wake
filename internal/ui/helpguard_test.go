@@ -335,7 +335,7 @@ var teaKeyWords = map[string][]string{
 	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"}, "KeySpace": {"space"}, "KeyBackspace": {"⌫"},
 	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
 	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"}, "KeyCtrlN": {"⌃N"}, "KeyCtrlP": {"⌃P"},
-	"KeyCtrlC": {"⌃C"},
+	"KeyCtrlC": {"⌃C"}, "KeyCtrlF": {"⌃F"}, "KeyShiftUp": {"⇧↑", "⇧↑↓"}, "KeyShiftDown": {"⇧↓", "⇧↑↓"},
 }
 
 // teaKeysNotRead are the keys no row writes a word for: a printable key is
@@ -348,6 +348,8 @@ var teaKeysNotRead = map[string]bool{"KeyRunes": true}
 // read as keys there.
 var typesInto = map[string][]string{
 	"resumePickerKey": {"KeySpace", "KeyBackspace"},
+	"jumpKey":         {"KeySpace", "KeyBackspace"},
+	"barKey":          {"KeySpace", "KeyBackspace"},
 	"workflowKey":     {"KeySpace", "KeyBackspace"},
 	"helpKey":         {"KeySpace"},
 }
@@ -359,6 +361,8 @@ var surfaceHandlers = map[string][][2]string{
 	"pickerKey":       {{"picker.go", "pickerKey"}},
 	"rewindKey":       {{"rewind.go", "rewindKey"}},
 	"resumePickerKey": {{"resumepicker.go", "resumePickerKey"}},
+	"jumpKey":         {{"jumppicker.go", "jumpKey"}},
+	"barKey":          {{"sidebarsearch.go", "barKey"}},
 	"helpKey":         {{"help.go", "helpKey"}},
 	"completionKey":   {{"completion.go", "completionKey"}},
 	"cardKey":         {{"cardkeys.go", "cardKey"}},

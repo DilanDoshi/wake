@@ -73,7 +73,7 @@ var legendEntries = []legendEntry{
 	{"⌃R", "activity", "show or hide the activity sidebar"},
 	{"⇞⇟", "scroll", "scroll the pane a page"},
 	{"⌃E", "expand", "open what the pane folded - tool results, long messages, card descriptions - and fold it again"},
-	{"⌃F", "fork", "fork the conversation: a new agent with its history so far"},
+	{"⌃F", "jump to agent", "open the jump picker: type a few letters of an agent's name, ↵ opens it in a new pane, ⌃B below, ⌃D here"},
 	{"⌃Q", "quit & park all", "park every agent and quit; a second ⌃Q confirms"},
 	{"⌃T", "mention mode", "flip the mention mode: " + mentionDirectMeans + ", or " + mentionOpenMeans},
 	{"⌃A", "show all", "widen a room a lone @name or @team narrowed back to every agent's lines; again to narrow"},

@@ -235,6 +235,10 @@ func (r Roster) Column(agents []Agent, subs subsOf, width, height int, channel s
 	}
 	r.channel = channel
 	all := r.headerLine(core.BroadcastName, width)
+	if len(agents) == 0 || agents[0].Team != "" { // no loose agent: a rule, not the top of an empty box
+		rule, text := r.channelStyles(core.BroadcastName)
+		all = centredEdge("", "", core.BroadcastName, width, rule, text)
+	}
 	if height <= allRows {
 		return all
 	}

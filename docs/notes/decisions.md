@@ -8,6 +8,84 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-21 — the sidebar's search bar (D1 of the jump picker's mockups), PR2
+
+The owner picked D with the jump box (A): a search bar atop the sidebar for the agent you want to *see in place*, where
+the jump box is for the one you want to open. Built on the same matcher (`agentfind.go`), so a few letters mean the
+same thing in both.
+
+- **In place, not re-ranked.** The filter keeps the roster's order (top block, then each team, attention within) and
+  drops the rest; a team with no match drops out. The jump box ranks by match quality because it is a list of one
+  kind; the sidebar's order is its own and a second opinion here would make the two disagree about who is first.
+- **Click to focus; `⌃F` never does.** Every other left press lets go (`App.press`), so the bar holds the keys
+  only while a press landed on it, and that click closes whatever else read the keys (the jump box, a picker, a view:
+  `closeModalsExcept`, the list `withFocus` shares), so nothing is lit and dead under it. Not a modal (settled with the
+  owner's defaults): a key it does not read lets go and goes on to do its own job, because a search field in a sidebar
+  is not worth swallowing `⌃X` for. **`⌃C` is the exception: it lets go and parks nothing** - a review found that
+  typing homes the cursor on the first match, so a `⌃C` to cancel the search would have parked it; the next one parks
+  as ever. A dispatch row opened from the bar shows its dispatch, as a click on the row does.
+- **The filter stands.** After a click elsewhere it stays, the glyph and `N/M` in the accent, until `esc` clears it
+  (`esc` is clear-and-return, one key). A sidebar too short for the bar and a list draws neither the bar nor the
+  filter (`activeQuery`); the query is kept and applies again when the room is back.
+- **`all` is a rule when nothing loose is under it** (`Roster.Column`): a filter that matches no loose agent, or a
+  roster of teams alone (the manager stopped), no longer draws the top edge of an empty box.
+- **One source, five readers.** `rosterAgents` replaces the roster's own reads at the draw, the click, the window,
+  `cursorAgent` and `pickAgent`; the strip, the board, the channel logic and the jump box keep `OnRoster`. A new reader
+  of "the sidebar's agents" is `rosterAgents`, never `OnRoster`.
+- **A hidden selection takes no key and says why**, the wheel's 2026-11-06 ruling extended: `cursorFilteredOut` joins
+  `rosterPickHidden`, and `unseenOr` answers `pickFilteredOut`. Typing moves the cursor to the first match when its own
+  is filtered out, so the common path never meets the refusal; it meets it only when a report changes the fleet under
+  a standing filter. `⌃X` can still select an agent the filter hides - it opens that agent's conversation, so its pane
+  is its own proof.
+- **One opener.** `openedBy` is the jump box's and the bar's: an agent already drawn is only focused, whichever key it
+  was, and a refusal is an agent that was not drawn and still is not.
+- **Not built (`deferred.md`):** matching a team or directory, a keyboard way to focus the bar, and the composer's caret
+  going dark while the bar holds the keys (a focus sync that would kill its blink loop without a `Refocus`).
+
+## 2026-11-20 — ⌃F and `/jump`: find an agent by a few letters of its name; fork is `/fork`
+
+The owner runs 40-50 agents, and walking the sidebar with ⇧↑↓ is too slow. `wake-orch` briefed mockups of four
+shapes (the throwaway take is outside the repo); the owner picked **A, the compact box over the composer**, with
+a rule between the filter line and the results, and the sidebar search bar (D1) as a second PR.
+
+- **The key is ⌃F, and fork moves to `/fork`** (the owner's ruling, on seeing the key analysis). ⌘F reaches no
+  macOS terminal (`keyprobe_test.go`: ⌘ belongs to the terminal's menus, and bubbletea v1.3.10 has no Kitty
+  keyboard protocol); ⌃K would have cost the composer's delete-to-end-of-line, which Claude Code binds too; ⌃P is
+  the text area's line-up and the completion menu's walk key; ⌃G/⌃L/⌃S are Claude Code's editor, redraw and stash.
+  ⌃F is the "find" letter, and Claude Code binds no ⌃F, so `keymap_test.go` needs no `acknowledged` row (it still
+  shadows the text area's character-forward, as fork did). **⌃K stays unbound by Wake.** A key cannot move without
+  the thing it was moving off, since `legendEntries` is a bijection with `App.key`.
+- **`/fork [@who]` is the old ⌃F, one path.** Bare it is `dmTarget`'s (the conversation on screen, else the roster's
+  pick, else the first agent in attention order), `/fork @who` is that agent as `/status @who` names one, `@who /fork`
+  aims it from the room, a team is refused like every target-command but park and quit, and the daemon's refusals
+  are untouched. It is in the closed set because no recorded `slash_commands` carries `fork` (checked against 2.1.322).
+  `forkOf` writes the one `FrameFork`. Bare `/fork` joins bare `/status` and `/mcp` in refusing a selection the wheel
+  scrolled out of view; ⌃F leaves that list, since it reads no selection.
+- **The list is what the sidebar lists, in attention order, not its section order.** The sidebar is the loose agents,
+  then each team's section, ranked inside each - a blocked agent in a team is first only in its own box. The picker
+  takes `Fleet.OnRoster()`: sessions parked in this run are there, as in the sidebar; the park book is `/resume`'s.
+- **A better match comes before attention.** Within a match quality, blocked agents first, then the order
+  `OnRoster` gives. The first draft put blocked ahead of everything, and typing `db` then `↵` opened a blocked
+  `docs-bulk-upload` (found only by its letters in order) over `db-migrate`. With nothing typed every agent is
+  the same quality, so the box is attention order, blocked first, as the owner asked.
+- **A box nobody can see takes no key.** The pane's rows for a menu are what `menuRoom` leaves under a card; with
+  none, `⌃F` says the pane is too short, and a resize that leaves none closes the box on the next key (handled,
+  not declined: a declined key's App is thrown away). A card's page the wheel scrolled off the composer has the box
+  off too: `⌃F` brings it home, and a key that arrives with it away only brings it back, as a send does.
+  The cursor is pinned to an agent's id from the first look.
+- **`↵` is a click.** It calls `openInNewPane` (an agent already on screen is only focused) and ends in the
+  helper the click's drop ends in (`selectOpened`), so the two cannot drift - in a window that carries one column
+  that is the click's rule too: it replaces the pane on screen (`jumppickernarrow_test.go`). Any open key on an agent already drawn only focuses it (a refused ⌃B there would close the box with the keys still elsewhere). `⌃B` and `⌃D` are the open keys'
+  placements; a refused `⌃B` keeps the box and the typed filter.
+- **One query editor.** `/wake-help`, the jump picker and `/resume` edit their filter with `typedQuery` and
+  `backspacedQuery` (help.go): no leading space, one between words, nothing unprintable, `queryMax` runes. The
+  resume picker's own older copy is gone, so it now strips a pasted newline and bounds a paste too
+  (`TestResumePickerQueryEdgesAreTheSharedNormalisers`).
+- **Matching is on the name as drawn**, case and spaces ignored: its start, a run inside it, its letters in order.
+  Not team names, not directories (deferred).
+- **Not everywhere.** A `/workflows` or `/wake-help` view takes every key in its pane, so ⌃F is not read there
+  until it is closed; the board closes on the key and goes on to open the box.
+
 ## 2026-11-20 — the task tools follow Claude Code's default: Wake does not turn them on (the owner, via wake-orch)
 
 wake-orch's check of the task-label surfaces found the pinned checklist and the working label on the conversation
