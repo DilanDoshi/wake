@@ -1,0 +1,32 @@
+{
+  "_note": "One of the big fleet's agents (setup.sh's stage-fleet.tape), the one the finder, the search bar and the team boxes are filmed against. Blocked on an ask from its own start.",
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 260,
+    "steps": [
+      {
+        "after": 0.4,
+        "text": "Ready, in `api/`."
+      }
+    ]
+  },
+  "autostart": {
+    "at": 1.5,
+    "tokens": 1900,
+    "steps": [
+      {
+        "after": 0.6,
+        "text": "The plan for the second region is clean; it only adds the replica."
+      },
+      {
+        "after": 0.9,
+        "ask": {
+          "tool": "Bash",
+          "input": {
+            "command": "terraform apply -target=module.replica_eu"
+          }
+        }
+      }
+    ]
+  }
+}
