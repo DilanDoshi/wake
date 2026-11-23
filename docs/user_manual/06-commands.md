@@ -306,7 +306,9 @@ sent nothing, and a notice says so.
 
 In the room, `@name !git status` runs the line in that agent's directory, draws it in its thread, and
 sends it there; `@team` and `@all` are refused, because a shell line has one directory. A bare `!cmd`
-in the room runs where `wake` started and reaches nobody.
+in the room runs where `wake` started and reaches nobody. The room draws the line as your own row and
+folds what it printed under it — three rows and a `⤷ +N lines · ⌃E or click to expand` pointer, while
+`… exited N` and `… timed out` stay drawn — and a reopened room draws it the same way.
 
 Output is capped so a runaway command cannot fill your transcript, and there is a deadline — but the
 deadline signals the whole process group rather than one pid, so a command that spawned children

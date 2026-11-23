@@ -66,6 +66,7 @@ typed into the room, mention and all.
 | `⌃F` | **Jump to any agent by name** — a box over the composer, a few letters narrow the fleet, `↵` opens the agent in a new column (in a window one column wide, in place of the pane on screen, as a click on its row does), `⌃B` below, `⌃D` in the focused pane, `⎋` closes it. Also `/jump [<filter>]` (see [chapter 6](06-commands.md#jump--find-an-agent-by-name)) |
 | `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. It stops on the channel headers too, `all` and each team's, where `↵` picks that channel for the room. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
 | *click the search bar* | Filter the sidebar by a few letters of a name; `↑↓`/`⇧↑↓` walk the matches, `↵` `⌃B` `⌃D` open the one under the cursor, `esc` clears the filter and returns the keys (see [the panes](02-the-room.md#the-panes)) |
+| *click an agent's row* | Open it in a **new column** next to the sidebar (in a window under 120 columns, in place of the pane on screen); an agent already on screen is only focused. **Drag** the row out to place it — the lower half of a pane opens it below, anywhere else a new column; `esc` cancels. **Shift-click** opens it below the focused pane where the terminal delivers one (see [the panes](02-the-room.md#the-panes)) |
 | `⌃D` | Open the selected agent **into the focused pane** |
 | `⌃Y` | Open the selected agent in a **new column** |
 | `⌃B` | Open the selected agent **below** the focused pane |
