@@ -222,6 +222,8 @@ func runFakeAgent() int {
 		return fakeAgentInterruptible(sid)
 	case scriptStreaming:
 		return fakeAgentStreaming(sid)
+	case scriptChatters:
+		return fakeAgentChatters(sid)
 	case scriptAsks:
 		return fakeAgentAsks(sid)
 	case scriptQuestions:
