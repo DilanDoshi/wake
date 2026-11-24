@@ -27,7 +27,11 @@ func TestTheJumpFilterEditsAtItsCaret(t *testing.T) {
 	if q, back := a.jumpPicker.Query, a.jumpPicker.Back; q != "blxue" || back != 2 {
 		t.Fatalf("← ← and x gave %s, want blx|ue", showCaret(q, back))
 	}
-	a = jumpPressed(t, a, kmsg(tea.KeyBackspace), kmsg(tea.KeyHome), kmsg(tea.KeyDelete))
+	a = jumpPressed(t, a, kmsg(tea.KeyRight))
+	if q, back := a.jumpPicker.Query, a.jumpPicker.Back; showCaret(q, back) != "blxu|e" {
+		t.Fatalf("→ gave %s, want blxu|e", showCaret(q, back))
+	}
+	a = jumpPressed(t, a, kmsg(tea.KeyLeft), kmsg(tea.KeyBackspace), kmsg(tea.KeyHome), kmsg(tea.KeyDelete))
 	if q, back := a.jumpPicker.Query, a.jumpPicker.Back; showCaret(q, back) != "|lue" {
 		t.Errorf("⌫, Home, ⌦ gave %s, want |lue", showCaret(q, back))
 	}
@@ -98,6 +102,10 @@ func TestTheKeysWakeClaimsStaySwallowedInTheJumpFilter(t *testing.T) {
 	for _, k := range []tea.KeyType{tea.KeyCtrlW, tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyCtrlV, tea.KeyCtrlT, tea.KeyCtrlN, tea.KeyCtrlP} {
 		a := jumpTyped(jumpOpened(t, blueFleet(t, 140, 40)), "blue")
 		a = jumpPressed(t, a, kmsg(tea.KeyLeft))
+		_, _, handled := a.jumpKey(kmsg(k)) // handled: App.key's switch never sees it, so the composer never does
+		if !handled {
+			t.Errorf("%s leaked past the box", tea.Key{Type: k}.String())
+		}
 		after := jumpPressed(t, a, kmsg(k))
 		if after.jumpPicker.Query != "blue" || after.jumpPicker.Back != 1 || after.focus != a.focus {
 			t.Errorf("%s changed the box: %s", tea.Key{Type: k}.String(), showCaret(after.jumpPicker.Query, after.jumpPicker.Back))
@@ -138,7 +146,15 @@ func TestTheResumeSearchEditsAtItsCaret(t *testing.T) {
 	if got := a.resumePicker.Query; got != "bc" {
 		t.Errorf("⌃H over bcd left %q, want bc", got)
 	}
-	a = resumePressed(t, a, altKey(tea.KeyBackspace))
+	a = resumePressed(t, a, kmsg(tea.KeyHome), kmsg(tea.KeyEnd))
+	if back := a.resumePicker.Back; back != 0 {
+		t.Errorf("Home then End left the caret %d from the end", back)
+	}
+	a = resumePressed(t, a, kmsg(tea.KeyLeft), kmsg(tea.KeyCtrlU))
+	if q, back := a.resumePicker.Query, a.resumePicker.Back; showCaret(q, back) != "|c" {
+		t.Errorf("← ⌃U over bc gave %s, want |c", showCaret(q, back))
+	}
+	a = resumePressed(t, a, kmsg(tea.KeyEnd), altKey(tea.KeyBackspace))
 	if got := a.resumePicker.Query; got != "" {
 		t.Errorf("⌥⌫ left %q", got)
 	}

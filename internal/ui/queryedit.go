@@ -22,10 +22,10 @@ import (
 // queryEditKeys is the key line the help carries for the edit keys of a filter line.
 const queryEditKeys = "← → caret · ⌥← ⌥→ by word · Home End · ⌫ ⌦ ⌥⌫ delete · ⌃U ⌃K to the start, end"
 
-// queryKeys is the text area's bindings less what Wake takes first (⌃W ⌃A ⌃E ⌃D ⌃B ⌃F, and
-// ⌃V's clipboard command) and the input's suggestion keys. ⌃H is a backspace, as in the
-// composer. ⌥⌦ and ⌥D are left out: the input's delete-word-forward panics with one rune
-// right of the caret (bubbles v1.0.0).
+// queryKeys is the text area's bindings for one line, less what Wake takes first (⌃W ⌃A ⌃E ⌃D
+// ⌃B ⌃F and ⌃V's clipboard command), the input's suggestion keys, ⌃T's transpose and the case
+// changes. ⌃H is a backspace, as in the composer. ⌥⌦ and ⌥D are left out: the input's
+// delete-word-forward panics with one rune right of the caret (bubbles v1.0.0).
 var queryKeys = textinput.KeyMap{
 	CharacterBackward:       key.NewBinding(key.WithKeys("left")),
 	CharacterForward:        key.NewBinding(key.WithKeys("right")),

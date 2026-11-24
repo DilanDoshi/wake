@@ -168,7 +168,7 @@ func composerWordLeftSpins(text string, caret int) bool {
 
 // What the composer does with the same text and the same key is what the filter does.
 func TestTheFilterEditsLikeTheComposerDoes(t *testing.T) {
-	texts := []string{"", "x", "foo", "foo bar", "foo bar baz", "foo  bar", "web-blur ui", "éa ñb"}
+	texts := []string{"", "x", " x", "x ", "  ", "a  b ", " a b", "foo", "foo bar", "foo bar baz", "foo  bar", "web-blur ui", "éa ñb"}
 	checked, skipped := 0, 0
 	for _, text := range texts {
 		for back := range utf8.RuneCountInString(text) + 1 {
@@ -275,5 +275,22 @@ func TestAReplacementRuneIsNeverTakenIntoTheFilter(t *testing.T) {
 	got, back := editedQuery("ab", 1, runeKey("�x"))
 	if got != "axb" || back != 1 {
 		t.Errorf("a paste with U+FFFD gave %s, want axb with the caret before the b", showCaret(got, back))
+	}
+}
+
+// tailOf cuts whole grapheme clusters and never goes over its room: ❤️ is one rune and two
+// cells, and cutting between its halves leaves a stray U+FE0F after the ellipsis.
+func TestTailOfKeepsWholeClustersWithinItsRoom(t *testing.T) {
+	for _, s := range []string{strings.Repeat("❤️", 20), strings.Repeat("宽", 20), strings.Repeat("e\u0301", 20), strings.Repeat("a", 40), "ab❤️cd宽ef"} {
+		for room := 1; room <= 45; room++ {
+			got := tailOf(s, room)
+			if w := ansi.StringWidth(got); w > room {
+				t.Fatalf("%q in %d cells is %d wide: %q", s, room, w, got)
+			}
+			rest := strings.TrimPrefix(got, "…")
+			if got != s && (!strings.HasSuffix(s, rest) || strings.HasPrefix(rest, "\uFE0F") || strings.HasPrefix(rest, "\u0301")) {
+				t.Fatalf("%q in %d cells gave %q: not a whole-cluster tail", s, room, got)
+			}
+		}
 	}
 }

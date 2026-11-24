@@ -204,7 +204,8 @@ func TestARosterChangeMovesTheBoxAndATypedKeyDoesNot(t *testing.T) {
 // cut to the box with the caret kept in view: the box is one height for every query
 // and caret in every width a pane can have.
 func TestTheBoxKeepsItsHeightAndTheCaretInANarrowPane(t *testing.T) {
-	long := []string{"", "t", "blu", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2), strings.Repeat("😀", queryMax/2)}
+	// ❤️ is one rune and two cells as a cluster (a text base and U+FE0F): the line's width is the cluster's, not the runes' sum.
+	long := []string{"", "t", "blu", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2), strings.Repeat("😀", queryMax/2), strings.Repeat("❤️", queryMax/2), strings.Repeat("e\u0301", queryMax/2)}
 	a := jumpOpened(t, blueFleet(t, 140, 40))
 	for width := minBlockWidth; width <= 70; width++ {
 		want := lipgloss.Height(a.jumpBox(width, 24))
@@ -230,7 +231,7 @@ func TestTheResumeSearchKeepsItsHeightAndTheCaretInANarrowPane(t *testing.T) {
 	rows := twoRows()
 	for width := minBlockWidth; width <= 70; width++ {
 		want := lipgloss.Height(ResumePicker{Rows: rows}.View(width, 30))
-		for _, q := range []string{"", "t", "iri", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2)} {
+		for _, q := range []string{"", "t", "iri", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2), strings.Repeat("❤️", queryMax/2)} {
 			for _, back := range []int{0, len([]rune(q)) / 2, len([]rune(q))} {
 				v := ResumePicker{Rows: rows, Query: q, Back: back}.View(width, 30)
 				if got := lipgloss.Height(v); got != want {
@@ -241,5 +242,22 @@ func TestTheResumeSearchKeepsItsHeightAndTheCaretInANarrowPane(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// The one- and two-row forms of /resume still say there is no match, and the "older" row stays.
+func TestResumePickerSaysNoMatchWhateverItsRowsAndKeepsItsMoreRow(t *testing.T) {
+	for maxRows := 2; maxRows <= 30; maxRows++ {
+		if v := stripANSI(ResumePicker{Rows: twoRows(), Query: "zzz"}.View(100, maxRows)); !strings.Contains(v, "no session matches") {
+			t.Errorf("at %d rows a search nothing matches says no such thing:\n%s", maxRows, v)
+		}
+	}
+	more := ResumePicker{Rows: twoRows(), More: 5}
+	if v := stripANSI(more.View(100, 30)); !strings.Contains(v, "… 5 more, older") {
+		t.Errorf("the older-sessions row is not drawn:\n%s", v)
+	}
+	more.Query = "zzz"
+	if got, want := lipgloss.Height(more.View(100, 30)), lipgloss.Height(ResumePicker{Rows: twoRows(), More: 5}.View(100, 30)); got != want {
+		t.Errorf("with older sessions the picker is %d rows for a search nothing matches, want %d", got, want)
 	}
 }
