@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -190,7 +191,55 @@ func TestARosterChangeMovesTheBoxAndATypedKeyDoesNot(t *testing.T) {
 		st.Sessions = append(st.Sessions, rpc.SessionStatus{ID: fmt.Sprintf("s%d", i), Name: fmt.Sprintf("a%d", i)})
 	}
 	b := a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
-	if after := spotOf(t, b); after.top >= before.top {
+	after := spotOf(t, b)
+	if after.top >= before.top {
 		t.Errorf("two agents arrived and the box still starts at row %d, was %d", after.top, before.top)
+	}
+	if typed := spotOf(t, jumpTyped(b, "a1")); typed != after {
+		t.Errorf("a typed query moved the box from %+v to %+v", after, typed)
+	}
+}
+
+// A filter line wider than the box would wrap and make the box taller, so the line is
+// cut to the box with the caret kept in view: the box is one height for every query
+// and caret in every width a pane can have.
+func TestTheBoxKeepsItsHeightAndTheCaretInANarrowPane(t *testing.T) {
+	long := []string{"", "t", "blu", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2), strings.Repeat("😀", queryMax/2)}
+	a := jumpOpened(t, blueFleet(t, 140, 40))
+	for width := minBlockWidth; width <= 70; width++ {
+		want := lipgloss.Height(a.jumpBox(width, 24))
+		for _, q := range long {
+			for _, back := range []int{0, len([]rune(q)) / 2, len([]rune(q))} {
+				a.jumpPicker.Query, a.jumpPicker.Back = q, back
+				box := a.jumpBox(width, 24)
+				if got := lipgloss.Height(box); got != want {
+					t.Fatalf("width %d, %q with the caret %d from the end: the box is %d rows, want %d:\n%s", width, q, back, got, want, ansi.Strip(box))
+				}
+				if w := lipgloss.Width(box); w > max(width, minBlockWidth) {
+					t.Fatalf("width %d, %q: the box is %d cells wide", width, q, w)
+				}
+				if filter := strings.Split(ansi.Strip(box), "\n")[1]; !strings.Contains(filter, jumpCaret) {
+					t.Fatalf("width %d, %q with the caret %d from the end: the caret is cut off the filter line %q", width, q, back, filter)
+				}
+			}
+		}
+	}
+}
+
+func TestTheResumeSearchKeepsItsHeightAndTheCaretInANarrowPane(t *testing.T) {
+	rows := twoRows()
+	for width := minBlockWidth; width <= 70; width++ {
+		want := lipgloss.Height(ResumePicker{Rows: rows}.View(width, 30))
+		for _, q := range []string{"", "t", "iri", strings.Repeat("w", queryMax), strings.Repeat("宽", queryMax/2)} {
+			for _, back := range []int{0, len([]rune(q)) / 2, len([]rune(q))} {
+				v := ResumePicker{Rows: rows, Query: q, Back: back}.View(width, 30)
+				if got := lipgloss.Height(v); got != want {
+					t.Fatalf("width %d, %q: the picker is %d rows, want %d:\n%s", width, q, got, want, ansi.Strip(v))
+				}
+				if !strings.Contains(ansi.Strip(v), jumpCaret) {
+					t.Fatalf("width %d, %q with the caret %d from the end: the caret is cut off:\n%s", width, q, back, ansi.Strip(v))
+				}
+			}
+		}
 	}
 }

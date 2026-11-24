@@ -451,7 +451,8 @@ func (p ResumePicker) searchBox(width int) string {
 	if p.windowBlurred {
 		box, caret = BoxStyle, ""
 	}
-	line := ansi.Truncate(style.Render(resumePrompt)+withCaret(p.Query, p.Back, resumeHint, caret), max(width-cardFrameWidth, 1), ellipsis)
+	room := max(width-cardFrameWidth, 1)
+	line := style.Render(resumePrompt) + withCaret(p.Query, p.Back, resumeHint, caret, room-ansi.StringWidth(resumePrompt))
 	return box.Width(max(width-boxFrameWidth, 1)).Render(line)
 }
 

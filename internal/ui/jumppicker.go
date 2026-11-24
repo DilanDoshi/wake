@@ -253,7 +253,7 @@ func (a App) jumpBox(width, room int) string {
 	for i := from; i < to; i++ {
 		listed = append(listed, a.jumpRow(found[i], i == cur, inner))
 	}
-	rows := append([]string{jumpFilter(a.jumpPicker.Query, a.jumpPicker.Back), HintStyle.Render(strings.Repeat("─", max(inner-1, 1)))}, filledTo(listed, size)...)
+	rows := append([]string{jumpFilter(a.jumpPicker.Query, a.jumpPicker.Back, inner), HintStyle.Render(strings.Repeat("─", max(inner-1, 1)))}, filledTo(listed, size)...)
 	head := fmt.Sprintf("jump to agent · %d of %d", len(found), total)
 	foot := joinedWords(" · ", countWords(from, len(found)-to), jumpKeys)
 	body := lipgloss.NewStyle().PaddingLeft(1).Render(strings.Join(rows, "\n"))
@@ -274,9 +274,10 @@ func (a App) jumpCompact(found []Agent, total, cur, width, room int) string {
 	return HintStyle.Render(ansi.Truncate(status, width, ellipsis)) + "\n" + row
 }
 
-// jumpFilter is the filter line: the search glyph, what is typed or the hint, a caret.
-func jumpFilter(query string, back int) string {
-	return AccentStyle.Render("⌕ ") + withCaret(query, back, jumpHint, jumpCaret)
+// jumpFilter is the filter line in width cells: the search glyph, what is typed or the hint, a caret.
+func jumpFilter(query string, back, width int) string {
+	const glyph = "⌕ "
+	return AccentStyle.Render(glyph) + withCaret(query, back, jumpHint, jumpCaret, width-ansi.StringWidth(glyph))
 }
 
 // jumpRow is one agent: the cursor, its glyph and name in its own hue, its team, and

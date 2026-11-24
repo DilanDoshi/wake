@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // splitCaret reads "foo| bar" as the text "foo bar" with the caret 4 runes from its end.
@@ -32,7 +33,7 @@ func showCaret(text string, back int) string {
 	return string(r[:at]) + "|" + string(r[at:])
 }
 
-func altRune(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: true} }
+func altRune(r rune) tea.KeyMsg       { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: true} }
 func altKey(t tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: t, Alt: true} }
 func runeKey(s string) tea.KeyMsg     { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
@@ -233,5 +234,46 @@ func TestTheKeysTheFilterEditsWithAreTheKeysBubbleteaReports(t *testing.T) {
 		if got := keysFor(t, tc.seq); len(got) != 1 || got[0] != tc.want {
 			t.Errorf("%s: bubbletea reported %v, want [%s]", tc.what, got, tc.want)
 		}
+	}
+}
+
+func TestAFilterLineIsCutAroundTheCaretToItsRoom(t *testing.T) {
+	long := strings.Repeat("abcdefghij", 4) // forty runes
+	for room := 6; room <= 50; room++ {
+		for _, back := range []int{0, 1, 15, 20, 39, 40} {
+			line := ansi.Strip(withCaret(long, back, "hint", jumpCaret, room))
+			if w := ansi.StringWidth(line); w > room {
+				t.Fatalf("room %d, caret %d from the end: the line is %d cells: %q", room, back, w, line)
+			}
+			i := strings.Index(line, jumpCaret)
+			if i < 0 {
+				t.Fatalf("room %d, caret %d from the end: no caret in %q", room, back, line)
+			}
+			// What the caret sits between stays visible while there is room for it.
+			at := len([]rune(long)) - back
+			if room >= 12 {
+				if at > 0 && !strings.HasSuffix(line[:i], string([]rune(long)[at-1])) {
+					t.Errorf("room %d, caret %d from the end: the rune before the caret is cut: %q", room, back, line)
+				}
+				if at < 40 && !strings.HasPrefix(line[i+len(jumpCaret):], string([]rune(long)[at])) {
+					t.Errorf("room %d, caret %d from the end: the rune after the caret is cut: %q", room, back, line)
+				}
+			}
+		}
+	}
+	if got := ansi.Strip(withCaret("ab", 1, "hint", jumpCaret, 20)); got != "a"+jumpCaret+"b" {
+		t.Errorf("a line that fits is drawn whole, got %q", got)
+	}
+	if got := ansi.Strip(withCaret("ab", 1, "hint", "", 20)); got != "ab" {
+		t.Errorf("an empty caret draws none, got %q", got)
+	}
+}
+
+// The text input's sanitizer drops U+FFFD, which would put its caret out of step with the
+// filter's, so the filter never takes one.
+func TestAReplacementRuneIsNeverTakenIntoTheFilter(t *testing.T) {
+	got, back := editedQuery("ab", 1, runeKey("�x"))
+	if got != "axb" || back != 1 {
+		t.Errorf("a paste with U+FFFD gave %s, want axb with the caret before the b", showCaret(got, back))
 	}
 }

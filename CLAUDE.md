@@ -146,8 +146,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   like the chat box** (`queryedit.go`): `←→` and `Home`/`End` move a caret, `⌥←→`/`⌥B`/`⌥F` by word, `⌥⌫` deletes
   a word, `⌃U`/`⌃K` to either end, `⌦` and `⌫` (and `⌃H`, which a terminal's `⌫` or `⌃⌫` sends) one rune, typing
   and a paste land at the caret under the query rules; bubbles' text input does it with the text area's bindings
-  less the keys Wake takes first (`⌃W` `⌃A` `⌃E` `⌃D` `⌃B` `⌃F` stay swallowed, `⌃V` is not read), and a test drives a
-  real composer to hold the two together. A caret that moves leaves the cursored agent; a changed text homes it.
+  less the keys Wake takes first (`⌃W` `⌃A` `⌃E` stay swallowed, the jump box's own `⌃D` `⌃B` `⌃F` keep their jobs,
+  `⌃V` is not read), and a test drives a real composer to hold the two together; a line too long for the box is
+  cut around the caret, so the caret stays on it and the box stays one height. A caret that moves leaves the cursored agent; a changed text homes it.
   `↵` opens the cursored agent through
   `openInNewPane`, as a click on its row does, and both finish in `selectOpened`; `⌃B` opens it below
   (`openBelow`, which refuses from a lower pane and leaves the box up), `⌃D` in the focused pane
