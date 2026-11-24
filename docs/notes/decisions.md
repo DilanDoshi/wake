@@ -52,11 +52,16 @@ dropped one line per message and the `/clear` reminder, which asked the operator
   never saw as lines go, so it draws the reclaimed-history line and no notice.
 - **Retires the 2026-10-19 reminder**; a bare `/clear` stays, and now also resets what is owed. A session resumed after a
   trim brings back only restored lines newer than what the trim dropped.
-- **The per-event allocation guard measures a slope** (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`): the 6 KiB
-  figure is unchanged, but it is now what one more retained event costs between a half room and the fullest, since a
-  `Before` has a fixed cost that a room of 20,000 events spread to nothing and one of 3,000 does not (main sat 5 bytes
-  under 6 KiB; dividing the total at 2,999 events came to 6,144-6,146 across runs against the 6,144 budget). The slope
-  reads 6,114-6,124 B an event.
+- **The per-event allocation guard measures a slope, and its 6 KiB budget is untouched**
+  (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`). It used to divide the bytes one `Before` allocates by the
+  events in the room. That is a per-event cost only while a `Before`'s fixed cost (the transcript rebuild, its maps) is
+  spread over very many events: at 20,000 events main measured 6,139 B an event, 5 bytes under the 6,144 budget. At the
+  3,000-line cap the same fixed cost is shared by 6.7 times fewer events, so the total over the room's 2,999 events reads
+  6,144-6,146 B across runs - at or over the budget with no change in what one event costs. The guard now builds a half
+  room and the fullest room and divides the difference in bytes by the difference in events, which is what one more
+  retained event costs: 6,114-6,124 B across runs, 20-30 B (about 0.4%) under the budget, as thin a margin as main had.
+  Adding a field to `roomLine` would turn it red, which is the point of a budget that sits this close. Both reviews
+  judged the slope the honest measure at this cap.
 - Checked by mutation, each red: the trigger a message late, a per-message shed, a restore that sheds live lines, no
   owed count, a fold into an evicted head, a count kept past its head, a count or an open kept past a merge that drops
   its line, a `hist` left standing after a trim, no watermark, a `Before` that does not honour it, a selection row short
