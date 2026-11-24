@@ -32,6 +32,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,6 +53,12 @@ const resumeWindow = 4
 // resumeFrameRows is the picker's rows that are not sessions: its own top and
 // bottom edges and the three rows of the search box.
 const resumeFrameRows = 5
+
+const (
+	resumeNoMatch = "no session matches — ⌫ to widen the search"
+	resumePrompt  = "› "
+	resumeHint    = "search…"
+)
 
 // resumePickerMax bounds the rows the picker holds - not what it draws (that is
 // resumeWindow), but what search can reach. A heavy user has hundreds of
@@ -117,6 +124,7 @@ type ResumePicker struct {
 	More     int // how many older rows the cap left out
 	Multi    bool
 	Query    string
+	Back     int // runes between the caret and the end of Query; zero is the end
 	Cursor   int // index into the filtered set
 	Selected map[string]bool
 	Seq      uint64             // which /resume opened it; a fill for another is not its own
@@ -199,12 +207,9 @@ func (a App) resumePickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a.toggleResume(), nil, true
 		}
 		return a, nil, true
-	case tea.KeyBackspace:
-		return a.editResume(backspacedQuery), nil, true
-	case tea.KeySpace:
-		return a.editResume(func(q string) string { return typedQuery(q, " ") }), nil, true
-	case tea.KeyRunes:
-		return a.editResume(func(q string) string { return typedQuery(q, string(m.Runes)) }), nil, true
+	case tea.KeyBackspace, tea.KeySpace, tea.KeyRunes, tea.KeyLeft, tea.KeyRight, tea.KeyHome, tea.KeyEnd,
+		tea.KeyDelete, tea.KeyCtrlH, tea.KeyCtrlU, tea.KeyCtrlK:
+		return a.editResume(m), nil, true
 	}
 	// Every other key is swallowed while the picker is up, so it is a proper
 	// search box: an arrow or a chord does not dismiss it mid-query the way an
@@ -214,12 +219,16 @@ func (a App) resumePickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a, nil, true
 }
 
-// editResume edits the search with the query functions every filter shares
-// (help.go's typedQuery and backspacedQuery) and re-homes the cursor, since the
-// match set has changed under it. A copied picker, App's immutability rule.
-func (a App) editResume(edit func(string) string) App {
+// editResume is one key at the search's caret (queryedit.go). A change of the text
+// re-homes the cursor, since the match set has changed under it; a caret that moves
+// leaves it. A copied picker, App's immutability rule.
+func (a App) editResume(m tea.KeyMsg) App {
 	p := a.resumePicker
-	p.Query, p.Cursor = edit(p.Query), 0
+	query, back := editedQuery(p.Query, p.Back, m)
+	if query != p.Query {
+		p.Cursor = 0
+	}
+	p.Query, p.Back = query, back
 	a.resumePicker = p
 	return a
 }
@@ -329,17 +338,22 @@ func (p ResumePicker) View(width, maxRows int) string {
 	if maxRows < resumeFrameRows+2 {
 		return p.compactView(f, w, maxRows)
 	}
-	rows := []string{p.searchBox(inner)}
+	size := p.sessionsFit(maxRows)
+	var listed []string
 	if len(f) == 0 {
-		rows = append(rows, detailRow("no session matches — ⌫ to widen the search", inner))
+		listed = append(listed, detailRow(resumeNoMatch, inner))
 	}
-	start, end := p.window(len(f), p.sessionsFit(maxRows))
+	start, end := p.window(len(f), size)
 	for i := start; i < end; i++ {
 		if i > start {
-			rows = append(rows, "")
+			listed = append(listed, "")
 		}
-		rows = append(rows, p.sessionRows(f[i], i == p.Cursor, inner)...)
+		listed = append(listed, p.sessionRows(f[i], i == p.Cursor, inner)...)
 	}
+	// Held to the rows the whole set opens with: a picker that shrank as the query
+	// narrowed would move the room above it on every key.
+	opened := min(len(p.Rows), size)
+	rows := append([]string{p.searchBox(inner)}, filledTo(listed, 3*opened-1)...)
 	if p.More > 0 {
 		rows = append(rows, detailRow(fmt.Sprintf("… %d more, older", p.More), inner))
 	}
@@ -364,6 +378,12 @@ func (p ResumePicker) sessionsFit(maxRows int) int {
 // cursor, so walking off the visible end pages the list rather than losing the
 // cursor.
 func (p ResumePicker) window(n, size int) (start, end int) { return windowAround(p.Cursor, n, size) }
+
+// filledTo is rows with blank rows added to n, so a list that holds fewer than the
+// box has for it leaves the box its height.
+func filledTo(rows []string, n int) []string {
+	return append(slices.Clone(rows), make([]string, max(n-len(rows), 0))...)
+}
 
 // windowAround is the [start, end) of n rows a size-row window draws so the
 // cursor stays in it: centred where it can be, pinned at either end.
@@ -395,7 +415,12 @@ func (p ResumePicker) header(f []resumeRow) string {
 func (p ResumePicker) compactView(f []resumeRow, width, maxRows int) string {
 	status := HintStyle.Render(ansi.Truncate(p.header(f)+" · "+p.searchText(), width, ellipsis))
 	if len(f) == 0 {
-		return status
+		// As tall as it is with a match, so the pane above it does not move.
+		rows := []string{status}
+		if maxRows >= 2 {
+			rows = append(rows, detailRow(resumeNoMatch, width))
+		}
+		return strings.Join(filledTo(rows, min(maxRows, 1+len(p.sessionRows(p.Rows[0], true, width)))), "\n")
 	}
 	session := p.sessionRows(f[clamp(p.Cursor, 0, len(f)-1)], true, width)
 	switch {
@@ -410,23 +435,23 @@ func (p ResumePicker) compactView(f []resumeRow, width, maxRows int) string {
 // searchText is the query being typed, or the search box's own prompt.
 func (p ResumePicker) searchText() string {
 	if p.Query == "" {
-		return "› search…"
+		return resumePrompt + resumeHint
 	}
-	return "› " + p.Query
+	return resumePrompt + p.Query
 }
 
 // searchBox is the query framed like the composer, because it is where the keys
-// are going.
+// are going. Its caret is drawn where it is, and not at all in a blurred window.
 func (p ResumePicker) searchBox(width int) string {
 	style := TextStyle
 	if p.Query == "" {
 		style = HintStyle
 	}
-	box := ComposerStyle
+	box, caret := ComposerStyle, jumpCaret
 	if p.windowBlurred {
-		box = BoxStyle
+		box, caret = BoxStyle, ""
 	}
-	line := style.Render(ansi.Truncate(p.searchText(), max(width-cardFrameWidth, 1), ellipsis))
+	line := ansi.Truncate(style.Render(resumePrompt)+withCaret(p.Query, p.Back, resumeHint, caret), max(width-cardFrameWidth, 1), ellipsis)
 	return box.Width(max(width-boxFrameWidth, 1)).Render(line)
 }
 

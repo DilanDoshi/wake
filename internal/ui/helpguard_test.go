@@ -334,6 +334,7 @@ var teaKeyWords = map[string][]string{
 	"KeyUp": {"↑"}, "KeyDown": {"↓"}, "KeyLeft": {"←"}, "KeyRight": {"→"},
 	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"}, "KeySpace": {"space"}, "KeyBackspace": {"⌫"},
 	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
+	"KeyDelete": {"⌦"}, "KeyCtrlU": {"⌃U"}, "KeyCtrlK": {"⌃K"}, "KeyCtrlH": {"⌫"}, // ⌃H is the byte a terminal's ⌫ or ⌃⌫ sends
 	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"}, "KeyCtrlN": {"⌃N"}, "KeyCtrlP": {"⌃P"},
 	"KeyCtrlC": {"⌃C"}, "KeyCtrlF": {"⌃F"}, "KeyShiftUp": {"⇧↑", "⇧↑↓"}, "KeyShiftDown": {"⇧↓", "⇧↑↓"},
 }
