@@ -1878,6 +1878,29 @@ daemon. **Fixed:** a reset keeps the running rows and their backlog and drops th
 `testdata/stream/clear-keeps-background.jsonl` (the recording's `ui_invalidate` frame, which this decoder
 does not read until #235, is left out, and its init frames' command lists are cut to the allowlist).
 
+## BUG-78 — ⌥← or ⌥B with no word to its left froze the room
+
+**Found 2026-11-23** by a parity test on another branch: `NewComposer().Update(⌥←)` never returns on an empty
+draft. The room's `Update` goroutine spins on one core and draws nothing more; `⌃C⌃C` still leaves, being read
+off the tty before Bubble Tea. **Cause, upstream:** bubbles v1.0.0's `textarea.wordLeft` steps left until it lands
+on a non-space and stops for nothing else, and at row 0, column 0 the step is a no-op. So it never returns when
+no non-space lies left of the caret on any row above or before it: an empty draft, spaces only (a no-break or
+ideographic space too, bubbles reads `unicode.IsSpace`), `" a"` with the caret in the space, and an empty line or
+the start of a line under blank lines. **The one exception is the caret at the very start of the draft, before a
+word:** there it returns at once and moves nothing. The same column 0 on a later line, under blank lines only,
+hangs. A draft whose current line is empty but a line above has text is fine.
+
+**Probed, not reasoned:** every caret of a spread of drafts, one child process per key. Only ⌥← and ⌥B hang; ⌥→ ⌥F ⌥⌦ ⌥D ⌥⌫ ⌃W
+⌥U ⌥L ⌥C never hang or panic (the text area's own bounds and `Update`'s clamps hold), so `Composer` is the only
+place with the defect and this tree has no `textinput`. **Fixed Wake-side, no `replace`** (as glamour's wrap;
+`go install` forbids one): `Composer.Update` answers the key with a no-op when nothing non-space lies left of the
+caret (`wordLeftStuck`, keyed on the text area's own `WordBackward` binding), through the same `fit().reposition()`
+seam as typed runes. **The guard is a superset of the hang**: it also answers the start-of-draft case above, where
+the text area would have moved nothing anyway. A caret that has a word to its left moves as before.
+Tests: `composerwordmove_test.go`, each case under a deadline so a regression fails, not hangs, over every
+caret of its drafts at a wide and two narrow widths (soft-wrapped rows, wide and Unicode spaces), with the caret
+read off a typed marker, not the line info the guard reads.
+
 ## Live acceptance of BUG-73, 75, 76 (2026-11-12, claude 2.1.322, `--model haiku`)
 
 A scratch fleet per take (a fresh socket directory, a `/tmp` project, the operator's own login), a background

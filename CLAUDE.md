@@ -369,6 +369,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Plain `↑↓`** recall prompt history unless the cursor can move within a multi-line draft —
   decided by simulating bubbles' move on a copy (`Composer.CanCursorUp/Down`), not by counting rows.
   The roster is `⇧↑↓`. `internal/ui/keys.go`, `composer.go`.
+- **`⌥←`/`⌥B` with no non-space left of the caret do nothing** (BUG-78): from there bubbles' `wordLeft` never
+  returns (bar the draft's very start), so `Composer.Update` answers the key first (`wordLeftStuck`, on the text
+  area's own `WordBackward` binding). Fixed Wake-side, never via `replace`. The other word keys neither loop nor
+  panic. `internal/ui/composerwordmove.go`.
 - **Claude Code's keymap is kept by hand** in `internal/ui/testdata/claude-keymap.json`;
   `keymap_test.go` fails on any unruled collision. Only ⌃O is destructive, hence armed.
 - **Detach is armed by ⌃O, confirmed by ↵, cancelled by ⌃O**, and the cue stays drawn while armed.
@@ -782,7 +786,7 @@ yet says so in bold.**
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` · `window.go` (the window's margins around the frame) |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `agentdrag.go` (a sidebar agent's click, drag, drop zones and Shift-click) · `agentdragdraw.go` (the tag and the outline) · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty tests `cmd/wake/draftwheelscreen_unix_test.go`, `sidebardragscreen_unix_test.go`, `shiftescapescreen_unix_test.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `agentdrag.go` (a sidebar agent's click, drag, drop zones and Shift-click) · `agentdragdraw.go` (the tag and the outline) · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `composerwordmove.go` (⌥←/⌥B with no word to move to) · `clipboard.go` · `cmd/wake/output.go` · pty tests `cmd/wake/draftwheelscreen_unix_test.go`, `sidebardragscreen_unix_test.go`, `shiftescapescreen_unix_test.go` |
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
