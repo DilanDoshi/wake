@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // pickOutOfView is what a key refused for a selection out of view says.
@@ -121,15 +119,12 @@ func (a App) rosterDrawn() Roster {
 	return r
 }
 
-// rosterRows is the rows the roster's agents have, under the pinned all.
-func (a App) rosterRows() int { return a.rosterListHeight() - allRows }
-
 // rosterWindow is the sidebar's items as drawn, their heights, and the window
 // over them - each worked out once.
 func (a App) rosterWindow() ([]rosterItem, heights, span) {
 	rows := sectionRows(a.fleet.sectioned(a.rosterAgents()))
 	h := itemHeights(rows, a.fleet.RunningTasks)
-	return rows, h, a.rosterDrawn().window(rows, h, a.rosterRows())
+	return rows, h, a.rosterDrawn().window(rows, h, a.rosterListHeight())
 }
 
 // wheelRoster is a notch over the sidebar: the window an item on (down) or back,
@@ -137,7 +132,7 @@ func (a App) rosterWindow() ([]rosterItem, heights, span) {
 // window opens when the fleet next overflows, since the pointer says what scrolls.
 func (a App) wheelRoster(lines int) App {
 	_, h, w := a.rosterWindow()
-	if h.total() <= a.rosterRows() {
+	if h.total() <= a.rosterListHeight() {
 		return a
 	}
 	step := 1
@@ -146,7 +141,7 @@ func (a App) wheelRoster(lines int) App {
 	}
 	// shown is kept: a notch the end stops moves nothing, and the seam decides
 	// again only on a change.
-	a.rosterView.top, a.rosterView.held = clamp(w.from+step, 0, h.lastTop(a.rosterRows()-1)), true
+	a.rosterView.top, a.rosterView.held = clamp(w.from+step, 0, h.lastTop(a.rosterListHeight()-1)), true
 	return a
 }
 
@@ -161,16 +156,16 @@ func (a App) rosterSettled(was App) App {
 		return a.rosterLetGo(drawn.from)
 	}
 	v, old := a.rosterView, was.rosterView
-	if !v.held || old.held && v.top == old.top && a.fleet.same(was.fleet) && a.rosterRows() == was.rosterRows() {
+	if !v.held || old.held && v.top == old.top && a.fleet.same(was.fleet) && a.rosterListHeight() == was.rosterListHeight() {
 		return a
 	}
 	rows, h, w := a.rosterWindow()
-	if h.total() <= a.rosterRows() {
+	if h.total() <= a.rosterListHeight() {
 		a.rosterView = rosterView{} // it all fits: nothing to hold
 		return a
 	}
 	c := a.roster.cursorRow(rows)
-	a.rosterView.shown = a.roster.Header == core.BroadcastName || c >= w.from && c < w.to
+	a.rosterView.shown = c >= w.from && c < w.to
 	return a
 }
 

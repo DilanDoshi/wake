@@ -19,8 +19,12 @@ package ui
 // hands the roster its agents already in section order (Fleet.sectioned), which
 // also blanks a top-block agent's team, so a header goes before an agent whose
 // team differs from the one above it and never inside the header-less top block.
-// With every Team empty no header is drawn and the roster is the one box of loose
-// agents under the pinned `all`.
+// The agents with no team are a box too, headed unteamedLabel (the owner's
+// 2026-11-25 pick), a header that picks nothing: it is no channel.
+//
+// **`all` is the first item and scrolls like any other** (owner's 2026-11-25 ruling:
+// it was pinned over the list before). It belongs to no agent, so it is the one item
+// without one; it is a row, never a box.
 //
 // A blank row sets a header off from whatever is above it (rosterItem.gap), and it
 // rides on the same item for the same reason the header does: the window keeps or
@@ -29,6 +33,7 @@ package ui
 // between items and draws a cut box as walls with no edge: it runs on past the cut.
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -43,21 +48,29 @@ const sectionRule = "─"
 // boxInset is the columns a member's row gives up on each side: a wall and a space.
 const boxInset = 2
 
+// unteamedLabel heads the box of the agents that are in no team. A space keeps it
+// from ever being a team's name, which is one token.
+const unteamedLabel = "no team"
+
 // boxBorder is the corners and walls of a section's box, the composer's.
 var boxBorder = lipgloss.RoundedBorder()
 
 // rosterItem is one agent's row block, with the team header drawn above it when
 // it is the first of its section, and a blank row above that when anything is
 // above it. One item per agent, so the window counts whole blocks and neither can
-// be split from its member.
+// be split from its member - and the all row, item 0, which has no agent.
 type rosterItem struct {
 	agent  Agent
-	header string // team header drawn above this agent, "" for none
+	header string // header drawn above this agent: its team's, or unteamedLabel; "" for none
 	gap    bool   // a blank row above the header, setting the section off from the rows above it
 	footer bool   // the box's closing row under this agent, the last of its section
+	all    bool   // the all channel's own row, item 0: it belongs to no agent
 }
 
 func (item rosterItem) hasHeader() bool { return item.header != "" }
+
+// teamHeader is whether the header is a team's, a channel; unteamedLabel's is not.
+func (item rosterItem) teamHeader() bool { return item.hasHeader() && item.agent.Team != "" }
 
 // lead is the rows an item draws above its agent's own: the gap, then the header.
 // They belong to no agent: a click on the header picks its channel, and one on
@@ -82,20 +95,25 @@ func (item rosterItem) trail() int {
 	return 0
 }
 
-// sectionRows attaches a header to the first agent of each team, the boundary
-// being a team change in the ordered slice - which Fleet.sectioned guarantees is
-// grouped and top-block-blanked - and a closing row to the last. One item per
-// agent. A header with nothing above it - a roster that opens on a team - needs no
-// gap to set it off.
+// sectionRows is the all item, then one item per agent: a header on the first agent
+// of each team, the boundary being a team change in the ordered slice - which
+// Fleet.sectioned guarantees is grouped and top-block-blanked - and on the first of
+// the agents with no team, and a closing row on the last of each. A header with
+// nothing above it but all, or any row above it - a roster that opens on a team, or
+// the no-team box right under all - needs no gap to set it off.
 func sectionRows(agents []Agent) []rosterItem {
-	rows := make([]rosterItem, len(agents))
+	rows := make([]rosterItem, 1, len(agents)+1)
+	rows[0] = rosterItem{all: true}
 	for i, a := range agents {
 		hdr := ""
-		if a.Team != "" && (i == 0 || agents[i-1].Team != a.Team) {
+		switch {
+		case a.Team == "" && i == 0:
+			hdr = unteamedLabel
+		case a.Team != "" && (i == 0 || agents[i-1].Team != a.Team):
 			hdr = a.Team
 		}
 		last := i == len(agents)-1 || agents[i+1].Team != a.Team
-		rows[i] = rosterItem{agent: a, header: hdr, gap: hdr != "" && i > 0, footer: last}
+		rows = append(rows, rosterItem{agent: a, header: hdr, gap: hdr != "" && i > 0, footer: last})
 	}
 	return rows
 }
@@ -104,12 +122,18 @@ func sectionRows(agents []Agent) []rosterItem {
 // count by: the agent's own rows (rowsFor), plus the lines above them (lead) and
 // the one under (trail).
 func rowsForRow(item rosterItem, subs subsOf) int {
+	if item.all {
+		return 1
+	}
 	return item.lead() + rowsFor(item.agent, subsFor(subs, item.agent.ID)) + item.trail()
 }
 
 // rowLines is the strings an item draws: the gap and the header's top edge (when it
 // has them), the agent's own rows between the box's walls, and its closing row.
 func (r Roster) rowLines(item rosterItem, subs subsOf, width int) []string {
+	if item.all {
+		return []string{r.allLine(width)}
+	}
 	var lines []string
 	if item.gap {
 		lines = append(lines, "")
@@ -117,9 +141,9 @@ func (r Roster) rowLines(item rosterItem, subs subsOf, width int) []string {
 	if item.hasHeader() {
 		lines = append(lines, r.headerLine(item.header, width))
 	}
-	channel := core.BroadcastName // the box the agent stands in: its team's, or all's
-	if item.agent.Team != "" {
-		channel = item.agent.Team
+	channel := item.agent.Team // the box the agent stands in, and its state: a team's, or the unteamed box's, never lit
+	if channel == "" {
+		channel = unteamedLabel
 	}
 	rule, _ := r.channelStyles(channel)
 	left, right := rule.Render(boxBorder.Left+" "), rule.Render(" "+boxBorder.Right)
@@ -147,11 +171,16 @@ func boxFit(line string, width int) string {
 }
 
 // channelStops is the sidebar's walk: walkable with the channel headers it draws,
-// the pinned all first and each team's header before its first member.
+// all first and each team's header before its first member. The no-team header is no
+// channel, so it is no stop.
 func channelStops(agents []Agent, subs subsOf) []Roster {
-	out := []Roster{{Header: core.BroadcastName}}
+	var out []Roster
 	for _, item := range sectionRows(agents) {
-		if item.hasHeader() {
+		switch {
+		case item.all:
+			out = append(out, Roster{Header: core.BroadcastName})
+			continue
+		case item.teamHeader():
 			out = append(out, Roster{Header: item.header})
 		}
 		out = append(out, walkable([]Agent{item.agent}, subs)...)
@@ -159,11 +188,16 @@ func channelStops(agents []Agent, subs subsOf) []Roster {
 	return out
 }
 
-// cursorRow is the item the cursor sits on - an agent's, or the one a team header
-// is drawn above - or -1. window anchors its scroll on it.
+// cursorRow is the item the cursor sits on - all's, an agent's, or the one a team
+// header is drawn above - or -1. window anchors its scroll on it.
 func (r Roster) cursorRow(rows []rosterItem) int {
 	for i, item := range rows {
-		if r.Header != "" && item.header == r.Header || r.Selected != "" && item.agent.ID == r.Selected {
+		switch {
+		case r.Header == core.BroadcastName && item.all:
+			return i
+		case r.Header != "" && item.teamHeader() && item.header == r.Header:
+			return i
+		case r.Selected != "" && item.agent.ID == r.Selected:
 			return i
 		}
 	}
@@ -216,9 +250,6 @@ func (r Roster) headerLine(header string, width int) string {
 	return centredEdge(boxBorder.TopLeft, boxBorder.TopRight, header, width, rule, text)
 }
 
-// allRows is the pinned `all` row every column opens on: the top edge of the loose agents' box.
-const allRows = 1
-
 // rosterSpot is what a roster row is: an agent's (and a dispatch under it), or a
 // channel header's.
 type rosterSpot struct {
@@ -227,32 +258,13 @@ type rosterSpot struct {
 	header   string
 }
 
-// Column is the sidebar: the pinned all over the agents View lays out below it,
-// with the picked channel ("" for all) marked. Hit counts its rows the same way.
-func (r Roster) Column(agents []Agent, subs subsOf, width, height int, channel string) string {
-	if width <= 0 || height <= 0 {
-		return ""
+// allLine is the all row: a plain rule naming the channel, and how many rows the
+// roster holds when it says (`all · 22`; Roster.total).
+func (r Roster) allLine(width int) string {
+	label := core.BroadcastName
+	if r.total > 0 {
+		label += " · " + strconv.Itoa(r.total)
 	}
-	r.channel = channel
-	all := r.headerLine(core.BroadcastName, width)
-	if len(agents) == 0 || agents[0].Team != "" { // no loose agent: a rule, not the top of an empty box
-		rule, text := r.channelStyles(core.BroadcastName)
-		all = centredEdge("", "", core.BroadcastName, width, rule, text)
-	}
-	if height <= allRows {
-		return all
-	}
-	return all + "\n" + r.View(agents, subs, width, height-allRows)
-}
-
-// Hit is the row under line y of Column: the all header, or what At finds in the
-// agents below it.
-func (r Roster) Hit(agents []Agent, subs subsOf, width, height, y int) (rosterSpot, bool) {
-	if width <= 0 || y < 0 || y >= height {
-		return rosterSpot{}, false
-	}
-	if y < allRows {
-		return rosterSpot{header: core.BroadcastName}, true
-	}
-	return r.At(agents, subs, width, height-allRows, y-allRows)
+	rule, text := r.channelStyles(core.BroadcastName)
+	return centredEdge("", "", label, width, rule, text)
 }

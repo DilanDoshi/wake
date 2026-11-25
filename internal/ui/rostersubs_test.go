@@ -218,7 +218,7 @@ func TestTheCursorWalksIntoASubagentRowAndBackOut(t *testing.T) {
 func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 1)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 3) // all, the no-team header, alex, then its subagent
 	agent, dispatch := spot.agent, spot.dispatch
 	if !ok {
 		t.Fatal("the row under the pointer resolved to nothing")
@@ -236,7 +236,7 @@ func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 func TestAClickOnTheAgentsOwnRowNamesNoDispatch(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 0)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 2) // under all and the no-team header
 	agent, dispatch := spot.agent, spot.dispatch
 	if !ok || agent.ID != "s1" {
 		t.Fatalf("the agent's row resolved to %+v, %v", agent, ok)

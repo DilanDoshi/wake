@@ -134,8 +134,8 @@ SHOTS = [
         "five teams · 21 agents",
         "Every team is a box.",
         "The sidebar draws each team as a box: the team's header is its top edge, "
-        "its agents stand inside walls, and a closing edge ends it. The agents above "
-        "the first team are a box of their own under the pinned <code>all</code>. A "
+        "its agents stand inside walls, and a closing edge ends it. The agents with "
+        "no team are a box of their own, headed <code>no team</code>, under <code>all</code>. A "
         "box wears its channel's state — accent while that team's channel is picked, "
         "muted otherwise — so which team the room is showing reads without a word. "
         "<code>/team</code> moves an agent from one box to another, and a click on a "

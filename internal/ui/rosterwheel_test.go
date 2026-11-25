@@ -138,10 +138,16 @@ func TestTheWheelOverATallSidebarScrollsItOneAgentANotchAndMovesNothingElse(t *t
 		t.Fatalf("the fixture fits its sidebar (%d agents drawn); it must overflow", len(before))
 	}
 
+	// A notch is an item, and all is the first: it leaves before any agent does.
+	a = wheelSidebar(a, true, 1)
+	pastAll := drawnAgents(a) // the row all gave up goes to one more agent below
+	if allRowY(a) != -1 || len(pastAll) == 0 || pastAll[0] != before[0] {
+		t.Fatalf("one notch down drew %v with all at row %d, want all gone and the window still opening on %v", pastAll, allRowY(a), before[0])
+	}
 	a = wheelSidebar(a, true, 1)
 	after := drawnAgents(a)
 	if len(after) == 0 || after[0] != before[1] {
-		t.Fatalf("one notch down drew %v, want the window one agent on from %v", after, before)
+		t.Fatalf("two notches down drew %v, want the window one agent on from %v", after, before)
 	}
 	if a.roster != roster {
 		t.Errorf("the wheel moved the selection from %+v to %+v", roster, a.roster)
@@ -150,8 +156,11 @@ func TestTheWheelOverATallSidebarScrollsItOneAgentANotchAndMovesNothingElse(t *t
 		t.Errorf("the wheel over the sidebar moved a pane: focus %q→%q, room scroll %d→%d", focus, a.focus, room, a.room.tr.scroll)
 	}
 
-	if a = wheelSidebar(a, false, 1); !slices.Equal(drawnAgents(a), before) {
-		t.Errorf("one notch back up drew %v, want %v", drawnAgents(a), before)
+	if a = wheelSidebar(a, false, 1); !slices.Equal(drawnAgents(a), pastAll) {
+		t.Errorf("one notch back up drew %v, want %v", drawnAgents(a), pastAll)
+	}
+	if a = wheelSidebar(a, false, 1); allRowY(a) < 0 || !slices.Equal(drawnAgents(a), before) {
+		t.Errorf("a second notch back up did not bring all home with the window as it was:\n%s", strings.Join(sideColumn(a), "\n"))
 	}
 }
 
@@ -324,7 +333,7 @@ func TestASelectionScrolledOutOfViewTakesNoKey(t *testing.T) {
 	picked := a.roster.Selected
 	name := a.fleet.agents[picked].Name
 	recorderOf(t, a).taken(t)
-	a = wheelSidebar(a, true, 1)
+	a = wheelSidebar(a, true, 2) // all leaves first, then the first agent
 	if agentRowY(a, name) >= 0 {
 		t.Fatalf("%s is still drawn after the wheel: %v", name, drawnAgents(a))
 	}
@@ -362,9 +371,9 @@ func TestAReRankDecidesWhetherTheWheelsSelectionCounts(t *testing.T) {
 	a, _ = keyVia(a, tea.KeyShiftDown)
 	a, _ = keyVia(a, tea.KeyShiftDown) // the top block's second agent
 	picked := a.roster.Selected
-	a = wheelSidebar(a, true, 1) // now the first row drawn
+	a = wheelSidebar(a, true, 2) // all leaves, then the first agent: now the first row drawn
 	if _, ok := a.pickedAgent(); !ok {
-		t.Fatalf("%s is drawn after one notch (%v) and does not count", picked, drawnAgents(a))
+		t.Fatalf("%s is drawn after two notches (%v) and does not count", picked, drawnAgents(a))
 	}
 	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: wheelStatus(25, map[string]string{picked: rpc.StateBlocked})})
 	if _, ok := a.pickedAgent(); ok {
@@ -390,6 +399,10 @@ func TestTheWheelOverTheUsageBarScrollsTheRosterAndTheStripDoesNot(t *testing.T)
 		t.Errorf("the wheel over the strip scrolled the roster: %v, then %v", before, drawnAgents(a))
 	}
 	a = wheelAt(a, tea.MouseButtonWheelDown, sidebarX(a), a.paneHeight()-2, 1) // the bar
+	if allRowY(a) != -1 {
+		t.Errorf("the wheel over the usage bar left all drawn: it scrolls the roster, whose first item is all")
+	}
+	a = wheelAt(a, tea.MouseButtonWheelDown, sidebarX(a), a.paneHeight()-2, 1)
 	if after := drawnAgents(a); len(after) == 0 || after[0] != before[1] {
 		t.Errorf("the wheel over the usage bar drew %v, want the roster one agent on from %v", after, before)
 	}
@@ -484,6 +497,10 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 							if ok {
 								t.Errorf("%s: the closing row %d hits %+v", where, y, spot)
 							}
+						case isTopEdge(strings.TrimRight(line, " ")) && strings.Contains(line, " "+unteamedLabel+" "):
+							if ok {
+								t.Errorf("%s: the no team header row %d hits %+v: it is no channel", where, y, spot)
+							}
 						case strings.Contains(line, "─"):
 							if !ok || spot.header == "" || !strings.Contains(line, " "+spot.header+" ") {
 								t.Errorf("%s: header row %d %q hits %+v (%v)", where, y, text, spot, ok)
@@ -503,8 +520,8 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 					// A window that follows the cursor draws it whenever its block fits
 					// beside the count; a taller one is the count alone.
 					if c := r.cursorRow(rows); !held && c >= 0 && rowsForRow(rows[c], teamedSubs) < height &&
-						!strings.Contains(stripANSI(out), agents[c].Name+" ") {
-						t.Errorf("%s: the window follows the cursor and does not draw %s:\n%s", where, agents[c].Name, stripANSI(out))
+						!strings.Contains(stripANSI(out), rows[c].agent.Name+" ") {
+						t.Errorf("%s: the window follows the cursor and does not draw %s:\n%s", where, rows[c].agent.Name, stripANSI(out))
 					}
 				}
 			}
@@ -517,13 +534,19 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 func TestHeadersUnderTheWheel(t *testing.T) {
 	a := wheelFleet(t)
 	a, _ = keyVia(a, tea.KeyShiftDown)
-	a, _ = keyVia(a, tea.KeyShiftUp) // onto the pinned all
+	a, _ = keyVia(a, tea.KeyShiftUp) // onto all
 	if a.roster.Header != core.BroadcastName {
 		t.Fatalf("⇧↑ from the first agent is on %+v, not all", a.roster)
 	}
 	a = wheelSidebar(a, true, 100)
+	if _, ok := a.pickedHeader(); ok {
+		t.Error("the cursor on all still counts once the wheel scrolled all away: it is a row like any, not pinned")
+	}
+	if a = wheelSidebar(a, false, 100); allRowY(a) < 0 {
+		t.Fatalf("the wheel at the top does not draw all:\n%s", strings.Join(sideColumn(a), "\n"))
+	}
 	if _, ok := a.pickedHeader(); !ok {
-		t.Error("the cursor on the pinned all does not count once the wheel holds the window")
+		t.Error("the cursor on all does not count once the wheel brought all back")
 	}
 
 	a = wheelFleet(t)
@@ -682,7 +705,7 @@ func TestARefusalForAHiddenSelectionSaysWhy(t *testing.T) {
 	} {
 		a := wheelFleet(t)
 		a, _ = keyVia(a, tea.KeyShiftDown)
-		a = wheelSidebar(a, true, 1)
+		a = wheelSidebar(a, true, 2) // all leaves first, then the selected first agent
 		notice.Reset()
 		press(a)
 		if n, ok := notice.Latest(); !ok || n.Text != pickOutOfView {
@@ -767,7 +790,7 @@ func TestAClickOntoASubagentRowLetsGoOfTheWheel(t *testing.T) {
 func TestTheWheelOverTheSidebarsLastRowScrollsIt(t *testing.T) {
 	a := wheelFleet(t)
 	before := drawnAgents(a)
-	a = wheelAt(a, tea.MouseButtonWheelDown, sidebarX(a), a.paneHeight()-1, 1)
+	a = wheelAt(a, tea.MouseButtonWheelDown, sidebarX(a), a.paneHeight()-1, 2) // all leaves first, then one agent
 	if after := drawnAgents(a); len(after) == 0 || after[0] != before[1] {
 		t.Errorf("the wheel over the sidebar's last row drew %v, want one agent on from %v", after, before)
 	}

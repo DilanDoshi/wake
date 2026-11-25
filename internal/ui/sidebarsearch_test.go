@@ -315,7 +315,7 @@ func TestASidebarTooShortForItsBarDrawsNoBarAndNoFilter(t *testing.T) {
 	a := barFleet(t, 140, 40)
 	a, _ = click(a, sidebarX(a), 1)
 	a = jumpTyped(a, "blu")
-	short := a.withSize(140, searchBarRows+allRows+searchListFloor).resizePanes()
+	short := a.withSize(140, searchBarRows+searchListFloor).resizePanes()
 	if short.searchBarShown() {
 		t.Fatalf("the bar is drawn in a pane %d rows tall", short.paneHeight())
 	}
@@ -357,15 +357,16 @@ func TestWithNothingSelectedTheFirstAgentDrawnIsTheCursorsAgent(t *testing.T) {
 	}
 }
 
-// The roster's rows are what the bar leaves: the count row and the agents drawn fit
+// The roster's rows are what the bar leaves: the items drawn and the count row fit
 // the sidebar's height under it, so the wheel's window and the draw agree.
 func TestTheWindowIsCutToTheRowsUnderTheBar(t *testing.T) {
 	a := wheelFleet(t)
 	if !a.searchBarShown() {
 		t.Fatal("setup: no bar is drawn")
 	}
-	if a.rosterRows()+allRows != a.rosterListHeight() {
-		t.Errorf("the window has %d rows under the all's %d, and the list %d", a.rosterRows(), allRows, a.rosterListHeight())
+	_, h, w := a.rosterWindow()
+	if used := h[w.from:w.to].total() + 1; used > a.rosterListHeight() { // +1: the count row
+		t.Errorf("the window and its count row take %d rows, the list under the bar has %d", used, a.rosterListHeight())
 	}
 	if countText(a) == "" {
 		t.Error("a roster taller than its rows draws no count row")

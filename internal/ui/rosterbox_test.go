@@ -1,8 +1,8 @@
 package ui
 
 // Each roster section is a box: the team's header is its top edge, the members
-// stand between walls, and a closing row sits under the last one. The loose agents
-// under the pinned `all` are one too.
+// stand between walls, and a closing row sits under the last one. The agents with
+// no team are one too, under `all`, headed `no team`.
 
 import (
 	"strings"
@@ -57,7 +57,8 @@ func TestEverySectionIsABoxAtTheSidebarWidth(t *testing.T) {
 		kind func(string) bool
 		text string
 	}{
-		{isWallRow, "bea"}, {isWallRow, "alex"}, {isFooter, ""}, {nil, ""},
+		{func(l string) bool { return isPlainRule(l, core.BroadcastName) }, "all"},
+		{isTopEdge, unteamedLabel}, {isWallRow, "bea"}, {isWallRow, "alex"}, {isFooter, ""}, {nil, ""},
 		{isTopEdge, "backend"}, {isWallRow, "thea"}, {isWallRow, "john"}, {isFooter, ""}, {nil, ""},
 		{isTopEdge, "frontend"}, {isWallRow, "mara"}, {isWallRow, "omar"}, {isWallRow, "lena"}, {isFooter, ""}, {nil, ""},
 		{isTopEdge, "qa"}, {isWallRow, "ruth"}, {isFooter, ""},
@@ -109,7 +110,7 @@ func TestATeamNameWiderThanTheEdgeIsCutWithAnEllipsis(t *testing.T) {
 	}
 }
 
-// With no team at all the roster is the one box under `all`.
+// With no team at all the roster is the one `no team` box under `all`.
 func TestAFleetWithNoTeamsIsOneBoxUnderAll(t *testing.T) {
 	var sessions []rpc.SessionStatus
 	for _, name := range []string{"alex", "thea", "john"} {
@@ -117,23 +118,27 @@ func TestAFleetWithNoTeamsIsOneBoxUnderAll(t *testing.T) {
 	}
 	lines := rosterLines(gapFleet(t, sessions...), "", noSubsOf, boxedWidth, 10)
 
+	const above = 2 // the all rule, then the box's own edge
+	if !isPlainRule(strings.TrimRight(lines[0], " "), core.BroadcastName) || !isTopEdge(strings.TrimRight(lines[1], " ")) || !strings.Contains(lines[1], unteamedLabel) {
+		t.Errorf("rows 0-1 are %q and %q, want all, then the no team box's top edge:\n%s", lines[0], lines[1], strings.Join(lines, "\n"))
+	}
 	for i, want := range []string{"alex", "thea", "john"} {
-		if !isWallRow(strings.TrimRight(lines[i], " ")) || !strings.Contains(lines[i], want) {
-			t.Errorf("row %d is %q, want %s between walls:\n%s", i, lines[i], want, strings.Join(lines, "\n"))
+		if !isWallRow(strings.TrimRight(lines[above+i], " ")) || !strings.Contains(lines[above+i], want) {
+			t.Errorf("row %d is %q, want %s between walls:\n%s", above+i, lines[above+i], want, strings.Join(lines, "\n"))
 		}
 	}
-	if !isFooter(lines[3]) {
-		t.Errorf("row 3 is %q, want the box closed under its last member:\n%s", lines[3], strings.Join(lines, "\n"))
+	if !isFooter(lines[above+3]) {
+		t.Errorf("row %d is %q, want the box closed under its last member:\n%s", above+3, lines[above+3], strings.Join(lines, "\n"))
 	}
 }
 
 // What each item draws is what rowsForRow says: the footer is a row of the last
 // member's block, and only of the last.
 func TestRowsForRowCountsTheFooterOfALastMemberOnly(t *testing.T) {
-	// alex ends the loose run, thea opens backend, john ends it, mara is frontend's
-	// only member: row + footer, then gap + header + row, row + footer, and gap +
-	// header + row + footer.
-	want := map[string]int{"alex": 2, "thea": 3, "john": 2, "mara": 4}
+	// alex is the whole no-team box, thea opens backend, john ends it, mara is
+	// frontend's only member: header + row + footer, then gap + header + row, row +
+	// footer, and gap + header + row + footer. The all item has no agent: its one row.
+	want := map[string]int{"": 1, "alex": 3, "thea": 3, "john": 2, "mara": 4}
 	f := (Fleet{}).WithStatus(&rpc.Status{
 		Teams: []string{"backend", "frontend"},
 		Sessions: []rpc.SessionStatus{
@@ -248,26 +253,6 @@ func TestTheLastWindowEndsOnTheFooter(t *testing.T) {
 	}
 }
 
-// The pinned `all` is the loose box's top edge, one row, and a click on it picks
-// the channel.
-func TestThePinnedAllIsTheLooseBoxTopEdge(t *testing.T) {
-	agents := boxFleet(t)
-	out := strings.Split(stripANSI((Roster{}).Column(agents, noSubsOf, boxedWidth, 20, "")), "\n")
-
-	if !isTopEdge(strings.TrimRight(out[0], " ")) || !strings.Contains(out[0], " all ") || ansi.StringWidth(strings.TrimRight(out[0], " ")) != boxedWidth {
-		t.Errorf("the pinned row is %q, want `all` in a top edge %d wide", out[0], boxedWidth)
-	}
-	if !isWallRow(strings.TrimRight(out[1], " ")) || !strings.Contains(out[1], "bea") {
-		t.Errorf("row 1 is %q, want the first loose agent between walls", out[1])
-	}
-	if spot, ok := (Roster{}).Hit(agents, noSubsOf, boxedWidth, 20, 0); !ok || spot.header != core.BroadcastName {
-		t.Errorf("a click on the pinned row resolves to (%+v, %v), want the all channel", spot, ok)
-	}
-	if spot, ok := (Roster{}).Hit(agents, noSubsOf, boxedWidth, 20, 1); !ok || spot.agent.Name != "bea" {
-		t.Errorf("a click on row 1 resolves to (%+v, %v), want bea", spot, ok)
-	}
-}
-
 // The box wears its channel's colour - the accent while it is picked, muted
 // otherwise - in its walls and closing row as in its edge. Every box is held to
 // its own state, with each channel picked in turn, so a box that ignored the pick
@@ -278,11 +263,11 @@ func TestTheBoxWearsItsChannelsState(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	agents := boxFleet(t)
 	rule := "╰" + strings.Repeat("─", boxedWidth-2) + "╯"
-	boxes := []string{"", "backend", "frontend", "qa"}  // top to bottom: all's box, then each team's
+	boxes := []string{"", "backend", "frontend", "qa"}  // top to bottom: the no-team box (""), then each team's
 	members := []string{"alex", "john", "omar", "ruth"} // one in each
 
 	for _, picked := range boxes {
-		out := (Roster{}).Column(agents, noSubsOf, boxedWidth, 40, picked)
+		out := (Roster{channel: picked}).View(agents, noSubsOf, boxedWidth, 40)
 		lines, plain := strings.Split(out, "\n"), strings.Split(stripANSI(out), "\n")
 		var closing []string
 		for i, l := range plain {
@@ -295,7 +280,7 @@ func TestTheBoxWearsItsChannelsState(t *testing.T) {
 		}
 		for i, box := range boxes {
 			want := HintStyle
-			if box == picked {
+			if box != "" && box == picked { // the no-team box is no channel: never lit
 				want = AccentStyle
 			}
 			if !strings.Contains(closing[i], want.Render(rule)) {
@@ -321,7 +306,7 @@ func TestTheCursorOnAHeaderBoldsTheNameAndNotTheBox(t *testing.T) {
 	agents := boxFleet(t)
 	rule := "╰" + strings.Repeat("─", boxedWidth-2) + "╯"
 
-	out := (Roster{Header: "frontend"}).Column(agents, noSubsOf, boxedWidth, 40, "backend")
+	out := (Roster{Header: "frontend", channel: "backend"}).View(agents, noSubsOf, boxedWidth, 40)
 	lines, plain := strings.Split(out, "\n"), strings.Split(stripANSI(out), "\n")
 
 	edge := lines[rowContaining(plain, " frontend ")]
@@ -367,7 +352,7 @@ func TestALongNameIsCutInsideTheWallsWithItsBadgeKept(t *testing.T) {
 	agents := []Agent{{ID: "s1", Name: strings.Repeat("n", 30), State: rpc.StateIdle, Unread: 7}}
 	lines := rosterLines(agents, "", noSubsOf, boxedWidth, 6)
 
-	row := strings.TrimRight(lines[0], " ")
+	row := strings.TrimRight(lines[2], " ") // under the all rule and the no-team box's edge
 	if !isWallRow(row) || !strings.HasSuffix(row, "7 │") || ansi.StringWidth(row) != boxedWidth {
 		t.Errorf("the long name's row is %q (%d columns), want it between walls ending in its badge", row, ansi.StringWidth(row))
 	}
@@ -379,11 +364,11 @@ func TestATokenCountDropsWhenTheBoxLeavesNoRoomForIt(t *testing.T) {
 	// "○ " + 12 + " ↓ 550" is 20 columns: it fits 23, not 19.
 	agents := []Agent{{ID: "s1", Name: "abcdefghijkl", State: rpc.StateWorking, TurnTokens: 550}}
 
-	if row := rosterLines(agents, "", noSubsOf, boxedWidth, 6)[0]; strings.Contains(row, tokenArrow) {
+	if row := rosterLines(agents, "", noSubsOf, boxedWidth, 6)[2]; strings.Contains(row, tokenArrow) { // under all and the box's edge
 		t.Errorf("the token count is drawn where the row has no room for it: %q", row)
 	}
 	short := []Agent{{ID: "s1", Name: "sydney", State: rpc.StateWorking, TurnTokens: 550}}
-	if row := rosterLines(short, "", noSubsOf, boxedWidth, 6)[0]; !strings.Contains(row, tokenArrow+" 550") {
+	if row := rosterLines(short, "", noSubsOf, boxedWidth, 6)[2]; !strings.Contains(row, tokenArrow+" 550") {
 		t.Errorf("the token count is missing from a row with room for it: %q", row)
 	}
 }

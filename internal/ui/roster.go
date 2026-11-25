@@ -38,6 +38,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/render"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -108,8 +109,8 @@ type Roster struct {
 	// the surface an operator stops a runaway agent from.
 	SelectedTask string
 
-	// Header is the channel header the cursor is on - core.BroadcastName for the
-	// pinned all, else a team - and "" on an agent. Never set beside Selected, so
+	// Header is the channel header the cursor is on - core.BroadcastName for
+	// all, else a team - and "" on an agent. Never set beside Selected, so
 	// every key that reads Selected finds no agent on a header.
 	Header string
 
@@ -119,6 +120,9 @@ type Roster struct {
 	// none is the row an empty column says, set on the drawn copy: what the search
 	// bar's filter found nothing to show. An empty fleet says nothing.
 	none string
+
+	// total is the roster's rows, set on the drawn copy for `all · N`; 0 draws a bare all.
+	total int
 
 	// view is where the window stands, set on the drawn copy (App.rosterDrawn)
 	// and zero on the App's own, which the seam and stopIndex compare whole.
@@ -168,11 +172,11 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	rows := sectionRows(agents)
 	w := r.window(rows, itemHeights(rows, subs), height)
 	lines := make([]string, 0, height)
-	if len(agents) == 0 && r.none != "" {
-		lines = append(lines, moreRow(r.none, width))
-	}
 	for _, item := range rows[w.from:w.to] {
 		lines = append(lines, r.rowLines(item, subs, width)...)
+	}
+	if len(agents) == 0 && r.none != "" { // the row that says why nothing is under all
+		lines = append(lines, moreRow(r.none, width))
 	}
 	// One item per agent, so the counts are agents the window did not reach, on
 	// the row window budgeted for them.
@@ -248,13 +252,16 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpo
 			continue
 		}
 		within := y - line
+		if item.all { // all's own one row picks the all channel
+			return rosterSpot{header: core.BroadcastName}, true
+		}
 		// The gap and the header lead the item and belong to no agent: a click on
-		// the header picks its channel and one on the gap nothing - the
-		// discriminator fable named. The agent's own rows follow them, which is why
-		// an agent is resolved only past item.lead(), and the box's closing row,
-		// under them, is no one's either.
+		// a team's header picks its channel, and one on the gap or on the no-team
+		// header nothing - the discriminator fable named. The agent's own rows follow
+		// them, which is why an agent is resolved only past item.lead(), and the
+		// box's closing row, under them, is no one's either.
 		if within < item.lead() {
-			if item.hasHeader() && within == item.lead()-1 {
+			if item.teamHeader() && within == item.lead()-1 {
 				return rosterSpot{header: item.header}, true
 			}
 			return rosterSpot{}, false

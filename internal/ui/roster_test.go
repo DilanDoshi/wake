@@ -97,6 +97,16 @@ func TestASidebarWithNoColumnDrawsNothingRatherThanAnEmptyColumn(t *testing.T) {
 	}
 }
 
+// looseRegion is the roster column as these tests were written about it: the agents
+// with no team and nothing above them. The column now opens on the all row and the
+// no-team header, so it is drawn two rows taller and those two taken off - the
+// agents' own rows are what is under test, and all and the header have tests of
+// their own (rosterall_test.go).
+func looseRegion(r Roster, agents []Agent, subs subsOf, width, height int) string {
+	rows := strings.Split(r.View(agents, subs, width, height+2), "\n")
+	return strings.Join(rows[2:], "\n")
+}
+
 func TestASidebarTallerThanTheFleetIsPaddedAndOneShorterIsCut(t *testing.T) {
 	many := make([]Agent, 30)
 	for i := range many {
@@ -132,7 +142,7 @@ func TestASidebarTallerThanTheFleetIsPaddedAndOneShorterIsCut(t *testing.T) {
 			State: rpc.StateWorking, Tool: "Read", ToolArg: fmt.Sprintf("pkg/file%d.go", i),
 		}
 	}
-	out := Roster{}.View(working, nil, rosterWidth, 7)
+	out := looseRegion(Roster{}, working, nil, rosterWidth, 7)
 	measureColumn(t, out, rosterWidth, 7)
 	flat := stripANSI(out)
 	if !strings.Contains(flat, "+3 below") {
@@ -165,7 +175,7 @@ func TestALongNameIsCutRatherThanWrappedOverTheAgentsBelowIt(t *testing.T) {
 		{ID: "s2", Name: "alex", State: rpc.StateBlocked},
 		{ID: "s3", Name: "jamie", State: rpc.StateIdle},
 	}
-	out := stripANSI(Roster{}.View(agents, nil, rosterWidth, 4)) // three rows and the box's closing one
+	out := stripANSI(looseRegion(Roster{}, agents, nil, rosterWidth, 4)) // three rows and the box's closing one
 	for _, name := range []string{"alex", "jamie"} {
 		if !strings.Contains(out, name) {
 			t.Errorf("a 35-character name pushed %s out of a 4-row sidebar: the long row wrapped instead of being cut, and took the rest of the fleet with it:\n%s", name, out)
@@ -187,7 +197,7 @@ func TestAPathIsCutToItsFileAndACommandIsNotMangled(t *testing.T) {
 		{"no separator", "Grep", "parseFrame", "parseFra…", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			out := stripANSI(Roster{}.View([]Agent{
+			out := stripANSI(looseRegion(Roster{}, []Agent{
 				{ID: "s1", Name: "syd", State: rpc.StateWorking, Tool: tc.tool, ToolArg: tc.arg},
 			}, nil,
 
@@ -211,7 +221,7 @@ func TestTheSidebarDrawsAgentsInTheOrderItWasGivenThem(t *testing.T) {
 		{ID: "s2", Name: "second", State: rpc.StateBlocked},
 		{ID: "s3", Name: "third", State: rpc.StateWorking},
 	}
-	out := stripANSI(Roster{}.View(agents, nil, rosterWidth, 4))
+	out := stripANSI(looseRegion(Roster{}, agents, nil, rosterWidth, 4))
 	if at, next := strings.Index(out, "first"), strings.Index(out, "second"); at < 0 || next < at {
 		t.Errorf("the sidebar re-ordered what it was handed - blocked floated to the top - so it and the room rank separately:\n%s", out)
 	}
@@ -223,7 +233,7 @@ func TestTheSidebarDrawsAgentsInTheOrderItWasGivenThem(t *testing.T) {
 // it.
 func TestAnAgentWhoseStateHasNotArrivedYetStillDrawsAGlyph(t *testing.T) {
 	for _, state := range []string{"", "a state from a later build"} {
-		out := stripANSI(Roster{}.View([]Agent{{ID: "s1", Name: "sydney", State: state}}, nil, rosterWidth, 2))
+		out := stripANSI(looseRegion(Roster{}, []Agent{{ID: "s1", Name: "sydney", State: state}}, nil, rosterWidth, 2))
 		row, _, _ := strings.Cut(out, "\n")
 		if row = inBox(row); !strings.HasPrefix(row, unknownGlyph+" sydney") {
 			t.Errorf("state %q drew %q, want a row beginning %q: a row with no glyph reads as an agent with no state", state, row, unknownGlyph+" sydney")
@@ -376,7 +386,7 @@ func TestTheCursorAndABlockedAgentAreDrawnDifferentlyFromEveryoneElse(t *testing
 		{ID: "blocked", Name: "two", State: rpc.StateBlocked},
 		{ID: "plain", Name: "three", State: rpc.StateIdle},
 	}
-	lines := strings.Split(Roster{Selected: "cursor"}.View(agents, nil, rosterWidth, 4), "\n")
+	lines := strings.Split(looseRegion(Roster{Selected: "cursor"}, agents, nil, rosterWidth, 4), "\n")
 	if len(lines) != 4 { // one line per agent, and the box's closing row
 		t.Fatalf("wanted one line per agent and the closing row, got %d", len(lines))
 	}
@@ -415,7 +425,7 @@ func TestARosterWithNoCursorDrawsNoCursor(t *testing.T) {
 // is cut rather than after. Truncating the assembled line drops the badge
 // first, every time, on exactly the rows that have one.
 func TestAnUnreadCountSurvivesANameTooLongForTheColumn(t *testing.T) {
-	out := stripANSI(Roster{}.View([]Agent{
+	out := stripANSI(looseRegion(Roster{}, []Agent{
 		{ID: "s1", Name: strings.Repeat("n", 30), State: rpc.StateIdle, Unread: 7},
 	}, nil,
 
@@ -432,7 +442,7 @@ func TestAnUnreadCountSurvivesANameTooLongForTheColumn(t *testing.T) {
 	// Two columns, not three: at three there is still one column left for the
 	// name and lipgloss truncates it correctly on its own, so the guard is
 	// never asked. The count and a space is exactly the column here.
-	narrow := stripANSI(Roster{}.View([]Agent{
+	narrow := stripANSI(looseRegion(Roster{}, []Agent{
 		{ID: "s1", Name: "sydney", State: rpc.StateIdle, Unread: 7},
 	}, nil,
 
@@ -446,7 +456,7 @@ func TestAnUnreadCountSurvivesANameTooLongForTheColumn(t *testing.T) {
 // which is thirty rows saying nothing in the space reserved for the one thing
 // the sidebar has to shout.
 func TestAnAgentWithNothingUnreadCarriesNoBadge(t *testing.T) {
-	out := stripANSI(Roster{}.View([]Agent{
+	out := stripANSI(looseRegion(Roster{}, []Agent{
 		{ID: "s1", Name: "sydney", State: rpc.StateIdle},
 	}, nil,
 

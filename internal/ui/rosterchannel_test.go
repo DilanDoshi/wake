@@ -1,6 +1,6 @@
 package ui
 
-// The roster's channel headers: a pinned `all` over every agent, and each team
+// The roster's channel headers: `all`, the list's first row, and each team
 // header, the top edge of its box, a place the cursor can stop, picked by ↵ or a click.
 
 import (
@@ -16,7 +16,8 @@ import (
 )
 
 func columnLines(r Roster, agents []Agent, width, height int, channel string) []string {
-	return strings.Split(stripANSI(r.Column(agents, noSubsOf, width, height, channel)), "\n")
+	r.channel = channel
+	return strings.Split(stripANSI(r.View(agents, noSubsOf, width, height)), "\n")
 }
 
 // isRule is whether a drawn row is a channel header naming name.
@@ -24,9 +25,9 @@ func isRule(line, name string) bool {
 	return strings.Contains(line, "─ "+name+" ─")
 }
 
-// The sidebar always opens on `all`, above the manager: with no team, with
-// teams, and with nobody, at exactly the column it was given.
-func TestTheRosterAlwaysOpensOnAllAboveTheManager(t *testing.T) {
+// The sidebar always opens on `all`, with the manager's box under it: with no team,
+// with teams, and with nobody, at exactly the column it was given.
+func TestTheRosterAlwaysOpensOnAll(t *testing.T) {
 	manager := rpc.SessionStatus{ID: "m", Name: core.ManagerName, State: rpc.StateIdle}
 	for name, sessions := range map[string][]rpc.SessionStatus{
 		"no teams": {manager, {ID: "s1", Name: "iris", State: rpc.StateIdle}},
@@ -35,20 +36,20 @@ func TestTheRosterAlwaysOpensOnAllAboveTheManager(t *testing.T) {
 	} {
 		agents := gapFleet(t, sessions...)
 		const width, height = 30, 12
-		out := Roster{}.Column(agents, noSubsOf, width, height, "")
+		out := Roster{}.View(agents, noSubsOf, width, height)
 		measureColumn(t, out, width, height)
 		lines := strings.Split(stripANSI(out), "\n")
 		if !isRule(lines[0], core.BroadcastName) {
 			t.Errorf("%s: row 0 is %q, want the all header", name, lines[0])
 		}
-		if len(agents) > 0 && !strings.Contains(lines[1], core.ManagerName) {
-			t.Errorf("%s: row 1 is %q, want the manager right under all", name, lines[1])
+		if len(agents) > 0 && (!strings.Contains(lines[1], unteamedLabel) || !strings.Contains(lines[2], core.ManagerName)) {
+			t.Errorf("%s: rows 1-2 are %q and %q, want the no team box with the manager in it under all", name, lines[1], lines[2])
 		}
 	}
-	if got := (Roster{}).Column(nil, noSubsOf, 30, 1, ""); !isRule(stripANSI(got), core.BroadcastName) || strings.Contains(got, "\n") {
+	if got := (Roster{}).View(nil, noSubsOf, 30, 1); !isRule(stripANSI(got), core.BroadcastName) || strings.Contains(got, "\n") {
 		t.Errorf("a one-row column drew %q, want the all header alone", got)
 	}
-	if got := (Roster{}).Column(nil, noSubsOf, 30, 0, ""); got != "" {
+	if got := (Roster{}).View(nil, noSubsOf, 30, 0); got != "" {
 		t.Errorf("a zero-row column drew %q", got)
 	}
 }
@@ -102,9 +103,9 @@ func TestTheWindowKeepsACursoredHeaderOnScreen(t *testing.T) {
 	}
 }
 
-// Every row Column draws is the row Hit names: the all header, a team header, an
-// agent, and nothing on a blank or the overflow count - across heights and
-// cursors, the click-lands-a-row-off class of bug.
+// Every row View draws is the row At names: the all header, a team header, an
+// agent, and nothing on a blank, the no-team header or the overflow count - across
+// heights and cursors, the click-lands-a-row-off class of bug.
 func TestEveryDrawnRowIsTheRowAClickHits(t *testing.T) {
 	agents := gapFleet(t, gapSessions()...)
 	cursors := []Roster{{}, {Header: core.BroadcastName}, {Selected: "s1"}, {Header: "backend"}, {Selected: "s3"}, {Header: "frontend"}, {Selected: "s4"}}
@@ -113,7 +114,7 @@ func TestEveryDrawnRowIsTheRowAClickHits(t *testing.T) {
 		for _, r := range cursors {
 			lines := columnLines(r, agents, 30, height, "")
 			for y, line := range lines {
-				spot, ok := r.Hit(agents, noSubsOf, 30, height, y)
+				spot, ok := r.At(agents, noSubsOf, 30, height, y)
 				drawnHeader := ""
 				for _, h := range headers {
 					if isRule(line, h) {
@@ -124,6 +125,10 @@ func TestEveryDrawnRowIsTheRowAClickHits(t *testing.T) {
 				case isFooter(strings.TrimRight(line, " ")):
 					if ok {
 						t.Errorf("height %d, cursor %+v, row %d is a box's closing row and hits %+v", height, r, y, spot)
+					}
+				case isTopEdge(strings.TrimRight(line, " ")) && strings.Contains(line, " "+unteamedLabel+" "):
+					if ok {
+						t.Errorf("height %d, cursor %+v, row %d is the no team header and hits %+v", height, r, y, spot)
 					}
 				case drawnHeader != "":
 					if !ok || spot.header != drawnHeader {
@@ -148,7 +153,8 @@ func TestTheSidebarMarksTheSelectedChannelAndTheCursor(t *testing.T) {
 	agents := gapFleet(t, gapSessions()...)
 	const width = 30
 	drawn := func(r Roster, channel, name string) string {
-		for _, l := range strings.Split(r.Column(agents, noSubsOf, width, 20, channel), "\n") {
+		r.channel = channel
+		for _, l := range strings.Split(r.View(agents, noSubsOf, width, 20), "\n") {
 			if isRule(stripANSI(l), name) {
 				return l
 			}
@@ -161,14 +167,15 @@ func TestTheSidebarMarksTheSelectedChannelAndTheCursor(t *testing.T) {
 	}
 	muted := func(name string) string { return edge(name, HintStyle, HintStyle) }
 	lit := func(name string) string { return edge(name, AccentStyle, AccentStyle) }
+	allRule := func(rule, text lipgloss.Style) string { return centredEdge("", "", core.BroadcastName, width, rule, text) } // all is a plain rule, no box
 	cases := []struct {
 		r             Roster
 		channel, name string
 		want          string
 	}{
-		{Roster{}, "", core.BroadcastName, lit(core.BroadcastName)},
+		{Roster{}, "", core.BroadcastName, allRule(AccentStyle, AccentStyle)},
 		{Roster{}, "", "backend", muted("backend")},
-		{Roster{}, "backend", core.BroadcastName, muted(core.BroadcastName)},
+		{Roster{}, "backend", core.BroadcastName, allRule(HintStyle, HintStyle)},
 		{Roster{}, "backend", "backend", lit("backend")},
 		{Roster{Header: "frontend"}, "backend", "frontend", edge("frontend", HintStyle, TextStyle.Bold(true))},
 		{Roster{Header: "backend"}, "backend", "backend", edge("backend", AccentStyle, AccentStyle.Bold(true))},

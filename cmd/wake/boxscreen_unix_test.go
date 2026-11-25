@@ -82,17 +82,21 @@ func TestTeamSectionsAreBoxesInTheRosterAndClicksFollowTheRows(t *testing.T) {
 	s.settle()
 
 	rows := sidebarRows(s.lines())[searchBarRows:]
-	for _, team := range []string{"all", "backend", "frontend"} {
+	// The agents with no team are a box headed `no team`; all above it is a plain rule.
+	for _, team := range []string{"no team", "backend", "frontend"} {
 		if !slices.ContainsFunc(rows, hasEdge(team)) {
 			t.Fatalf("no top edge for %s in the sidebar:\n%s", team, s.dump())
 		}
+	}
+	if s.allRow() < searchBarRows {
+		t.Fatalf("no all rule heads the sidebar:\n%s", s.dump())
 	}
 	for _, name := range []string{"w1", "w2", "w3"} {
 		if !slices.ContainsFunc(rows, hasMember(name)) {
 			t.Fatalf("%s is not drawn between its box's walls:\n%s", name, s.dump())
 		}
 	}
-	// One closing row for each of all's box, backend and frontend.
+	// One closing row for each of the no-team box, backend and frontend.
 	if n := len(slices.DeleteFunc(slices.Clone(rows), func(r string) bool { return !isClosing(r) })); n != 3 {
 		t.Errorf("the sidebar draws %d closing rows, want 3:\n%s", n, s.dump())
 	}
@@ -124,28 +128,38 @@ func TestTheBoxWearsItsChannelsColour(t *testing.T) {
 	teamedFleet(t, s)
 	s.settle()
 
-	// Pick backend: its edge is the row the click resolves to.
-	edge := boxRowOf(s, hasEdge("backend"))
-	s.click(boxDivider+8, edge)
-	s.settle()
-
 	wallAt := func(y int) vt10x.Color {
 		s.term.Lock()
 		defer s.term.Unlock()
 		return s.term.Cell(boxDivider+1, y).FG
 	}
-	wall := func(name string) vt10x.Color { return wallAt(boxRowOf(s, hasMember(name))) }
 	accent, muted := colourOf(t, ui.Accent.Dark), colourOf(t, ui.Muted.Dark)
+	// The no-team box is no channel: muted with all picked (the default) as well as with a team picked.
+	looseWall := func(when string) {
+		t.Helper()
+		edge := boxRowOf(s, hasEdge("no team"))
+		if edge < 0 {
+			t.Fatalf("no no-team box is drawn %s:\n%s", when, s.dump())
+		}
+		if got := wallAt(edge + 1); got != muted {
+			t.Errorf("%s the no-team box's wall is %#x, want the muted %#x.\n%s", when, got, muted, s.dump())
+		}
+	}
+	looseWall("with all picked")
+
+	// Pick backend: its edge is the row the click resolves to.
+	edge := boxRowOf(s, hasEdge("backend"))
+	s.click(boxDivider+8, edge)
+	s.settle()
+
+	wall := func(name string) vt10x.Color { return wallAt(boxRowOf(s, hasMember(name))) }
 	if got := wall("w1"); got != accent {
 		t.Errorf("backend is the picked channel and its wall is %#x, want the accent %#x.\n%s", got, accent, s.dump())
 	}
 	if got := wall("w3"); got != muted {
 		t.Errorf("frontend is not picked and its wall is %#x, want the muted %#x.\n%s", got, muted, s.dump())
 	}
-	// The loose agents' box under all is muted too, once another channel is picked.
-	if got := wallAt(boxRowOf(s, hasEdge("all")) + 1); got != muted {
-		t.Errorf("all is not picked and its box's wall is %#x, want the muted %#x.\n%s", got, muted, s.dump())
-	}
+	looseWall("with backend picked")
 }
 
 func TestAScrolledBoxRunsOffTheWindowAndTheLastWindowEndsOnAClosingRow(t *testing.T) {

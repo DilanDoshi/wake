@@ -23,10 +23,10 @@ const (
 	// searchBarRows is the bar's height: a box around one line.
 	searchBarRows = 3
 
-	// searchListFloor is the rows the roster keeps under the bar and the pinned all: a
+	// searchListFloor is the rows the roster keeps under the bar: all and three more. A
 	// sidebar shorter than that draws no bar, since a filter with no room to show
 	// what it found is worse than none.
-	searchListFloor = 3
+	searchListFloor = 4
 
 	sidebarSearchVerb = "sidebar search"
 	searchHint        = "search agents"
@@ -48,7 +48,7 @@ type SideSearch struct {
 // searchBarShown is whether the sidebar is drawn tall enough for its bar.
 func (a App) searchBarShown() bool {
 	return a.layout.ShowRoster && a.regions().Roster > 0 && !a.board.Up &&
-		a.rosterHeight() >= searchBarRows+allRows+searchListFloor
+		a.rosterHeight() >= searchBarRows+searchListFloor
 }
 
 // searchRows is the rows the bar takes off the top of the sidebar: none when it is not drawn.

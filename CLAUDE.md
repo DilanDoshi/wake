@@ -149,12 +149,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   the wheel moved away is brought home by the key, which does nothing else. **The cursor is an agent's id,
   not a row**, pinned from the first look, so a report that re-ranks the fleet cannot move `↵` onto another
   agent. `internal/ui/jumppicker.go`, `agentfind.go`.
-- **The sidebar's search bar** (owner's 2026-11-20 pick, D1 of the mockups): three rows atop the roster, over the pinned
-  `all`, drawn only where the sidebar has room for it and a list under it (`searchBarShown`). A click focuses it, closing
+- **The sidebar's search bar** (owner's 2026-11-20 pick, D1 of the mockups): three rows atop the roster, over its first
+  row (`all`), drawn only where the sidebar has room for it and a list under it (`searchBarShown`: seven rows, the bar's three
+  and four of list). A click focuses it, closing
   whatever else read the keys (`closeModalsExcept`, the one list `withFocus` shares); any other left press lets go
   (`App.press`). Typing, space and `⌫` edit the filter with the
-  jump picker's matcher and the sidebar narrows **in place** - the roster's own order, a team with no match gone, `all`
-  drawn as a rule over no box when no loose agent is under it (a filter's doing, and a roster of teams alone's) - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
+  jump picker's matcher and the sidebar narrows **in place** - the roster's own order, a team with no match gone, the `no team` box drawn only
+  while an agent with no team matches, `all · N` always (N is the whole roster) - with `N/M` beside it; `↑↓` and `⇧↑↓` walk the matches, `↵` `⌃B`
   `⌃D` open the cursored agent through `openedBy`, the jump box's one opener (an agent already drawn is only
   focused; a header picks its channel; a dispatch row opens its agent showing that dispatch), `esc` clears the
   filter and gives the keys back, and **`⌃C` only lets go of it** - the habit that cancels a search must not park the
@@ -429,18 +430,21 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
   `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
 - **The sidebar's sections are boxes** (owner's 2026-11-19 pick; the board keeps its dividers): a team's header is
-  the top edge, `│ … │` walls stand around its members and a `╰──╯` row closes under the last; the agents above the
-  first team are a box under the pinned `all`. A row has the column less four (19 at the default 23): a name is cut
+  the top edge, `│ … │` walls stand around its members and a `╰──╯` row closes under the last; the agents with no team are a box
+  of their own headed `no team`, a header that picks nothing (it is no channel, so no click target and no `⇧↑↓` stop, and a
+  space no team name can hold). It is never lit; the first row of the list is `all`, a plain rule, `all · N` (N is every
+  non-ended roster row, the manager and parked agents included, the filter aside: the strip's segments add up to it)
+  that scrolls like any row (owner's 2026-11-25 pick). A row has the column less four (19 at the default 23): a name is cut
   at the right wall and the unread badge stays, the token, goal, loop and workflow-count figures drop whole sooner
   and a tool argument is cut sooner (`Read(internal…)`). The edge,
-  walls and closing row wear the channel's state (accent while picked, muted). The closing row rides on the
+  walls and closing row wear the channel's state (accent while picked, muted; the no-team box's always muted). The closing row rides on the
   section's last item as the header does on its first (`rosterItem.footer`, `trail`), counted in `rowsForRow` and
   skipped by `At`, so a window cuts between items and a cut box runs on as walls with no edge. A drag copies the
   walls it covers; a double- or triple-click leaves them out. `internal/ui/rostersection.go`, `decisions.md`
   (2026-11-19).
 - **Over the right sidebar the wheel scrolls the roster** (owner's 2026-11-06 ask), only one taller than
-  its column; one that fits takes no wheel. An item a notch (an agent with its gap and team header, so a
-  header never parts from its member), held where the wheel left it: the selection never moves, and one
+  its column; one that fits takes no wheel. An item a notch (`all`, then an agent with its gap and
+  team header, so a header never parts from its member; the count row counts items), held where the wheel left it: the selection never moves, and one
   the held window does not draw takes no key - ⌃C, esc, ↵, ⌃D/⌃Y/⌃B, bare `/status`/`/mcp`/`/fork` - until it
   is drawn again, and says so (`rosterPickHidden`, the one place that rule lives, decided in Update's seam
   on a change, never per frame; nothing selected hides nothing, and the conversation holding the keys is
@@ -614,8 +618,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   daemon's resume line (`core.NoticeAutoResumed`) has no addressee and is no broadcast**: it is its own agent's
   thread's, so a narrowed room or a channel draws only its members' (`focusAdmits`).
 - **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
-  room's base, titled with the team, until the pinned `all` (at the sidebar's top, the default) or another
-  team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
+  room's base, titled with the team, until `all` (the sidebar's first row, the default) or another
+  team is picked, and the pick stands while `all` is scrolled off; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
   members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
   narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
   line is the channel's; a team left with no header returns the window to all. **Your own line always draws in

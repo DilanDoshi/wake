@@ -85,7 +85,8 @@ func (a App) assembleFrame() string {
 		if len(listed) == 0 && a.activeQuery() != "" {
 			roster.none = searchNoMatch
 		}
-		side := roster.Column(a.fleet.sectioned(listed), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight(), a.room.channel)
+		roster.channel, roster.total = a.room.channel, len(agents) // the picked channel, and `all · N`: every roster row, the filter aside
+		side := roster.View(a.fleet.sectioned(listed), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterListHeight())
 		if a.searchBarShown() {
 			side = a.searchBar(r.Roster-dividerWidth, len(listed), len(agents)) + "\n" + side // the filter over it; see sidebarsearch.go
 		}
