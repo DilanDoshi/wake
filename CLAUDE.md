@@ -872,8 +872,8 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.329** (re-checked 2026-11-20: every flag below but `--permission-prompt-tool` has
-its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226–2.1.329. A fixture's `init` names its version. Findings notes:
+**Verified against v2.1.332** (re-checked 2026-11-25: every flag below but `--permission-prompt-tool` has
+its own `--help` row, identical to 2.1.330's, and Wake's own argv ran live); corpus captured at 2.1.226–2.1.329. A fixture's `init` names its version. Findings notes:
 `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -944,6 +944,8 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
 - **2.1.322 prints `system/ui_invalidate` before every session's `init`** (after `session_title_changed`,
   which `--name` brings), its `event` a string where `stream_event`'s is an object, so
   `wireFrame.StreamEvent` stays raw and a stream event it cannot read is nothing (`ui-invalidate.jsonl:2`).
+- **2.1.332 adds `system/commands_changed`** (the whole command list, seen once in the audit's runs) **and
+  `init.sandbox_enabled`**: both decode as generic system chatter and nothing reads them (recorded live, no fixture).
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id. Claude Code offers those tools by default only on
   older models (its docs: "Task tool availability"), so a current-model agent keeps no list and its working label is a
   pool word; `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the operator's environment brings them back, which Wake passes through
