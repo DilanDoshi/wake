@@ -56,7 +56,7 @@ func TestAPressOnTheViewTakesAnEarlierHighlightDown(t *testing.T) {
 	a := runOpen(t)
 	a.layout.ShowRoster = true
 	a = a.resizePanes()
-	// The pinned `all` header: an agent's row is a drag source now, not text.
+	// The `all` row: an agent's row is a drag source now, not text.
 	a, _ = drag(a, rosterLeft(a), rosterLeft(a)+5, searchBarRows) // under the search bar
 	if a.sel.empty() {
 		t.Fatal("the roster drag highlighted nothing, so its going proves nothing")

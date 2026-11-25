@@ -34,7 +34,7 @@ const (
 
 	// pickFilteredOut is the refusal for a selection the filter hides, the sibling of
 	// pickOutOfView for one the wheel scrolled away.
-	pickFilteredOut = "the agent selected in the sidebar is filtered out. esc in the search bar clears the filter, ⇧↑↓ moves on from it"
+	pickFilteredOut = "the row selected in the sidebar is filtered out. esc in the search bar clears the filter, ⇧↑↓ moves on from it"
 
 	barKeys = "type to filter · ↑↓ ⇧↑↓ move · ↵ open · ⌃B below · ⌃D here · esc clear · ⌃C let go"
 )

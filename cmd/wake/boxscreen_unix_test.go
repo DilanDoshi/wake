@@ -183,14 +183,17 @@ func TestAScrolledBoxRunsOffTheWindowAndTheLastWindowEndsOnAClosingRow(t *testin
 	if count < 1 || !isClosing(side[count-1]) {
 		t.Errorf("the last window is not a closing row then the count:\n%s", s.dump())
 	}
-	// And at the top the window's first rows are the box's own, under the pinned edge.
+	// And at the top the window's first rows are all, then the no-team box's own.
 	for range 12 {
 		s.send(sidebarWheel(false, boxCols, 4))
 	}
 	top := sidebarRows(s.awaitFrame("the roster scrolled to its top", func(rows []string) bool {
 		return !strings.Contains(strings.Join(rows, "\n"), "above")
 	}))
-	if len(top) < 2 || !strings.HasPrefix(top[0], "╭") || !strings.HasPrefix(top[1], "│ ") {
-		t.Errorf("the roster's top is %q then %q, want all's top edge over a member:\n%s", top[0], top[1], s.dump())
+	// Under the search bar's own three rows: the all rule, the box's top edge, a member.
+	if len(top) < searchBarRows+3 || !strings.Contains(top[searchBarRows], "─ all · ") ||
+		!strings.HasPrefix(top[searchBarRows+1], "╭") || !strings.HasPrefix(top[searchBarRows+2], "│ ") {
+		t.Errorf("the roster's top is %q, %q, %q, want all, then the no team box's top edge over a member:\n%s",
+			top[searchBarRows], top[searchBarRows+1], top[searchBarRows+2], s.dump())
 	}
 }

@@ -519,7 +519,7 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 					}
 					// A window that follows the cursor draws it whenever its block fits
 					// beside the count; a taller one is the count alone.
-					if c := r.cursorRow(rows); !held && c >= 0 && rowsForRow(rows[c], teamedSubs) < height &&
+					if c := r.cursorRow(rows); !held && c >= 0 && !rows[c].all && rowsForRow(rows[c], teamedSubs) < height &&
 						!strings.Contains(stripANSI(out), rows[c].agent.Name+" ") {
 						t.Errorf("%s: the window follows the cursor and does not draw %s:\n%s", where, rows[c].agent.Name, stripANSI(out))
 					}
@@ -529,8 +529,8 @@ func TestEveryWindowDrawsWhatAClickHits(t *testing.T) {
 	}
 }
 
-// The pinned all is always drawn, so a cursor on it counts however the wheel
-// holds the window; a team header the wheel scrolled away picks no channel.
+// all is a row like any: a cursor on it, or on a team's header, the wheel scrolled
+// away takes no key and picks no channel, and counts again once it is drawn.
 func TestHeadersUnderTheWheel(t *testing.T) {
 	a := wheelFleet(t)
 	a, _ = keyVia(a, tea.KeyShiftDown)

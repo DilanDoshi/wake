@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -241,9 +242,9 @@ func TestAFilteredRosterKeepsAllAndDrawsTheNoTeamBoxOnlyForALooseMatch(t *testin
 				shown = append(shown, a)
 			}
 		}
-		lines := rosterLinesOf(Roster{total: 3}, f.sectioned(shown))
-		if !strings.Contains(lines[0], "all · 3") {
-			t.Errorf("%s: the first row is %q, want `all · 3`, the whole roster's count", name, lines[0])
+		lines := rosterLinesOf(Roster{}, f.sectioned(shown)) // the whole roster's count under a filter is App-level: TestAllKeepsTheWholeCountUnderAFilter
+		if !isPlainRule(strings.TrimRight(lines[0], " "), core.BroadcastName) {
+			t.Errorf("%s: the first row is %q, want the all rule", name, lines[0])
 		}
 		if !isTopEdge(strings.TrimRight(lines[1], " ")) || !strings.Contains(lines[1], tc.boxes[0]) {
 			t.Errorf("%s: row 1 is %q, want the %s box's edge", name, lines[1], tc.boxes[0])
@@ -426,5 +427,47 @@ func TestTheBarStillNeedsSevenRowsOfSidebar(t *testing.T) {
 	}
 	if smallest != 7 {
 		t.Errorf("the bar first draws with a sidebar %d rows tall, want 7", smallest)
+	}
+}
+
+// `no team` must never be a team a window could be told to pick: a real team called
+// that would be lit as a channel while the no-team box is drawn under the same name.
+func TestTheNoTeamLabelCanNeverBeARealTeamsName(t *testing.T) {
+	if got, err := rpc.NormalizeTeam(unteamedLabel); err == nil {
+		t.Errorf("%q is a team name (%q): the no-team box would collide with it", unteamedLabel, got)
+	}
+}
+
+// The channel the room shows reaches the drawn sidebar: its box is lit (and its name bold,
+// the cursor being on the header a pick leaves it on), all and the no-team box are muted -
+// through the App, where the picked channel is forwarded.
+func TestTheSidebarLightsThePickedChannelsBoxAndNeitherAllNorNoTeam(t *testing.T) {
+	forceColour(t)
+	a := wheelFleet(t).selectChannel("backend")
+	width := a.regions().Roster - dividerWidth
+	from := a.layout.Width - width
+	var rows []string
+	for _, row := range strings.Split(a.View(), "\n") {
+		rows = append(rows, ansi.Cut(row, from, a.layout.Width))
+	}
+	litRow := func(label string) string {
+		for _, row := range rows {
+			if strings.Contains(stripANSI(row), label) {
+				return row
+			}
+		}
+		t.Fatalf("no sidebar row draws %q:\n%s", label, strings.Join(sideColumn(a), "\n"))
+		return ""
+	}
+	n := strconv.Itoa(len(a.fleet.OnRoster()))
+	for label, want := range map[string]string{
+		"─ all · " + n + " ─": centredEdge("", "", "all · "+n, width, HintStyle, HintStyle),
+		" no team ":           centredEdge(boxBorder.TopLeft, boxBorder.TopRight, unteamedLabel, width, HintStyle, HintStyle),
+		" backend ":           centredEdge(boxBorder.TopLeft, boxBorder.TopRight, "backend", width, AccentStyle, AccentStyle.Bold(true)),
+		" frontend ":          centredEdge(boxBorder.TopLeft, boxBorder.TopRight, "frontend", width, HintStyle, HintStyle),
+	} {
+		if got := litRow(label); !strings.Contains(got, want) {
+			t.Errorf("the %q row is %q, want it drawn as %q", label, got, want)
+		}
 	}
 }

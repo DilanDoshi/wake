@@ -167,7 +167,9 @@ func TestTheSidebarMarksTheSelectedChannelAndTheCursor(t *testing.T) {
 	}
 	muted := func(name string) string { return edge(name, HintStyle, HintStyle) }
 	lit := func(name string) string { return edge(name, AccentStyle, AccentStyle) }
-	allRule := func(rule, text lipgloss.Style) string { return centredEdge("", "", core.BroadcastName, width, rule, text) } // all is a plain rule, no box
+	allRule := func(rule, text lipgloss.Style) string {
+		return centredEdge("", "", core.BroadcastName, width, rule, text)
+	} // all is a plain rule, no box
 	cases := []struct {
 		r             Roster
 		channel, name string

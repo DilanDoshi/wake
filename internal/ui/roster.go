@@ -114,7 +114,7 @@ type Roster struct {
 	// every key that reads Selected finds no agent on a header.
 	Header string
 
-	// channel is the picked channel ("" for all), set by Column for the draw.
+	// channel is the picked channel ("" for all), set where the sidebar is drawn.
 	channel string
 
 	// none is the row an empty column says, set on the drawn copy: what the search
@@ -178,7 +178,7 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	if len(agents) == 0 && r.none != "" { // the row that says why nothing is under all
 		lines = append(lines, moreRow(r.none, width))
 	}
-	// One item per agent, so the counts are agents the window did not reach, on
+	// The counts are the items - all and the agents - the window did not reach, on
 	// the row window budgeted for them.
 	if above, below := w.from, len(rows)-w.to; above+below > 0 {
 		lines = append(lines, moreRow(countLine(above, below, width), width))
@@ -232,7 +232,7 @@ func rowsFor(a Agent, subs []Task) int {
 func idleActivityShown(a Agent) bool { return a.Tool == "" && (a.goal.Active || a.loop.Active) }
 
 // At is the agent whose rows include line y, counted the way View lays them, or
-// the team header drawn on it.
+// the all row or the team header drawn on it.
 //
 // It starts from the same window View draws, so a click on a scrolled column
 // lands on the agent under the pointer rather than on the one that would have
