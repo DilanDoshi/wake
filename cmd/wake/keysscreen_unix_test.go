@@ -487,6 +487,7 @@ func TestAnUnaddressedRoomDraftIsRefusedWithTheManagerParked(t *testing.T) {
 
 	s.send("\x17") // ⌃W
 	s.await("group chat")
+	s.awaitManagerRow()
 	s.send("/manager\r")
 	s.await("▪ manager")
 
@@ -516,7 +517,7 @@ func TestManagerStopEndsTheManagerRatherThanParkingIt(t *testing.T) {
 	s.send("\x17") // ⌃W
 	s.await("group chat")
 	// The seated manager, before anything is done to it.
-	s.await("manager")
+	s.awaitManagerRow()
 
 	s.send("/manager-stop\r")
 
