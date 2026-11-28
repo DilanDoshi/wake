@@ -29,7 +29,6 @@ import (
 // is the one visible difference from the DM's header.
 const (
 	roomTitle            = "group chat"
-	roomRetentionEvents  = 20_000
 	roomReclaimedHistory = "… older room history reclaimed"
 )
 
@@ -163,12 +162,14 @@ type Room struct {
 	// also stop being rows mouse.go's startSelection has to know about.
 	menu string
 
-	// clearedAt is when /clear last emptied this room: restored history older
-	// than it stays out. reminded is the thousands the room has said it holds,
-	// and earlier is ↑'s prompts from before the clear. See roomclear.go.
+	// clearedAt is when /clear last emptied this room, or the time of the newest
+	// restored line a trim dropped: restored history no newer than it stays out.
+	// earlier is ↑'s prompts from before the clear. See roomclear.go. trimmed is
+	// how many messages the room has dropped to stay small and not yet said so.
+	// See roomtrim.go.
 	clearedAt time.Time
-	reminded  int
 	earlier   []string
+	trimmed   int
 
 	// chrome is what chromeHeight returned when the transcript was last sized,
 	// which is DM.chrome's rule read for this pane.
@@ -377,8 +378,9 @@ func (r Room) appendLine(line roomLine) Room {
 		r.said = r.said.append(line)
 	}
 	r.runs = runs
-	if drop := r.said.count() - roomRetentionEvents; drop > 0 {
+	if drop := roomTrimCount(r.said.count()); drop > 0 {
 		r = r.reclaimOldest(drop)
+		r.trimmed += drop
 	}
 	if following {
 		r.tr = r.tr.toBottom()
@@ -425,18 +427,21 @@ func (r Room) Before(earlier []roomLine) Room {
 	// Re-derived from every transcript rather than from this batch. See raw.
 	hist := collapseBroadcasts(r.raw, &r.nextLineID)
 	hist, histCounts := foldHist(hist)
+	hist = r.sinceClear(hist) // what a clear or a trim let go of stays gone
 
 	live := held[min(r.hist, len(held)):]
 	liveStart := r.liveLineStart(held)
 	combined := append(append(make([]roomLine, 0, len(hist)+len(live)), hist...), live...)
-	drop := max(len(combined)-roomRetentionEvents, 0)
-	liveDrop := max(drop-len(hist), 0)
+	// Only history goes: the live lines were all seen, and being under the cap
+	// they leave the room under it once the history is gone, so a restore never
+	// costs one.
+	drop := min(roomTrimCount(len(combined)), len(hist))
 	combined = append([]roomLine(nil), combined[drop:]...)
-	r.hist = max(len(hist)-drop, 0)
+	r.hist = len(hist) - drop
 	r.runs = openRuns(combined[r.hist:], r.hist)
 	r.counts = keptOn(unionCounts(keptOn(r.counts, live), histCounts), combined)
 	r.reclaimed = r.reclaimed || drop > 0
-	// A merge both drops the oldest lines and re-derives history ids, so an open
+	// A merge both drops the oldest history and re-derives its ids, so an open
 	// kept on a line that left - or whose id changed - would linger. Keep only
 	// opens whose block is still in the room, which bounds the set to what is
 	// retained. On the rebuild path, not the per-event one, so its cost rides
@@ -445,8 +450,8 @@ func (r Room) Before(earlier []roomLine) Room {
 	blocks := renderRoom(r, combined)
 
 	base := 0
-	if liveDrop < len(live) {
-		base = liveStart + roomRenderedLines(live[:liveDrop]) - roomRenderedLines(combined[:r.hist])
+	if len(live) > 0 {
+		base = liveStart - roomRenderedLines(combined[:r.hist])
 		if !r.reclaimed {
 			base -= len(blockLines(roomBanner(r.blockWidth()), true))
 		}
@@ -492,6 +497,13 @@ func (r Room) reclaimOldest(drop int) Room {
 		moves = append(moves, roomLineMove{from: oldFirst, to: cut - 1, rows: 1})
 	}
 	r.said = r.said.trimBefore(r.said.first() + drop)
+	// Before re-derives history from raw, which a trim leaves alone: what went stays
+	// out, as after a clear, or the next restore would bring it back above the tail.
+	if gone := min(drop, r.hist); gone > 0 {
+		if at := evicted[gone-1].ev.At; at.After(r.clearedAt) {
+			r.clearedAt = at
+		}
+	}
 	r.hist = max(r.hist-drop, 0)
 	if !r.reclaimed {
 		r.reclaimed = true

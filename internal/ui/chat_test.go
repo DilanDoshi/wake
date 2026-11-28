@@ -46,6 +46,11 @@ var roomScaleAgent = Agent{ID: "s1", Name: "sydney", Label: "auth-fix"}
 func roomScaleEvent() core.Event { return core.Event{Kind: core.KindTurnEnd} }
 
 // roomOf returns a Room that has already been fed n events.
+// roomScaleLong is the fullest a room is measured at: the samples of an append's
+// cost bring it to fullRoom and stop short of the trim, which is a chunk's cost
+// (TestATrimAllocatesPerDroppedEventNotPerWindow) and not an append's.
+const roomScaleLong = fullRoom - scaleSamples
+
 func roomOf(n int) Room {
 	r := NewRoom().SetSize(scaleWidth, scaleHeight)
 	for range n {
@@ -208,23 +213,23 @@ func TestAnArrivingMessageDoesNotYankAScrolledReaderToTheBottom(t *testing.T) {
 // to the conversation makes the whole app slower the longer it runs.
 func TestAppendCostsTheSameWhateverTheConversationHasCostSoFar(t *testing.T) {
 	short := roomAppendCost(roomOf(scaleShort))
-	long := roomAppendCost(roomOf(scaleLong))
+	long := roomAppendCost(roomOf(roomScaleLong))
 
-	t.Logf("one append: %v at %d events, %v at %d (%.2fx)", short, scaleShort, long, scaleLong, float64(long)/float64(short))
+	t.Logf("one append: %v at %d events, %v at %d (%.2fx)", short, scaleShort, long, roomScaleLong, float64(long)/float64(short))
 	if ratio := float64(long) / float64(short); ratio > maxCostRatio {
 		t.Errorf("one append costs %v at %d events and %v at %d - %.1fx for %dx the conversation, want at most %.1fx",
-			short, scaleShort, long, scaleLong, ratio, scaleLong/scaleShort, maxCostRatio)
+			short, scaleShort, long, roomScaleLong, ratio, roomScaleLong/scaleShort, maxCostRatio)
 	}
 }
 
 func TestAppendAllocatesTheSameWhateverTheConversationHasCostSoFar(t *testing.T) {
 	short := roomBytesPerAppend(roomOf(scaleShort))
-	long := roomBytesPerAppend(roomOf(scaleLong))
+	long := roomBytesPerAppend(roomOf(roomScaleLong))
 
-	t.Logf("one append: %d bytes at %d events, %d at %d (%.2fx)", short, scaleShort, long, scaleLong, float64(long)/float64(short))
+	t.Logf("one append: %d bytes at %d events, %d at %d (%.2fx)", short, scaleShort, long, roomScaleLong, float64(long)/float64(short))
 	if ratio := float64(long) / float64(short); ratio > maxAllocRatio {
 		t.Errorf("one append allocates %d bytes at %d events and %d at %d - %.1fx for %dx the conversation, want at most %.1fx",
-			short, scaleShort, long, scaleLong, ratio, scaleLong/scaleShort, maxAllocRatio)
+			short, scaleShort, long, roomScaleLong, ratio, roomScaleLong/scaleShort, maxAllocRatio)
 	}
 }
 

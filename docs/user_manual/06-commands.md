@@ -176,8 +176,9 @@ expanded — nothing else on the way from a composer would do it.
 `/model opus`, `/clear`, `/compact`, `/context`, and every command you have in `.claude/commands/`.
 The one exception is a bare `/clear` typed in the room: it empties the group chat in this window and
 reaches no agent. In a conversation, and as `@name /clear` in the room, `/clear` still clears that
-agent's conversation. A room heavy with messages says so every 1,000, briefly, in the notice row.
-A window opened later rebuilds the room from the transcripts, so the clear is this window's.
+agent's conversation. The room keeps itself light: when it holds 3,000 messages it drops the oldest 1,000
+and says so, briefly, in the notice row. No agent or conversation is touched.
+A window opened later rebuilds the room from the transcripts, so the clear and the trim are this window's.
 Wake claims those words and passes the rest through untouched, and there is a guard whose whole job
 is to keep it that way. If Wake ever swallowed one of yours you would lose a Claude Code feature
 with no error, which is why the guard is over *what Wake must not claim* rather than over what it does.

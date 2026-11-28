@@ -132,7 +132,7 @@ const (
 )
 
 // renderRoomBlock is the one seam through which the Room renders an event. A
-// retention test counts it because one hidden call here can put 20,000 Markdown
+// retention test counts it because one hidden call here can put 3,000 Markdown
 // events back through glamour outside the actual full-room pass.
 var renderRoomBlock = roomBlock
 

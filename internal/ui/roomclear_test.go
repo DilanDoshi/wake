@@ -1,8 +1,7 @@
 package ui
 
 // A bare /clear in the room empties the group chat in this window and touches
-// nothing else: no agent, no conversation, no frame to the daemon. And the room
-// says, briefly, each time it passes another thousand messages.
+// nothing else: no agent, no conversation, no frame to the daemon.
 
 import (
 	"maps"
@@ -10,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -156,61 +153,6 @@ func TestClearKeepsThePromptHistory(t *testing.T) {
 	}
 }
 
-// Every thousand messages the room says so, once, in a notice that times out;
-// a clear starts the count again.
-func TestTheRoomRemindsEveryThousandMessages(t *testing.T) {
-	ticks := recordNoticeTicks(t)
-	a := roomWithHistoryAsked(t)
-	fill := func(a App, n int) App {
-		for range n {
-			a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1", ""))
-		}
-		return a
-	}
-	want := roomFullNotice(1)
-
-	a = fill(a, roomReminderEvery-1)
-	if strings.Contains(noticeNow(), want) {
-		t.Fatalf("reminded at %d messages", roomReminderEvery-1)
-	}
-	a = fill(a, 1)
-	if got := noticeNow(); !strings.Contains(got, want) {
-		t.Fatalf("at %d messages the notice reads %q, want %q", roomReminderEvery, got, want)
-	}
-	if !strings.Contains(want, "1,000") || !strings.Contains(want, "/clear") {
-		t.Errorf("the reminder %q does not name the count and /clear", want)
-	}
-
-	// Temporary: it arms a linger and the expiry clears it.
-	var m tea.Model = a
-	m, _ = m.Update(nudge{})
-	if len(*ticks) == 0 {
-		t.Fatal("the reminder armed no linger, so it would stay up")
-	}
-	m, _ = m.Update((*ticks)[len(*ticks)-1].msg)
-	if row := m.(App).noticeLine(); row != "" {
-		t.Errorf("the reminder outlived its linger: %q", row)
-	}
-	a = m.(App)
-
-	notice.Reset()
-	a = fill(a, roomReminderEvery-1)
-	if noticeNow() != "" {
-		t.Errorf("reminded again before the next thousand: %q", noticeNow())
-	}
-	a = fill(a, 1)
-	if got := noticeNow(); !strings.Contains(got, roomFullNotice(2)) {
-		t.Errorf("at 2,000 the notice reads %q", got)
-	}
-
-	a = submitRoom(t, a, "/clear")
-	notice.Reset()
-	fill(a, roomReminderEvery)
-	if got := noticeNow(); !strings.Contains(got, want) {
-		t.Errorf("after a clear the count did not start again: %q", got)
-	}
-}
-
 // A room past its retention cap has a marker for the history it reclaimed; a
 // clear is a fresh room, so the marker goes with everything else.
 func TestClearingAReclaimedRoomDropsTheReclaimedMarker(t *testing.T) {
@@ -251,24 +193,6 @@ func TestAClearedSessionIsNotAskedForItsHistoryAgain(t *testing.T) {
 	a = submitRoom(t, a, "/clear")
 	if next := a.askRoomHistory("s1"); slices.Contains(next.roomAsk.pending, "s1") {
 		t.Error("a session the cleared room held lines for was asked for its history again")
-	}
-}
-
-// The reminder is advice about the room, so it waits while a conversation holds
-// the keys - /clear typed there would clear that agent's.
-func TestTheReminderWaitsForTheRoomToHoldTheKeys(t *testing.T) {
-	a := roomWithHistoryAsked(t)
-	a.focus = "s1"
-	for range roomReminderEvery {
-		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1", ""))
-	}
-	if strings.Contains(noticeNow(), "/clear") {
-		t.Fatalf("the reminder fired while a conversation held the keys: %q", noticeNow())
-	}
-	// Back to the room with nothing more arriving: the reminder owed is said now.
-	a = a.showRoom()
-	if got := noticeNow(); !strings.Contains(got, roomFullNotice(1)) {
-		t.Errorf("back in the room the reminder still did not show: %q", got)
 	}
 }
 

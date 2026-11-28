@@ -180,16 +180,22 @@ func assertOutsideNotice(t *testing.T, who, channel string, reported bool) {
 	}
 }
 
-// The send that brings the room to another thousand messages draws the room's
-// reminder too: the warning about this send is what the operator is left reading.
-func TestTheOutsideNoticeOutlastsTheRoomsReminder(t *testing.T) {
+// The send that brings the room to its cap makes the room announce its trim too:
+// the warning about this send is what the operator is left reading.
+func TestTheOutsideNoticeOutlastsTheRoomsTrimNotice(t *testing.T) {
 	a := threeTeamRoom(t).selectChannel("frontend")
-	for a.room.said.count() < roomReminderEvery-1 {
+	for a.room.said.count() < roomRetentionEvents-1 {
 		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@delta hi"}, "s3", "frontend"))
 	}
+	if a.room.reclaimed {
+		t.Fatal("precondition: the room trimmed before the send")
+	}
 	a = sendFrom(a, "frontend", "@backend ship it")
-	if a.room.reminded != 1 {
-		t.Fatalf("precondition: the send did not pass the reminder (reminded %d)", a.room.reminded)
+	if !a.room.reclaimed {
+		t.Fatal("precondition: the send did not bring the room to its cap")
+	}
+	if n := notice.Count(roomTrimNotice(roomTrimEvents)); n != 1 {
+		t.Fatalf("precondition: the trim was announced %d times, want once", n)
 	}
 	if got, want := noticeNow(), fmt.Sprintf(outsideChannel, "@backend", "frontend"); got != want {
 		t.Errorf("the notice reads %q, want %q", got, want)
@@ -206,7 +212,7 @@ func TestATypedInStampIsPrunedWhenItsLineIsReclaimed(t *testing.T) {
 		t.Fatalf("the send typed in frontend is not stamped and drawn there (%v)", r.typedIn)
 	}
 	held := r
-	for i := range wantRoomRetention + 5 {
+	for i := range roomRetentionEvents {
 		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
 	}
 	if len(r.typedIn) != 0 {

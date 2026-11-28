@@ -316,7 +316,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to, a.room.channel))
-	if !r.Broadcast { // after withRoom, whose /clear reminder would otherwise replace it
+	if !r.Broadcast { // after withRoom, whose trim notice would otherwise replace it
 		a.noteOutside(to, r.Resolved)
 	}
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM

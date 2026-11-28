@@ -143,8 +143,8 @@ fleet's name, retitles it on a `/wake-name`, and gives the shell its own title b
 `/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
 manager's included. A bare `/clear` typed in the room is Wake's own: it empties this window's group chat
-and reaches no agent (conversations and `↑` history are kept), and the room notes every 1,000 messages it
-holds; `@name /clear`, and `/clear` in a conversation, still clear that agent. Everything else you type
+and reaches no agent (conversations and `↑` history are kept); the room also drops its oldest 1,000
+messages itself whenever it holds 3,000, in this window only; `@name /clear`, and `/clear` in a conversation, still clear that agent. Everything else you type
 is passed to the agent byte for byte. A lone `@name` narrows the room to that agent's thread, and a lone `@team` to its members'; `⌃A` widens it
 back to everyone while still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
 that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`

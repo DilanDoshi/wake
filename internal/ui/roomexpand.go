@@ -125,7 +125,7 @@ func (r Room) toggleExpandAll() Room {
 // blocks that are leaving the room, so it stays bounded by what is retained
 // rather than by every line ever marked. Copied on write for Room's value
 // contract, and only when an evicted block was actually marked - reclamation runs
-// once per event past the cap, so its common path (nothing marked, or nothing
+// once per chunk past the cap, so its common path (nothing marked, or nothing
 // marked among the evicted) must allocate nothing.
 func forgotten[V any](m map[uint64]V, evicted []roomLine) map[uint64]V {
 	if len(m) == 0 || !slices.ContainsFunc(evicted, func(l roomLine) bool { _, ok := m[l.id]; return ok }) {
