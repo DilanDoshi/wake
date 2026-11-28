@@ -389,6 +389,15 @@ func (s *screen) awaitFrame(what string, ok func(rows []string) bool) []string {
 	return nil
 }
 
+// awaitManagerRow waits for the manager's row on a whole frame; before it,
+// `/manager` reads "none" and spawns a second one, which the daemon refuses.
+func (s *screen) awaitManagerRow() {
+	s.t.Helper()
+	s.awaitFrame("the manager's roster row", func(rows []string) bool {
+		return slices.ContainsFunc(rosterNamesIn(rows), core.IsManager)
+	})
+}
+
 func (s *screen) text() string { return strings.Join(s.lines(), "\n") }
 
 // await blocks until want is on screen, and fails with the screen if it is not.
