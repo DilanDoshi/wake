@@ -61,16 +61,23 @@ manager that only *drew* those calls would be a lie on camera.
     test_page.py        the site's tests: what the front page leads with, that every clip has a
                         tape that ends after a Show and a gesture file that matches it, that a cut
                         never runs past its recording, that no sentence a review proved false
-                        has come back
+                        has come back, that every page links the icons and `--pages-only` encodes nothing
     test_fleet.py       the big fleet's table in setup.sh against its scenarios
     test_agent.py       the stand-in `claude`, run as Wake runs it (an autostarted ask is answerable)
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters
     page.py             the landing site (index, features, releases, and the robots.txt,
-                        sitemap.xml and favicon a search engine reads): `page.py <wake-landing>`
+                        sitemap.xml and icons a crawler and a browser read): `page.py <wake-landing>`;
+                        `--pages-only` rewrites every page and icon but leaves media/ alone, and
+                        `--releases-only` just releases.html
     pagecopy.py         its words — one entry per beat, the build notes, each page's title
                         and description
+    favicon.py          the site's icon, built by every run but `--releases-only` from the banner's ring
+                        (internal/ui/banner.go) and Accent (theme.go): the SVG, two PNGs and the
+                        apple-touch-icon
+    test_favicon.py     the icon's tests: a golden of the ring and its colour, the SVG and each PNG
+                        read back pixel by pixel
 
 ## The mouse
 

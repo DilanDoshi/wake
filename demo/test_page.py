@@ -10,9 +10,12 @@ sentence against the code it describes; that is a human's (or a reviewer's) job,
 RETIRED is where each sentence one caught goes so it cannot come back.
 """
 
+import contextlib
+import io
 import os
 import re
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -284,6 +287,162 @@ class TheCuts(unittest.TestCase):
         problems = page.short_cuts(missing)
         self.assertEqual(len(problems), len(CLIPS))
         self.assertIn("no recording", problems[0])
+
+
+ICON_LINKS = (
+    '<link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any">',
+    '<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">',
+    '<link rel="icon" href="favicon-48.png" type="image/png" sizes="48x48">',
+    '<link rel="apple-touch-icon" href="apple-touch-icon.png">',
+)
+ICON_FILES = ("favicon.svg", "favicon-32.png", "favicon-48.png", "apple-touch-icon.png")
+
+
+class TheIcon(unittest.TestCase):
+    def test_every_page_links_exactly_the_four_icons(self):
+        pages = {
+            "index": page.index_page(),
+            "features": page.features_page(),
+            "releases": page.page("releases.html", ""),
+        }
+        for name, html in pages.items():
+            with self.subTest(page=name):
+                found = re.findall(r'<link rel="[^"]*icon[^"]*"[^>]*>', html)
+                self.assertEqual(found, list(ICON_LINKS))
+
+    def test_the_apple_icons_ground_is_the_sites_light_ground(self):
+        import favicon
+
+        light = re.search(r"--ground:(#[0-9a-fA-F]{6})", page.CSS).group(1)
+        self.assertEqual(favicon.GROUND, light.lower())
+
+
+class Built:
+    """What one run of main() did to a scratch checkout."""
+
+    def __init__(self, stubs, written, icons, stdout, exit):
+        self.stubs, self.written, self.icons = stubs, written, icons
+        self.stdout, self.exit = stdout, exit
+
+
+class TheBuild(unittest.TestCase):
+    def build(self, *flags, media=True, root=None, target=lambda d: d):
+        """Run main() into a scratch checkout with the slow parts stubbed out.
+
+        Reading a recording or calling ffmpeg is an AssertionError wherever the test
+        runs, so a machine with recordings cannot hide one.
+        """
+        with tempfile.TemporaryDirectory() as dest:
+            if media:
+                os.mkdir(os.path.join(dest, "media"))
+            out, stubs, caught = io.StringIO(), {}, None
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(
+                    mock.patch.object(sys, "argv", ["page.py", target(dest), *flags])
+                )
+                stack.enter_context(contextlib.redirect_stdout(out))
+                if root is not None:
+                    stack.enter_context(mock.patch.object(page, "ROOT", root))
+                for name, result in (
+                    ("fetch_releases", []),
+                    ("short_cuts", []),
+                    ("encode", 1024),
+                ):
+                    stubs[name] = stack.enter_context(
+                        mock.patch.object(page, name, return_value=result)
+                    )
+                for name in ("recorded_length", "run"):
+                    stubs[name] = stack.enter_context(
+                        mock.patch.object(page, name, side_effect=AssertionError(name))
+                    )
+                try:
+                    page.main()
+                except SystemExit as err:
+                    caught = err
+            written = sorted(os.listdir(dest))
+            if "media" in written:
+                written[written.index("media")] = "media/" + ",".join(
+                    sorted(os.listdir(os.path.join(dest, "media")))
+                )
+            icons = {}
+            for name in ICON_FILES:
+                if name in written:
+                    with open(os.path.join(dest, name), "rb") as fh:
+                        icons[name] = fh.read()
+        return Built(stubs, written, icons, out.getvalue(), caught)
+
+    def test_a_pages_only_run_encodes_no_clip_and_reads_no_recording(self):
+        run = self.build("--pages-only")
+        self.assertIsNone(run.exit)
+        run.stubs["encode"].assert_not_called()
+        run.stubs["short_cuts"].assert_not_called()
+        self.assertIn("media/", run.written)  # still there, and still empty
+
+    def test_a_pages_only_run_writes_the_pages_and_the_icons(self):
+        import favicon
+
+        run = self.build("--pages-only")
+        for name in (
+            "index.html",
+            "features.html",
+            "releases.html",
+            "robots.txt",
+            "sitemap.xml",
+        ):
+            self.assertIn(name, run.written)
+        self.assertEqual(run.icons, favicon.files(os.path.dirname(HERE)))
+
+    def test_a_pages_only_run_does_not_say_it_made_media(self):
+        out = self.build("--pages-only").stdout
+        self.assertIn("media untouched", out)
+        self.assertNotIn("MB of media", out)
+
+    def test_a_pages_only_run_needs_the_clips_its_pages_link_to(self):
+        run = self.build("--pages-only", media=False)
+        self.assertIn("media", str(run.exit))
+        self.assertEqual(run.written, [])
+        run = self.build("--pages-only", target=lambda d: os.path.join(d, "missing"))
+        self.assertIn("media", str(run.exit))
+
+    def test_a_full_run_still_encodes_every_clip_and_writes_the_icons(self):
+        run = self.build(media=False)
+        self.assertIsNone(run.exit)
+        self.assertEqual(
+            run.stubs["encode"].call_count, len(pagecopy.SHOTS) + len(pagecopy.FRIENDS)
+        )
+        self.assertTrue(any(w.startswith("media/") for w in run.written))
+        self.assertEqual(sorted(run.icons), sorted(ICON_FILES))
+
+    def test_a_releases_only_run_writes_the_releases_page_and_nothing_else(self):
+        run = self.build("--releases-only", media=False)
+        self.assertIsNone(run.exit)
+        self.assertEqual(run.written, ["releases.html"])
+
+    def test_pages_only_and_releases_only_together_are_refused(self):
+        run = self.build("--pages-only", "--releases-only")
+        self.assertIn("--pages-only", str(run.exit))
+
+    def test_a_misspelt_option_is_refused_not_taken_for_the_checkout(self):
+        run = self.build("--pages-onyl", media=False)
+        self.assertIn("--pages-onyl", str(run.exit))
+        self.assertEqual(run.written, [])
+        run.stubs["fetch_releases"].assert_not_called()
+
+    def test_an_icon_that_cannot_be_built_stops_a_full_run_before_anything_is_written(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as empty_root:
+            run = self.build(root=empty_root, media=False)
+        self.assertIn("icon", str(run.exit))
+        self.assertEqual(run.written, [])
+        run.stubs["fetch_releases"].assert_not_called()
+        run.stubs["encode"].assert_not_called()
+
+    def test_an_icon_that_cannot_be_built_stops_a_pages_only_run_too(self):
+        with tempfile.TemporaryDirectory() as empty_root:
+            run = self.build("--pages-only", root=empty_root)
+        self.assertIn("icon", str(run.exit))
+        self.assertEqual(run.written, ["media/"])
 
 
 if __name__ == "__main__":
