@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.17 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.18 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -74,17 +74,19 @@ come back.
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
 roster instead — including a conversation's running subagents in the right sidebar, a subagent's own nested under it — and `↵` or `⌃D`
 opens the one the cursor is on. The roster's team headers are channels: `↵` or a click on one shows
-only that team's thread in the room, and `all` at the top shows everyone again. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
+only that team's thread in the room, and `all`, the list's first row, shows everyone again. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
 While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` or `↵` completes.
 
 To get an agent on screen without walking the roster: `⌃F` (or `/jump [filter]`) opens a box where a few
 letters of a name narrow the fleet, blocked agents first, and `↵` opens the agent in a new column (`⌃B`
-below, `⌃D` in the focused pane). A click on an agent's row in the right sidebar opens it the same way
+below, `⌃D` in the focused pane). The box keeps its height as you type, and its filter edits like the chat
+box (`←→`, `⌥←→` by word, `⌥⌫`, `⌃U`/`⌃K`), as `/resume`'s search does. A click on an agent's row in the right sidebar opens it the same way
 (in a window under 120 columns it takes the place of the pane on screen), and you can drag a row out of
 the sidebar and drop it where you want it: on the lower half of a pane it opens below that pane, anywhere
 else in a new column, with `esc` to cancel; a Shift-click opens below the focused pane where your terminal
 delivers one. The search bar at the top of the sidebar filters the roster in place as you type, and each
-sidebar section is drawn as a box with its team as the top edge. `⌃F` used to fork a conversation; that is
+sidebar section is drawn as a box with its team as the top edge; the agents with no team have a `no team`
+box under `all · N`, which counts the fleet and scrolls with the list. `⌃F` used to fork a conversation; that is
 `/fork` now.
 
 A message to a working agent is read at its next tool boundary and pinned `⧗` until then; `↑` takes

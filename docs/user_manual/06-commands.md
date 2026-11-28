@@ -222,7 +222,9 @@ never replacing the room. `⎋` or a second `⌃F` closes it, and `⌃C` closes 
 you, as it does from every menu.
 
 The box is a search box, so it owns the keyboard while it is up: a key it has no use for is swallowed rather
-than moving the keys to another pane under it. It lists what the sidebar lists, so an agent parked in this run is there too; a session
+than moving the keys to another pane under it. It keeps the height it opened with as you type, and its
+filter line edits like the chat box: `←` `→`, `Home` `End`, `⌥←` `⌥→` (or `⌥B` `⌥F`) by word, `⌥⌫`
+deletes a word, `⌃U` and `⌃K` delete to either end. `/resume`'s search box does the same. It lists what the sidebar lists, so an agent parked in this run is there too; a session
 parked in an earlier run is still `/resume`'s.
 
 `/fork` is what `⌃F` was before it became the finder. It branches the conversation you are in, `/fork @alex` branches
