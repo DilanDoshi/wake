@@ -46,6 +46,7 @@ type JumpPicker struct {
 	up     bool
 	Pane   string // the pane it was opened over; "" is the room
 	Query  string
+	Back   int    // runes between the caret and the end of Query; zero is the end
 	Cursor string // the cursored agent's id; "" only while nothing matches
 }
 
@@ -128,7 +129,7 @@ func (a App) jump(arg string) (App, tea.Cmd) {
 	return a.clearDraft().openJump(typedQuery("", arg)), nil
 }
 
-// jumpKey drives the box: typing and ⌫ edit the filter, ↑↓ walk the matches, ↵ ⌃B
+// jumpKey drives the box: typing and the edit keys (queryedit.go) work the filter, ↑↓ walk the matches, ↵ ⌃B
 // and ⌃D open the cursored agent, esc and ⌃F close it. ⌃C closes it and parks the
 // agent in front of you - above every guard, so its first press stays visible for the
 // ⌃C⌃C kill switch (resumePickerKey's reasoning). Every other key is swallowed.
@@ -163,20 +164,23 @@ func (a App) jumpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.openJumped(App.openBelow), nil, true
 	case tea.KeyCtrlD:
 		return a.openJumped(App.openDMWith), nil, true
-	case tea.KeyBackspace:
-		return a.editJump(backspacedQuery), nil, true
-	case tea.KeySpace:
-		return a.editJump(func(q string) string { return typedQuery(q, " ") }), nil, true
-	case tea.KeyRunes:
-		return a.editJump(func(q string) string { return typedQuery(q, string(m.Runes)) }), nil, true
+	case tea.KeyBackspace, tea.KeySpace, tea.KeyRunes, tea.KeyLeft, tea.KeyRight, tea.KeyHome, tea.KeyEnd,
+		tea.KeyDelete, tea.KeyCtrlH, tea.KeyCtrlU, tea.KeyCtrlK:
+		return a.editJump(m), nil, true
 	}
 	return a, nil, true
 }
 
-// editJump changes the filter and homes the cursor on the best match.
-func (a App) editJump(edit func(string) string) App {
-	a.jumpPicker.Query = edit(a.jumpPicker.Query)
-	return a.jumpHomed()
+// editJump is one key at the filter's caret. The cursor homes on the best match only
+// when the text changed: a caret that moves leaves the agent it was on.
+func (a App) editJump(m tea.KeyMsg) App {
+	query, back := editedQuery(a.jumpPicker.Query, a.jumpPicker.Back, m)
+	changed := query != a.jumpPicker.Query
+	a.jumpPicker.Query, a.jumpPicker.Back = query, back
+	if changed {
+		return a.jumpHomed()
+	}
+	return a
 }
 
 // moveJump walks the matches without wrapping: a cursor that wraps makes the ends of
@@ -235,18 +239,21 @@ func (a App) jumpBox(width, room int) string {
 	inner := max(w-cardFrameWidth, 1)
 	found, total := a.jumpMatches()
 	cur := jumpIndex(found, a.jumpPicker.Cursor)
-	size := min(room-jumpChrome, jumpRows)
+	// The height is the roster's, never the matches': a box that shrank as the filter
+	// narrowed would move the room above it, and the composer under it, on every key.
+	size := min(room-jumpChrome, jumpRows, total)
 	if size < 1 {
 		return a.jumpCompact(found, total, cur, w, room)
 	}
-	rows := []string{jumpFilter(a.jumpPicker.Query), HintStyle.Render(strings.Repeat("─", max(inner-1, 1)))}
+	var listed []string
 	if len(found) == 0 {
-		rows = append(rows, detailRow(fmt.Sprintf(jumpNoMatch, a.jumpPicker.Query), inner))
+		listed = append(listed, detailRow(fmt.Sprintf(jumpNoMatch, a.jumpPicker.Query), inner))
 	}
 	from, to := windowAround(cur, len(found), size)
 	for i := from; i < to; i++ {
-		rows = append(rows, a.jumpRow(found[i], i == cur, inner))
+		listed = append(listed, a.jumpRow(found[i], i == cur, inner))
 	}
+	rows := append([]string{jumpFilter(a.jumpPicker.Query, a.jumpPicker.Back, inner), HintStyle.Render(strings.Repeat("─", max(inner-1, 1)))}, filledTo(listed, size)...)
 	head := fmt.Sprintf("jump to agent · %d of %d", len(found), total)
 	foot := joinedWords(" · ", countWords(from, len(found)-to), jumpKeys)
 	body := lipgloss.NewStyle().PaddingLeft(1).Render(strings.Join(rows, "\n"))
@@ -267,13 +274,10 @@ func (a App) jumpCompact(found []Agent, total, cur, width, room int) string {
 	return HintStyle.Render(ansi.Truncate(status, width, ellipsis)) + "\n" + row
 }
 
-// jumpFilter is the filter line: the search glyph, what is typed or the hint, a caret.
-func jumpFilter(query string) string {
-	text := HintStyle.Render(jumpHint)
-	if query != "" {
-		text = TextStyle.Render(query)
-	}
-	return AccentStyle.Render("⌕ ") + text + AccentStyle.Render(jumpCaret)
+// jumpFilter is the filter line in width cells: the search glyph, what is typed or the hint, a caret.
+func jumpFilter(query string, back, width int) string {
+	const glyph = "⌕ "
+	return AccentStyle.Render(glyph) + withCaret(query, back, jumpHint, jumpCaret, width-ansi.StringWidth(glyph))
 }
 
 // jumpRow is one agent: the cursor, its glyph and name in its own hue, its team, and

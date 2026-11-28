@@ -139,7 +139,19 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `waiting for you`. A few letters of a name narrow what the sidebar lists (`agentfind.go`: its start, a run in
   it, then its letters in order; case and spaces ignored) in attention order, **blocked first**
   (`Fleet.OnRoster`, not the sidebar's section order); a better match comes before attention, so a blocked
-  agent found only by scattered letters does not outrank the name typed. `↵` opens the cursored agent through
+  agent found only by scattered letters does not outrank the name typed. **The box keeps the height it opened with**
+  (owner's 2026-11-23 ask): its result rows are the roster's, never the matches' (`min(room - jumpChrome, jumpRows,
+  roster)`, so no keystroke can move it), fewer matches leave blank rows under them (`filledTo`) and `no agent
+  matches` sits inside the same box; the `/resume` search box holds its height the same way. **The filter line edits
+  like the chat box** (`queryedit.go`): `←→` and `Home`/`End` move a caret, `⌥←→`/`⌥B`/`⌥F` by word, `⌥⌫` deletes
+  a word, `⌃U`/`⌃K` to either end, `⌦` and `⌫` (and `⌃H`, which a terminal's `⌫` or `⌃⌫` sends) one rune, typing
+  and a paste land at the caret under the query rules; bubbles' text input does it with the text area's bindings
+  for one line less the keys Wake takes first (`⌃W` `⌃A` `⌃E` stay swallowed, the jump box's own `⌃D` `⌃B` `⌃F` keep their
+  jobs, `⌃V` is not read), `⌃T`, the case changes and delete-word-forward (`⌥⌦` `⌥D`: bubbles' text input panics on it), and a
+  test drives a real composer to hold the two together; a line too long for the box is cut around the caret by grapheme
+  cluster, so the caret stays on it and the box stays one height (the one- and two-row forms of a pane too short for the
+  box draw no caret). A caret that moves leaves the cursored agent; a changed text homes it.
+  `↵` opens the cursored agent through
   `openInNewPane`, as a click on its row does, and both finish in `selectOpened`; `⌃B` opens it below
   (`openBelow`, which refuses from a lower pane and leaves the box up), `⌃D` in the focused pane
   (`openDMWith`); an agent already drawn is only focused, whichever key it was; `esc`/`⌃F` close it and `⌃C` closes it and parks the agent in front of you. It is a modal
@@ -795,7 +807,7 @@ yet says so in bold.**
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `jumppicker.go` (`⌃F` and `/jump`; pty test `cmd/wake/jumpscreen_unix_test.go`) · `fork.go` (`/fork`) · `agentfind.go` (finding an agent by its name) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `jumppicker.go` (`⌃F` and `/jump`; pty test `cmd/wake/jumpscreen_unix_test.go`) · `queryedit.go` (the jump box's and `/resume`'s filter line: caret, edit keys, paste at the caret) · `fork.go` (`/fork`) · `agentfind.go` (finding an agent by its name) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) · `roomresumefold.go` (an agent's repeated resumes, folded) · `roomlinemoves.go` (where each line's rows sit, and how a rebuild moves them) · pty test `cmd/wake/roomresumefoldscreen_unix_test.go` |

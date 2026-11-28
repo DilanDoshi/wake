@@ -250,21 +250,20 @@ func (a App) searchBar(width, found, total int) string {
 }
 
 // tailOf is the end of s that fits room cells, the start elided: what was typed last is
-// where the caret is. A wide rune is whole or gone.
+// where the caret is. A wide rune is whole or gone, and so is a grapheme cluster (a text
+// base and U+FE0F is one cell wide as a rune and two as a cluster).
 func tailOf(s string, room int) string {
-	if ansi.StringWidth(s) <= room {
+	width := ansi.StringWidth(s)
+	if width <= room {
 		return s
 	}
 	if room < 1 {
 		return ""
 	}
-	rs, used, at := []rune(s), 1, len([]rune(s)) // the ellipsis takes a cell
-	for ; at > 0; at-- {
-		w := ansi.StringWidth(string(rs[at-1]))
-		if used+w > room {
-			break
+	// The ellipsis takes a cell. A wide cell cut through is kept whole, one over, so cut on.
+	for cut := width - (room - 1); ; cut++ {
+		if out := ansi.TruncateLeft(s, cut, "…"); ansi.StringWidth(out) <= room {
+			return out
 		}
-		used += w
 	}
-	return "…" + string(rs[at:])
 }
