@@ -5,11 +5,12 @@
 
 writes index.html (the story), features.html (every beat and the build notes),
 releases.html (the GitHub releases, rendered at build time), media/ (one
-mp4 and one poster per beat) and what a search engine reads first (robots.txt,
-sitemap.xml, favicon.svg) into that checkout. The site is served under a
-CSP that allows same-origin media and no external hosts but fonts, so clips
-are files beside the pages and the release notes are baked in rather than
-fetched. Edit this file and pagecopy.py, never the output.
+mp4 and one poster per beat), what a search engine reads first (robots.txt,
+sitemap.xml) and the icons a browser asks for (favicon.svg and its PNGs, built
+by favicon.py) into that checkout. --pages-only does all of it but the media.
+The site is served under a CSP that allows same-origin media and no external
+hosts but fonts, so clips are files beside the pages and the release notes are
+baked in rather than fetched. Edit this file and pagecopy.py, never the output.
 """
 
 import html
@@ -19,6 +20,7 @@ import subprocess
 import sys
 from typing import Callable
 
+import favicon
 from pagecopy import (
     ALSO,
     FRIENDS,
@@ -32,6 +34,7 @@ from pagecopy import (
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 OUT = os.path.join(HERE, ".work", "out")
 REPO = "DilanDoshi/wake"
 GITHUB = "https://github.com/" + REPO
@@ -39,12 +42,6 @@ LATEST = GITHUB + "/releases/latest"
 # Where the site is served: canonical links, the sitemap and the share image
 # are absolute. Change it here when the site moves to its own domain.
 SITE = "https://wake-landing-rouge.vercel.app"
-# A "W" in the site's --accent, drawn as a stroke so it needs no font.
-FAVICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-<rect width="32" height="32" rx="7" fill="#c2603f"/>
-<path d="M7 9l4.5 14L16 13l4.5 10L25 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-"""
 INSTALL = (
     "curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh"
     % REPO
@@ -266,7 +263,10 @@ def page(active: str, body: str, head: str = "") -> str:
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="canonical" href="{url}">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-48.png" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Wake">
 <meta property="og:title" content="{title}">
@@ -472,6 +472,11 @@ def write(path: str, text: str) -> None:
         fh.write(text)
 
 
+def write_bytes(path: str, data: bytes) -> None:
+    with open(path, "wb") as fh:
+        fh.write(data)
+
+
 def write_releases(dest: str, rels: list[dict]) -> None:
     # GitHub's own "latest": the newest that is not a prerelease, as the Download link resolves.
     latest = next((r["tag_name"] for r in rels if not r["prerelease"]), None)
@@ -516,8 +521,8 @@ def features_page() -> str:
     )
 
 
-def write_crawl_files(dest: str) -> None:
-    """What a crawler reads before any page: where the pages are, and the icon."""
+def write_crawl_files(dest: str, icons: dict) -> None:
+    """What a crawler reads before any page, and the icons a browser asks for."""
     urls = "".join(f"  <url><loc>{url_of(p)}</loc></url>\n" for p in META)
     write(
         os.path.join(dest, "sitemap.xml"),
@@ -529,25 +534,12 @@ def write_crawl_files(dest: str) -> None:
         os.path.join(dest, "robots.txt"),
         f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n",
     )
-    write(os.path.join(dest, "favicon.svg"), FAVICON)
+    for name, data in icons.items():
+        write_bytes(os.path.join(dest, name), data)
 
 
-def main() -> None:
-    args = sys.argv[1:]
-    # A release touches only releases.html: the clips are not re-encoded from
-    # whatever recordings happen to be on this machine (docs/RELEASING.md).
-    releases_only = "--releases-only" in args
-    paths = [a for a in args if a != "--releases-only"]
-    if len(paths) != 1:
-        sys.exit("usage: page.py <wake-landing checkout> [--releases-only]")
-    dest = paths[0]
-    # First, so a gh that is missing or signed out fails before any page is written.
-    rels = fetch_releases()
-    if releases_only:
-        write_releases(dest, rels)
-        print("releases: %s/releases.html — %d releases" % (dest, len(rels)))
-        return
-
+def encode_media(dest: str) -> int:
+    """Every clip and poster into dest/media; the bytes written."""
     problems = short_cuts(recorded_length)
     if problems:
         sys.exit("recordings that do not cover their cuts:\n  " + "\n  ".join(problems))
@@ -563,12 +555,65 @@ def main() -> None:
         size = encode(friend.clip, friend.start, friend.dur, media, friend.crop)
         total += size
         print("  %-18s %7.1f KB" % (friend.clip, size / 1024))
+    return total
+
+
+USAGE = "usage: page.py <wake-landing checkout> [--releases-only | --pages-only]"
+
+
+def parse_args(args: list) -> tuple:
+    """(checkout, releases_only, pages_only), or an exit that says what was wrong."""
+    flags = [a for a in args if a.startswith("--")]
+    paths = [a for a in args if not a.startswith("--")]
+    unknown = [a for a in flags if a not in ("--releases-only", "--pages-only")]
+    if unknown:
+        sys.exit("unknown option %s\n%s" % (unknown[0], USAGE))
+    if "--releases-only" in flags and "--pages-only" in flags:
+        sys.exit(
+            "--pages-only and --releases-only are exclusive: one rewrites every page, the other releases.html alone"
+        )
+    if len(paths) != 1:
+        sys.exit(USAGE)
+    return paths[0], "--releases-only" in flags, "--pages-only" in flags
+
+
+def build_icons() -> dict:
+    try:
+        return favicon.files(ROOT)
+    except (OSError, ValueError) as err:
+        sys.exit("cannot build the site's icon: %s" % err)
+
+
+def main() -> None:
+    # --releases-only: a release touches only releases.html, and the clips are not
+    # re-encoded from whatever recordings this machine holds (docs/RELEASING.md).
+    # --pages-only: every page and icon, for a change in a page's head or words
+    # and not in a clip; the clips its pages link to must already be there.
+    dest, releases_only, pages_only = parse_args(sys.argv[1:])
+    if pages_only and not os.path.isdir(os.path.join(dest, "media")):
+        sys.exit(
+            "%s/media not found: --pages-only leaves the clips alone, so they must be there"
+            % dest
+        )
+    # First, so an icon source that cannot be read, or a gh that is missing or
+    # signed out, fails before any page is written.
+    icons = {} if releases_only else build_icons()
+    rels = fetch_releases()
+    if releases_only:
+        write_releases(dest, rels)
+        print("releases: %s/releases.html — %d releases" % (dest, len(rels)))
+        return
+
+    total = 0 if pages_only else encode_media(dest)
 
     write(os.path.join(dest, "index.html"), index_page())
     write(os.path.join(dest, "features.html"), features_page())
     write_releases(dest, rels)
-    write_crawl_files(dest)
+    write_crawl_files(dest, icons)
 
+    if pages_only:
+        print("\npages only: %s — media untouched, %d releases" % (dest, len(rels)))
+        return
     print(
         "\nsite: %s — %d beats, %.1f MB of media, %d releases"
         % (dest, len(SHOTS) + len(FRIENDS), total / 1e6, len(rels))

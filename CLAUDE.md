@@ -828,7 +828,7 @@ yet says so in bold.**
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.FleetStates` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) · `testdata/sessions/` (Claude's session registry) |
-| Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
+| Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py` (`--pages-only`: every page and icon, no clips), its words `demo/pagecopy.py` → the wake-landing repo · the site's icon `demo/favicon.py`, read from `internal/ui/banner.go` and `theme.go` and held to a golden by `demo/test_favicon.py` · tests `demo/test_page.py` (run `python3 -m unittest discover -s demo`; not part of `make ci`) |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
 ## Toolchain
