@@ -299,9 +299,10 @@ func (c Composer) Refocus() (Composer, tea.Cmd) {
 	return c, cmd
 }
 
-// Update handles one message: everything goes to the text area.
+// Update handles one message: everything goes to the text area, bar typed runes
+// and a ⌥←/⌥B with no word to move to (composerwordmove.go).
 //
-// Nothing is intercepted here, and ⇧⇥ is the reason that rule is written down.
+// Nothing else is intercepted here, and ⇧⇥ is the reason that rule is written down.
 // It used to be caught here to cycle c.mode, which moved a label and reached no
 // agent. It is App.key's now and it writes a frame; the label moves when the
 // daemon answers. The text area binds neither it nor ⇥, so the App takes both
@@ -323,6 +324,9 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 		// single rune is included because one formula cannot drift from two.
 		c.ta.InsertString(string(k.Runes))
 		return c.fit().reposition(), nil
+	}
+	if c.wordLeftStuck(msg) {
+		return c.fit().reposition(), nil // bubbles' wordLeft would never return
 	}
 	// Grown to the bound *before* the update, then fitted back down after.
 	//
