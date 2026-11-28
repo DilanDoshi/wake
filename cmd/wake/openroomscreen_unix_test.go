@@ -10,9 +10,7 @@ package main
 
 import (
 	"os"
-	"slices"
 	"testing"
-	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/daemon"
@@ -30,12 +28,7 @@ func TestBareWakeOpensTheRoomWithOnlyTheManager(t *testing.T) {
 	s.await("group chat")
 	// Waited for, so the assertions below are made over a fleet that has
 	// started what it is going to start rather than over the first frame.
-	for deadline := time.Now().Add(screenTimeout); !slices.ContainsFunc(s.rosterNames(), core.IsManager); {
-		if time.Now().After(deadline) {
-			t.Fatalf("bare `wake` drew no manager on the roster.\n%s", s.dump())
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	s.awaitManagerRow()
 	s.settle()
 
 	if got := paneTitles(s); len(got) != 1 || got[0] != "group chat" {

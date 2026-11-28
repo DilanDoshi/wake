@@ -7,16 +7,19 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// With no teams no item carries a header, so the roster draws exactly the flat
-// list it always has - the property that keeps every existing roster test green.
-func TestSectionRowsAddsNoHeaderWithoutTeams(t *testing.T) {
+// With no teams the only header is the no-team box's, on the first agent: no item
+// carries a team's, and nothing but all comes before the agents.
+func TestSectionRowsAddsOnlyTheNoTeamHeaderWithoutTeams(t *testing.T) {
 	rows := sectionRows([]Agent{{ID: "a"}, {ID: "b"}})
-	if len(rows) != 2 {
-		t.Fatalf("sectionRows returned %d items for 2 agents, want one per agent", len(rows))
+	if len(rows) != 3 || !rows[0].all {
+		t.Fatalf("sectionRows returned %d items for 2 agents, want all and one per agent", len(rows))
 	}
-	for _, item := range rows {
-		if item.hasHeader() {
-			t.Error("a header was drawn for a fleet with no teams")
+	for i, item := range rows {
+		if item.teamHeader() {
+			t.Errorf("item %d draws a team's header for a fleet with no teams", i)
+		}
+		if want := i == 1; item.hasHeader() != want {
+			t.Errorf("item %d has a header: %v, want %v (only the first agent heads the no-team box)", i, item.hasHeader(), want)
 		}
 	}
 }
@@ -43,21 +46,22 @@ func TestRosterDrawsTeamHeadersAndAHeaderClickSelectsNoAgent(t *testing.T) {
 		t.Errorf("the roster drew no `backend` team header:\n%s", out)
 	}
 
-	// Layout: row 0 alex (top block), row 1 its box's closing row, row 2 a blank,
-	// row 3 the `backend` header, rows 4-5 thea, john, row 6 the closing row.
-	for _, y := range []int{1, 2, 6} {
+	// Layout: row 0 all, row 1 the no-team header, row 2 alex (top block), row 3 its
+	// box's closing row, row 4 a blank, row 5 the `backend` header, rows 6-7 thea,
+	// john, row 8 the closing row.
+	for _, y := range []int{1, 3, 4, 8} {
 		if spot, ok := r.At(agents, noSubs, width, height, y); ok {
-			t.Errorf("a click on row %d, a blank or a closing row, resolved to %+v; it belongs to no one", y, spot)
+			t.Errorf("a click on row %d, a header that is no channel, a blank or a closing row, resolved to %+v; it belongs to no one", y, spot)
 		}
 	}
-	if spot, ok := r.At(agents, noSubs, width, height, 3); !ok || spot.header != "backend" || spot.agent.ID != "" {
-		t.Errorf("a click on row 3, the team header, resolved to (%+v, %v); want the backend header and no agent", spot, ok)
+	if spot, ok := r.At(agents, noSubs, width, height, 5); !ok || spot.header != "backend" || spot.agent.ID != "" {
+		t.Errorf("a click on row 5, the team header, resolved to (%+v, %v); want the backend header and no agent", spot, ok)
 	}
-	if spot, ok := r.At(agents, noSubs, width, height, 0); !ok || spot.agent.ID != "s1" {
-		t.Errorf("row 0 = (%q, %v), want alex (s1) in the top block", spot.agent.ID, ok)
+	if spot, ok := r.At(agents, noSubs, width, height, 2); !ok || spot.agent.ID != "s1" {
+		t.Errorf("row 2 = (%q, %v), want alex (s1) in the top block", spot.agent.ID, ok)
 	}
-	if spot, ok := r.At(agents, noSubs, width, height, 4); !ok || spot.agent.ID != "s2" {
-		t.Errorf("row 4 = (%q, %v), want thea (s2) under the backend header", spot.agent.ID, ok)
+	if spot, ok := r.At(agents, noSubs, width, height, 6); !ok || spot.agent.ID != "s2" {
+		t.Errorf("row 6 = (%q, %v), want thea (s2) under the backend header", spot.agent.ID, ok)
 	}
 }
 

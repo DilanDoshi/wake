@@ -50,7 +50,8 @@ The roster's team headers are **channels**. Put the cursor on one with `⇧↑�
 it, and the room shows only that team's thread — its members' lines, the turns you sent them, the
 messages sent to or from them, every broadcast, and the manager, which has a seat in every channel —
 titled with the team's name instead of `group chat`. It lasts until you pick another team or
-`all`, the header pinned at the top of the sidebar, which is where every window starts.
+`all`, the first row of the sidebar's list, which is where every window starts. `all` scrolls away with the list like any
+row; the channel you picked stands while it is out of view.
 
 Inside a channel the room works as it always does. A lone `@name` narrows further (`backend › @kit`),
 `⌃A` widens back to the channel, and where a message goes does not change: a draft with no `@` still
@@ -115,7 +116,8 @@ key the bar does not read lets go of it and leaves the filter standing, lit, unt
 same search as a box over the composer; it never focuses the bar.
 
 Each section of the roster is drawn as a **box**: a team's name is the top edge, its agents stand between
-walls, and a closing row ends it; the agents above the first team sit in a box under the pinned `all`. A
+walls, and a closing row ends it; the agents with no team sit in a box of their own, headed `no team` (a label that picks nothing),
+under `all`, which reads `all · 22` for the 22 agents the fleet holds, the manager included. A
 row is four columns narrower inside its box, so a long name is cut at the right wall and the figures at its
 end drop sooner. **Click an agent's row** and it opens in a new column at the right end of the grid, next to
 the sidebar (in a window under 120 columns it takes the place of the pane on screen, as `⌃D` does); an agent

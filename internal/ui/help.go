@@ -14,8 +14,6 @@ package ui
 
 import (
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -175,23 +173,8 @@ func (a App) helpPage() int {
 	return max(room-1, 1)
 }
 
-// typedQuery is query with text typed onto it: one space between words, none
-// leading, nothing unprintable, and no more than queryMax runes.
-func typedQuery(query, text string) string {
-	for _, r := range text {
-		if unicode.IsSpace(r) {
-			r = ' '
-		}
-		switch {
-		case unicode.IsControl(r):
-		case r == ' ' && (query == "" || strings.HasSuffix(query, " ")):
-		case utf8.RuneCountInString(query) >= queryMax:
-		default:
-			query += string(r)
-		}
-	}
-	return query
-}
+// typedQuery is query with text typed onto its end, under typedAt's rules.
+func typedQuery(query, text string) string { return typedAt(query, 0, text) }
 
 // backspacedQuery drops query's last rune.
 func backspacedQuery(query string) string {

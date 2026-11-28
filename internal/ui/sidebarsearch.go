@@ -23,10 +23,10 @@ const (
 	// searchBarRows is the bar's height: a box around one line.
 	searchBarRows = 3
 
-	// searchListFloor is the rows the roster keeps under the bar and the pinned all: a
+	// searchListFloor is the rows the roster keeps under the bar: all and three more. A
 	// sidebar shorter than that draws no bar, since a filter with no room to show
 	// what it found is worse than none.
-	searchListFloor = 3
+	searchListFloor = 4
 
 	sidebarSearchVerb = "sidebar search"
 	searchHint        = "search agents"
@@ -34,7 +34,7 @@ const (
 
 	// pickFilteredOut is the refusal for a selection the filter hides, the sibling of
 	// pickOutOfView for one the wheel scrolled away.
-	pickFilteredOut = "the agent selected in the sidebar is filtered out. esc in the search bar clears the filter, ⇧↑↓ moves on from it"
+	pickFilteredOut = "the row selected in the sidebar is filtered out. esc in the search bar clears the filter, ⇧↑↓ moves on from it"
 
 	barKeys = "type to filter · ↑↓ ⇧↑↓ move · ↵ open · ⌃B below · ⌃D here · esc clear · ⌃C let go"
 )
@@ -48,7 +48,7 @@ type SideSearch struct {
 // searchBarShown is whether the sidebar is drawn tall enough for its bar.
 func (a App) searchBarShown() bool {
 	return a.layout.ShowRoster && a.regions().Roster > 0 && !a.board.Up &&
-		a.rosterHeight() >= searchBarRows+allRows+searchListFloor
+		a.rosterHeight() >= searchBarRows+searchListFloor
 }
 
 // searchRows is the rows the bar takes off the top of the sidebar: none when it is not drawn.
@@ -250,21 +250,20 @@ func (a App) searchBar(width, found, total int) string {
 }
 
 // tailOf is the end of s that fits room cells, the start elided: what was typed last is
-// where the caret is. A wide rune is whole or gone.
+// where the caret is. A wide rune is whole or gone, and so is a grapheme cluster (a text
+// base and U+FE0F is one cell wide as a rune and two as a cluster).
 func tailOf(s string, room int) string {
-	if ansi.StringWidth(s) <= room {
+	width := ansi.StringWidth(s)
+	if width <= room {
 		return s
 	}
 	if room < 1 {
 		return ""
 	}
-	rs, used, at := []rune(s), 1, len([]rune(s)) // the ellipsis takes a cell
-	for ; at > 0; at-- {
-		w := ansi.StringWidth(string(rs[at-1]))
-		if used+w > room {
-			break
+	// The ellipsis takes a cell. A wide cell cut through is kept whole, one over, so cut on.
+	for cut := width - (room - 1); ; cut++ {
+		if out := ansi.TruncateLeft(s, cut, "…"); ansi.StringWidth(out) <= room {
+			return out
 		}
-		used += w
 	}
-	return "…" + string(rs[at:])
 }

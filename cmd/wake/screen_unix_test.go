@@ -389,6 +389,15 @@ func (s *screen) awaitFrame(what string, ok func(rows []string) bool) []string {
 	return nil
 }
 
+// awaitManagerRow waits for the manager's row on a whole frame; before it,
+// `/manager` reads "none" and spawns a second one, which the daemon refuses.
+func (s *screen) awaitManagerRow() {
+	s.t.Helper()
+	s.awaitFrame("the manager's roster row", func(rows []string) bool {
+		return slices.ContainsFunc(rosterNamesIn(rows), core.IsManager)
+	})
+}
+
 func (s *screen) text() string { return strings.Join(s.lines(), "\n") }
 
 // await blocks until want is on screen, and fails with the screen if it is not.
@@ -519,9 +528,15 @@ func rosterNamesIn(rows []string) []string {
 // left wall - requiring that adjacency is exact rather than heuristic.
 var rosterRow = regexp.MustCompile(`(?:^|│)│ [●◐○▪·] ([a-z][a-z0-9-]*)`)
 
-// rosterHeader is a channel header row in the sidebar, the top edge of `all`'s
-// box or a team's, anchored on the divider for rosterRow's reason.
+// rosterHeader is a channel header row in the sidebar: a team's top edge, anchored
+// on the divider for rosterRow's reason. `no team` has a space, so it is never one.
 var rosterHeader = regexp.MustCompile(`(?:^|│)╭─+ ([a-z][a-z0-9_-]*) ─`)
+
+// rosterAllRule is the all row: a plain rule, `all · N`, no corners.
+var rosterAllRule = regexp.MustCompile(`(?:^|│)─+ (all) · \d+ ─`)
+
+// allRow is the screen row drawing the all rule, or -1 once it has scrolled away.
+func (s *screen) allRow() int { return s.rowOf("─ all · ") }
 
 // rosterStops is every sidebar row ⇧↑↓ stops on, in the order it walks them:
 // agents by name and channel headers as "── <name>".
@@ -531,6 +546,8 @@ func (s *screen) rosterStops() []string {
 		if m := rosterRow.FindStringSubmatch(line); m != nil {
 			out = append(out, m[1])
 		} else if m := rosterHeader.FindStringSubmatch(line); m != nil {
+			out = append(out, "── "+m[1])
+		} else if m := rosterAllRule.FindStringSubmatch(line); m != nil {
 			out = append(out, "── "+m[1])
 		}
 	}

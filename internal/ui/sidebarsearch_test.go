@@ -62,7 +62,7 @@ func TestTheBarIsDrawnAtopTheSidebarOverAll(t *testing.T) {
 		t.Fatalf("the bar's three rows are %q, want a box holding the placeholder", rows[:3])
 	}
 	if !strings.Contains(rows[3], "all") {
-		t.Errorf("row 3 is %q, want the pinned all under the bar", rows[3])
+		t.Errorf("row 3 is %q, want all under the bar", rows[3])
 	}
 	if a.barFocused() {
 		t.Error("the bar holds the keys before anyone clicked it")
@@ -315,7 +315,7 @@ func TestASidebarTooShortForItsBarDrawsNoBarAndNoFilter(t *testing.T) {
 	a := barFleet(t, 140, 40)
 	a, _ = click(a, sidebarX(a), 1)
 	a = jumpTyped(a, "blu")
-	short := a.withSize(140, searchBarRows+allRows+searchListFloor).resizePanes()
+	short := a.withSize(140, searchBarRows+searchListFloor).resizePanes()
 	if short.searchBarShown() {
 		t.Fatalf("the bar is drawn in a pane %d rows tall", short.paneHeight())
 	}
@@ -357,15 +357,20 @@ func TestWithNothingSelectedTheFirstAgentDrawnIsTheCursorsAgent(t *testing.T) {
 	}
 }
 
-// The roster's rows are what the bar leaves: the count row and the agents drawn fit
+// The roster's rows are what the bar leaves: the items drawn and the count row fit
 // the sidebar's height under it, so the wheel's window and the draw agree.
 func TestTheWindowIsCutToTheRowsUnderTheBar(t *testing.T) {
 	a := wheelFleet(t)
 	if !a.searchBarShown() {
 		t.Fatal("setup: no bar is drawn")
 	}
-	if a.rosterRows()+allRows != a.rosterListHeight() {
-		t.Errorf("the window has %d rows under the all's %d, and the list %d", a.rosterRows(), allRows, a.rosterListHeight())
+	_, h, w := a.rosterWindow()
+	used, room := h[w.from:w.to].total(), a.rosterListHeight()-1 // the count row takes one
+	if used > room {
+		t.Errorf("the window takes %d rows, the list under the bar has %d beside its count row", used, room)
+	}
+	if w.to < len(h) && used+h[w.to] <= room { // and the window is maximal: the next item would not fit
+		t.Errorf("the window takes %d of %d rows and the next item (%d rows) would fit", used, room, h[w.to])
 	}
 	if countText(a) == "" {
 		t.Error("a roster taller than its rows draws no count row")
@@ -617,14 +622,14 @@ func TestAHoldIsNotRevivedByAShrinkThenAGrow(t *testing.T) {
 	}
 }
 
-// The bar's rows are drawn exactly when the sidebar has the floor: the bar, the pinned all and
+// The bar's rows are drawn exactly when the sidebar has the floor: the bar, all and
 // the rows under them, no fewer and no more.
 func TestTheBarAppearsAtTheFloorExactly(t *testing.T) {
 	first := -1
 	for h := 6; h <= 30 && first < 0; h++ {
 		if a := barFleet(t, 140, h); a.searchBarShown() {
 			first = h
-			// The bar's 3 rows, the pinned all, and 3 rows of agents: the spec's own sum, not the constants'.
+			// The bar's 3 rows, all, and 3 rows under it: the spec's own sum, not the constants'.
 			if got := a.rosterHeight(); got != 7 {
 				t.Errorf("the bar first shows at a roster of %d rows, want 7", got)
 			}
@@ -673,7 +678,7 @@ func TestARefusedCtrlBLeavesTheBarFocusedWithItsFilter(t *testing.T) {
 }
 
 // ↵ on a channel header picks the channel and lets go of the bar; a header the filter drops
-// takes the cursor to the first match, and the pinned all stays.
+// takes the cursor to the first match, and the cursor on all stays.
 func TestHeadersAreStopsOfTheWalkAndOfTheHoming(t *testing.T) {
 	a := jumpTyped(barApp(t), "blu")
 	for a.roster.Header == "" {
@@ -699,7 +704,7 @@ func TestHeadersAreStopsOfTheWalkAndOfTheHoming(t *testing.T) {
 	c := barApp(t)
 	c.roster = Roster{Header: core.BroadcastName}
 	if c = jumpTyped(c, "blu"); c.roster.Header != core.BroadcastName {
-		t.Errorf("a cursor on the pinned all moved to %+v", c.roster)
+		t.Errorf("a cursor on all moved to %+v", c.roster)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -91,9 +92,10 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 			for _, cursor := range []string{"", agents[n-1].ID, agents[n/2].ID} {
 				out := stripANSI(Roster{Selected: cursor}.View(agents, nil, rosterWidth, height))
 
-				drawn, first, last := 0, -1, -1
-				for i, a := range agents {
-					if strings.Contains(out, a.Name+" ") {
+				// Items, as the window counts them: all is item 0, agent i is item i+1.
+				items, drawn, first, last := n+1, 0, -1, -1
+				for i := range items {
+					if i == 0 && strings.Contains(out, "─ all ─") || i > 0 && strings.Contains(out, agents[i-1].Name+" ") {
 						drawn++
 						if first < 0 {
 							first = i
@@ -101,7 +103,7 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 						last = i
 					}
 				}
-				if drawn == n {
+				if drawn == items {
 					if hasCountRow(out) {
 						t.Errorf("%d agents in %d rows: everything fits and the column still says something is hidden:\n%s", n, height, out)
 					}
@@ -109,11 +111,11 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 				}
 				// The window is one run of the fleet: the agents before it are above,
 				// the rest below - and with nothing drawn, all of them below.
-				above, below := max(first, 0), n-1-last
+				above, below := max(first, 0), items-1-last
 				if drawn == 0 {
-					above, below = 0, n
+					above, below = 0, items
 				}
-				if want := countLine(above, below, rosterWidth); !strings.Contains(out, want) || above+below != n-drawn {
+				if want := countLine(above, below, rosterWidth); !strings.Contains(out, want) || above+below != items-drawn {
 					t.Errorf("%d agents in %d rows, cursor %q: drew %d and does not say %q:\n%s", n, height, cursor, drawn, want, out)
 				}
 			}
@@ -121,14 +123,17 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 	}
 }
 
-// flatRows is what each item of a fleet with no team draws, counted without
-// rowsForRow so a test of the window does not borrow its oracle from the code it
-// tests: the agent's own rows, and the box's closing row under the last.
+// flatRows is what each item of a fleet with no team draws - all's one row, then each
+// agent's block - counted without rowsForRow so a test of the window does not borrow
+// its oracle from the code it tests: the agent's own rows, the no-team box's header
+// over the first, and its closing row under the last. Item i+1 is agent i.
 func flatRows(agents []Agent, subs subsOf) heights {
-	out := make(heights, len(agents))
+	out := make(heights, len(agents)+1)
+	out[0] = 1
 	for i, a := range agents {
-		out[i] = rowsFor(a, subsFor(subs, a.ID))
+		out[i+1] = rowsFor(a, subsFor(subs, a.ID))
 	}
+	out[1]++
 	out[len(out)-1]++
 	return out
 }
@@ -148,7 +153,7 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 				for _, cursor := range []string{agents[0].ID, agents[len(agents)/2].ID, agents[len(agents)-1].ID} {
 					r := Roster{Selected: cursor}
 					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
-					if w.from == 0 && w.to == len(agents) {
+					if w.from == 0 && w.to == len(agents)+1 {
 						continue // everything fits
 					}
 					h := flatRows(agents, subs)
@@ -157,10 +162,10 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 						used += n
 					}
 					room := height - 1
-					if c := indexOf(agents, cursor); w.from == w.to && w.from == c && h[c] > room {
+					if c := indexOf(agents, cursor) + 1; w.from == w.to && w.from == c && h[c] > room {
 						continue // the cursor's own agent is taller than the room: the count alone is drawn
 					}
-					if w.to < len(agents) && used+h[w.to] <= room {
+					if w.to < len(agents)+1 && used+h[w.to] <= room {
 						t.Errorf("%d agents, height %d, cursor %q: window [%d,%d) uses %d of %d rows and the agent after it would fit",
 							len(agents), height, cursor, w.from, w.to, used, room)
 					}
@@ -201,15 +206,15 @@ func TestTheCursorIsAlwaysInsideTheWindow(t *testing.T) {
 						// Skipping it unconditionally is what made the first draft
 						// of this test vacuous: a mutant that returned span{} for
 						// everything passed it.
-						if room := height - 1; h[i] <= room {
+						if room := height - 1; h[i+1] <= room {
 							t.Errorf("height %d, cursor on agent %d (%d rows): window is empty and the cursor's agent fits in %d rows",
-								height, i, h[i], room)
+								height, i, h[i+1], room)
 						}
 						continue
 					}
-					if i < w.from || i >= w.to {
+					if i+1 < w.from || i+1 >= w.to {
 						t.Errorf("height %d, cursor on agent %d (%d rows): window is [%d,%d), which does not contain it",
-							height, i, h[i], w.from, w.to)
+							height, i, h[i+1], w.from, w.to)
 					}
 				}
 			}
@@ -311,8 +316,12 @@ func TestAColumnWithNoRoomForAnAgentSaysHowManyThereAre(t *testing.T) {
 		{fleetOf(5), 1},
 	} {
 		out := stripANSI(Roster{}.View(tc.agents, nil, rosterWidth, tc.height))
-		if !strings.Contains(out, countLine(0, len(tc.agents), rosterWidth)) {
-			t.Errorf("%d agents in %d rows does not say all %d are hidden:\n%q", len(tc.agents), tc.height, len(tc.agents), out)
+		hidden := len(tc.agents) // all is an item too: where it did not fit either, it is counted
+		if !strings.Contains(out, "─ all ─") {
+			hidden++
+		}
+		if !strings.Contains(out, countLine(0, hidden, rosterWidth)) {
+			t.Errorf("%d agents in %d rows does not say all %d items are hidden:\n%q", len(tc.agents), tc.height, hidden, out)
 		}
 	}
 }
@@ -340,6 +349,13 @@ func TestAtAnswersForTheRowsTheColumnDrewAndNoOthers(t *testing.T) {
 					owner := ownerPerRow(drawn)
 					for y := -1; y <= height+2; y++ {
 						spot, ok := r.At(agents, subs, rosterWidth, height, y)
+						if ok && spot.header != "" { // all's own row is the one header here: no team is drawn
+							if y < 0 || y >= len(drawn) || !isRule(drawn[y], spot.header) {
+								t.Errorf("%d agents, height %d, cursor %q: a click at y=%d hit the %s header and that row is %q",
+									len(agents), height, cursor, y, spot.header, rowAt(drawn, y))
+							}
+							continue
+						}
 						got := spot.agent
 						want := ""
 						if y >= 0 && y < len(owner) {
@@ -385,6 +401,8 @@ func ownerPerRow(rows []string) []string {
 	for i, row := range rows {
 		switch {
 		case strings.TrimSpace(row) == "" || isCountRow(row) || isFooter(strings.TrimRight(row, " ")):
+			current = ""
+		case isTopEdge(strings.TrimRight(row, " ")) || isRule(row, core.BroadcastName): // a header: no agent's
 			current = ""
 		case strings.HasPrefix(strings.TrimPrefix(row, "│ "), "  "):
 			// A continuation keeps the agent above it.

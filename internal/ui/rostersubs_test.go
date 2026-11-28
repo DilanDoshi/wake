@@ -218,7 +218,7 @@ func TestTheCursorWalksIntoASubagentRowAndBackOut(t *testing.T) {
 func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 1)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 3) // all, the no-team header, alex, then its subagent
 	agent, dispatch := spot.agent, spot.dispatch
 	if !ok {
 		t.Fatal("the row under the pointer resolved to nothing")
@@ -236,7 +236,7 @@ func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 func TestAClickOnTheAgentsOwnRowNamesNoDispatch(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 0)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 2) // under all and the no-team header
 	agent, dispatch := spot.agent, spot.dispatch
 	if !ok || agent.ID != "s1" {
 		t.Fatalf("the agent's row resolved to %+v, %v", agent, ok)
@@ -330,7 +330,7 @@ func TestClickingAnAgentsOwnRowLeavesNoOtherAgentsDispatchAttached(t *testing.T)
 	stale := a.roster.SelectedTask
 
 	// The far right column is the roster; the agent's own row is found, since row
-	// 0 is the pinned all header. pickAgent has already opened the sidebar. A
+	// 0 is the all row. pickAgent has already opened the sidebar. A
 	// click on an agent's row opens it on release, so this is a full click.
 	a = clickAgent(t, a, a.roster.Selected)
 
@@ -505,7 +505,7 @@ func TestADispatchFinishingUnderTheCursorLeavesItOnItsAgent(t *testing.T) {
 	if got := stale.Move(agents, gone, -1); got.Selected != "s0" {
 		t.Errorf("one step up landed on %+v, want the row above alex's - not a reset to the top", got)
 	}
-	// alex is the last row, so the row after it is the pinned all the walk wraps to.
+	// alex is the last row, so the row after it is all, which the walk wraps to.
 	if got := stale.Move(agents, gone, 1); got != (Roster{Header: core.BroadcastName}) {
 		t.Errorf("one step down landed on %+v, want all", got)
 	}

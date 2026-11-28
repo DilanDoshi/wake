@@ -6616,3 +6616,15 @@ An agent's `completed` ending is held while a task it owns runs, and drawn if no
   another id, or seen only as `task_progress`, draws two lines as before. A turn ending between the shell's
   ending and the restart (a `/context` reply is one) draws the early ending, and the restart a second line.
   *Closes with:* a recording of either.
+
+## FROM `fix/test-awaits-the-row-before-toggling`, 2026-11-24
+
+`cmd/wake`'s two `/manager` screen tests wait for the manager's row (`awaitManagerRow`). Left out:
+
+- **`/manager` while the manager is still starting says "a manager is already running".** `wake new` and bare `wake`
+  start the manager behind the first agent (`ensureManager`, written before the model exists), and its launch runs
+  the MCP self-test before the daemon registers a row (`launch`'s `managerConfig`, then `admitLive`). Until that row
+  is in a report, `App.manager` reads "none" and sends a second spawn, which the daemon refuses
+  (`managerRefusal`). The refusal is drawn, so nothing is lost silently, but the keystroke does nothing and the
+  words are off: the manager is starting, not running, and the next `/manager` parks it. *Closes with:* the model
+  knowing the spawn `ensureManager` wrote, so `/manager` in that window says the manager is starting, or waits.
