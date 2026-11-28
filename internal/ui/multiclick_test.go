@@ -160,7 +160,7 @@ func TestMoreClicksSelectInTheQueryBox(t *testing.T) {
 func TestMoreClicksSelectInTheRoster(t *testing.T) {
 	frozenClock(t)
 	a := rosterApp(t)
-	all := searchBarRows // the pinned all sits under the search bar
+	all := searchBarRows // all sits under the search bar
 	line := frameRow(a, all)
 	rest := line[strings.LastIndex(line, "│")+len("│"):]
 	word := strings.Fields(strings.NewReplacer("─", " ", "╭", " ", "╮", " ").Replace(rest))[0] // the loose box's top edge

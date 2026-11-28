@@ -64,8 +64,8 @@ func TestARosterTeamHeaderHasABlankRowAboveIt(t *testing.T) {
 
 func gapSessionsAgents(t *testing.T) []Agent { return gapFleet(t, gapSessions()...) }
 
-// A header with nothing above it has nothing to be set off from: a roster that
-// opens on a team opens on its header.
+// A header with nothing above it but all has nothing to be set off from: a roster
+// that opens on a team opens on its header, right under all.
 func TestARosterThatOpensOnATeamDrawsNoBlankAboveIt(t *testing.T) {
 	agents := gapFleet(t,
 		rpc.SessionStatus{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
@@ -74,13 +74,14 @@ func TestARosterThatOpensOnATeamDrawsNoBlankAboveIt(t *testing.T) {
 
 	lines := rosterLines(agents, "", noSubsOf, 30, 20)
 
-	if rowContaining(lines, "backend") != 0 {
-		t.Errorf("the roster does not open on the backend header:\n%s", strings.Join(lines, "\n"))
+	if rowContaining(lines, "backend") != 1 {
+		t.Errorf("the roster does not open on the backend header, under all:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
-// No team, no header and no gap: the flat roster it has always drawn - scrolled,
-// too, where the window is engaged and a stray blank would cost a row of agents.
+// No team, no gap: the flat roster it has always drawn, under all and the no-team
+// header - scrolled, too, where the window is engaged and a stray blank would cost
+// a row of agents.
 func TestAFleetWithNoTeamsDrawsNoBlankRows(t *testing.T) {
 	var sessions []rpc.SessionStatus
 	for _, name := range []string{"alex", "thea", "john", "mara", "omar", "lena"} {
@@ -98,8 +99,10 @@ func TestAFleetWithNoTeamsDrawsNoBlankRows(t *testing.T) {
 			t.Errorf("row %d of a team-less roster is blank:\n%s", i, strings.Join(lines, "\n"))
 		}
 	}
-	if !strings.Contains(lines[3], "+3 below") {
-		t.Errorf("three agents fit and the other three are counted, but the last row is %q:\n%s", lines[3], strings.Join(lines, "\n"))
+	// john's window is thea, john, mara: above it are all and alex, below it omar and
+	// lena - items, as the window counts them.
+	if !strings.Contains(lines[3], "+2 above · +2 below") {
+		t.Errorf("three agents fit and the other items are counted, but the last row is %q:\n%s", lines[3], strings.Join(lines, "\n"))
 	}
 }
 
@@ -137,7 +140,13 @@ func TestEveryRosterRowResolvesToWhatIsDrawnThereAtEveryHeight(t *testing.T) {
 				if isFooter(strings.TrimRight(line, " ")) && ok {
 					t.Errorf("height %d, cursor %s: the closing row %d resolves to %+v, want no one", height, sel, y, spot)
 				}
-				if strings.Contains(line, "─") && !isFooter(strings.TrimRight(line, " ")) && (!ok || spot.header == "" || a.ID != "") {
+				noTeam := isTopEdge(strings.TrimRight(line, " ")) && strings.Contains(line, " "+unteamedLabel+" ")
+				switch {
+				case noTeam:
+					if ok {
+						t.Errorf("height %d, cursor %s: the no team header on row %d resolves to %+v, want no one: it is no channel", height, sel, y, spot)
+					}
+				case strings.Contains(line, "─") && !isFooter(strings.TrimRight(line, " ")) && (!ok || spot.header == "" || a.ID != ""):
 					t.Errorf("height %d, cursor %s: the header on row %d resolves to (%+v, %v), want its channel and no agent", height, sel, y, spot, ok)
 				}
 				// A gap or a header is never left over the count: whatever the window

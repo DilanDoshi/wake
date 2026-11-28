@@ -34,12 +34,12 @@ func rosterLeft(a App) int { return a.layout.Width - a.regions().Roster + 1 }
 
 // The reported bug: every rendered surface must be highlightable and copied on
 // release, not just the transcript and the query box. A drag across the
-// sidebar's pinned all header - chrome that took no selection at all before -
+// sidebar's all row - chrome that took no selection at all before -
 // selects it as screen cells and copies on release. (An agent's row is a drag
 // source now: see agentdrag.go.)
 func TestADragOverChromeSelectsAndCopies(t *testing.T) {
 	a := rosterApp(t)
-	y, x0 := searchBarRows, rosterLeft(a) // the pinned all, under the search bar
+	y, x0 := searchBarRows, rosterLeft(a) // all, under the search bar
 	got, cmd := drag(a, x0, x0+10, y)
 	if !got.sel.onScreen {
 		t.Errorf("sel = %+v: a drag on chrome is a screen selection", got.sel)
@@ -84,7 +84,7 @@ func TestAClickOnTheRosterStillOpensTheConversation(t *testing.T) {
 // assembled frame instead of a pane's scrollback.
 func TestTheScreenSelectionCopiesTheCellsUnderIt(t *testing.T) {
 	a := rosterApp(t)
-	y, x0 := searchBarRows, rosterLeft(a) // the pinned all header, which is text and no drag source
+	y, x0 := searchBarRows, rosterLeft(a) // the all row, which is text and no drag source
 	x1 := x0 + 12
 	got, _ := drag(a, x0, x1, y)
 	lines := strings.Split(got.assembleFrame(), "\n")

@@ -1,7 +1,7 @@
 package ui
 
 // The sidebar's window over a roster taller than its column, starting at an item
-// (an agent with the gap and header it leads with). The wheel holds it where it
+// (all, or an agent with the gap and header it leads with). The wheel holds it where it
 // left it; otherwise it moves the least that shows the cursor, worked out at every
 // draw, so a re-rank cannot strand the cursor unless the wheel holds the window -
 // and then a selection it does not draw takes no key. decisions.md, 2026-11-06.
@@ -11,12 +11,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // pickOutOfView is what a key refused for a selection out of view says.
-const pickOutOfView = "the agent selected in the sidebar is scrolled out of view. The wheel brings it back, ⇧↑↓ moves on from it"
+const pickOutOfView = "the row selected in the sidebar is scrolled out of view. The wheel brings it back, ⇧↑↓ moves on from it"
 
 // rosterView is where the sidebar's window stands.
 type rosterView struct {
@@ -91,8 +89,8 @@ func (r Roster) window(rows []rosterItem, h heights, height int) span {
 	return h.grow(top, room)
 }
 
-// countLine is what the column says about the agents its window leaves out, and
-// which way they are: "+5 above", "+3 below", "+5 above · +2 below". A column too
+// countLine is what the column says about the items (all and the agents) its window
+// leaves out, and which way they are: "+5 above", "+3 below", "+5 above · +2 below". A column too
 // narrow to say both says "+7 more".
 func countLine(above, below, width int) string {
 	if line := "  " + countWords(above, below); ansi.StringWidth(line) <= width {
@@ -121,15 +119,12 @@ func (a App) rosterDrawn() Roster {
 	return r
 }
 
-// rosterRows is the rows the roster's agents have, under the pinned all.
-func (a App) rosterRows() int { return a.rosterListHeight() - allRows }
-
 // rosterWindow is the sidebar's items as drawn, their heights, and the window
 // over them - each worked out once.
 func (a App) rosterWindow() ([]rosterItem, heights, span) {
 	rows := sectionRows(a.fleet.sectioned(a.rosterAgents()))
 	h := itemHeights(rows, a.fleet.RunningTasks)
-	return rows, h, a.rosterDrawn().window(rows, h, a.rosterRows())
+	return rows, h, a.rosterDrawn().window(rows, h, a.rosterListHeight())
 }
 
 // wheelRoster is a notch over the sidebar: the window an item on (down) or back,
@@ -137,7 +132,7 @@ func (a App) rosterWindow() ([]rosterItem, heights, span) {
 // window opens when the fleet next overflows, since the pointer says what scrolls.
 func (a App) wheelRoster(lines int) App {
 	_, h, w := a.rosterWindow()
-	if h.total() <= a.rosterRows() {
+	if h.total() <= a.rosterListHeight() {
 		return a
 	}
 	step := 1
@@ -146,7 +141,7 @@ func (a App) wheelRoster(lines int) App {
 	}
 	// shown is kept: a notch the end stops moves nothing, and the seam decides
 	// again only on a change.
-	a.rosterView.top, a.rosterView.held = clamp(w.from+step, 0, h.lastTop(a.rosterRows()-1)), true
+	a.rosterView.top, a.rosterView.held = clamp(w.from+step, 0, h.lastTop(a.rosterListHeight()-1)), true
 	return a
 }
 
@@ -161,16 +156,16 @@ func (a App) rosterSettled(was App) App {
 		return a.rosterLetGo(drawn.from)
 	}
 	v, old := a.rosterView, was.rosterView
-	if !v.held || old.held && v.top == old.top && a.fleet.same(was.fleet) && a.rosterRows() == was.rosterRows() {
+	if !v.held || old.held && v.top == old.top && a.fleet.same(was.fleet) && a.rosterListHeight() == was.rosterListHeight() {
 		return a
 	}
 	rows, h, w := a.rosterWindow()
-	if h.total() <= a.rosterRows() {
+	if h.total() <= a.rosterListHeight() {
 		a.rosterView = rosterView{} // it all fits: nothing to hold
 		return a
 	}
 	c := a.roster.cursorRow(rows)
-	a.rosterView.shown = a.roster.Header == core.BroadcastName || c >= w.from && c < w.to
+	a.rosterView.shown = c >= w.from && c < w.to
 	return a
 }
 

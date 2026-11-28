@@ -35,7 +35,7 @@ func TestAChannelPickedInTheRosterFiltersTheRoom(t *testing.T) {
 	t.Logf("SCREENSHOT the backend channel:\n%s", s.dump())
 
 	// all is pinned at the top; a click on it is the whole room again.
-	s.click(s.cols-3, s.rowOf("─ all ─"))
+	s.click(s.cols-3, s.allRow())
 	s.await("group chat ─╮")
 	s.await("gammaword")
 
@@ -79,7 +79,7 @@ func TestYourOwnSendStaysInTheChannelItWasTypedIn(t *testing.T) {
 
 	// Both backend members have answered once all shows both replies, so the
 	// frontend channel drawing neither is the channel's choice, not a race.
-	s.click(s.cols-3, s.rowOf("─ all ─"))
+	s.click(s.cols-3, s.allRow())
 	s.await("group chat ─╮")
 	s.await("@backend crossword")
 	s.awaitCount("agent heard: crossword", 2)

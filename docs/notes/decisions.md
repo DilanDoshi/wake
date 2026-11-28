@@ -8,6 +8,43 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-25 — `all` is a row that scrolls, and the agents with no team are a box of their own (the owner, via wake-orch)
+
+The owner picked variant A-in-count of wake-orch's mockups: an `all · N` row, then a `no team` box holding the manager and
+the loose agents, then the team boxes. And, of every mockup: "on scroll the --all-- should scroll like normal and should
+not be anchored". The box under the pinned `all` read as "these are all the agents" when it meant "the agents with no
+team", and `all` stood over a list it is a row of.
+
+- **`all` is item 0 of the roster**, the one item with no agent (`rosterItem.all`). `allRows` and everything that read it
+  went with the pin: `Column` and `Hit` are `View` and `At` (`At` answers for `all`'s row like any other), `rosterRows` is
+  `rosterListHeight`, and the search bar's threshold is `searchBarRows+searchListFloor` with the floor 3 to 4 (all and three
+  more), so the bar still needs the literal seven rows. A wheel notch is an item, so `all` leaves before any agent does; the
+  count row counts items, `all` among them (`+1 above` with only `all` gone).
+- **`all` stays a channel stop** for `⇧↑↓`, a click and `↵` wherever it is drawn, and **the channel pick stands while it is
+  scrolled off** (`a.room.channel` does not read the window). The cursor on a scrolled-off `all` is a hidden selection like a
+  team header's: it takes no key and says why (`rosterPickHidden`; the old `Header == BroadcastName ||` clause of
+  `rosterSettled` is gone). `⇧↑` onto it pulls the window back to the top (`cursorRow` is item 0).
+- **`no team` is a header that picks nothing** (`unteamedLabel`; `At` gives it no spot and `channelStops` no stop): the
+  channel of a team is what a lone `@team` narrows to and the agents with no team have no address. It has a space, so no
+  real team can be called it (a team is `[a-z0-9_-]`). It rides on the first loose agent's item, so it never parts from its
+  first member, with no blank row under `all`; the first team keeps none when nobody is loose. **The box is never lit** -
+  muted whichever channel is picked, as the mockups drew it: only `all`'s rule says all is picked.
+- **N is `len(Fleet.OnRoster())`**: every non-ended row, the manager and parked agents included, and not the filter's
+  narrowing (the bar already says `4/22`). It cannot disagree with the strip: both draw from the same `OnRoster`, and the
+  strip counts every state once (`need you`, `working`, `idle`, `silent`, `parked`, `orphaned`, a finished turn as `done`
+  instead of idle), so its segments add up to N; only `looping` is cross-cutting. `TestAllCountsEveryRosterRowAndTheStripAddsUpToIt`
+  holds it. `Roster.total` is set where the sidebar is drawn (`appview.go`); 0 draws a bare `all`.
+- **Supersedes** three rulings: 2026-11-06's "the pinned `all` is always drawn", 2026-11-19's "the pinned `all` row stays the
+  one-row top edge (`allRows` is unchanged)" and its "the pinned `all` edge is sticky: scrolled over a team's walls it still
+  names the channel a click picks". The sticky edge was a deliberate #249 choice; the owner reversed it.
+- **A cut box runs on, and so does the no-team box**: scrolled past its first agent its walls draw with no edge, as a
+  team's do. With `all` scrolled off above it that no longer reads as the old `all` box under the rule.
+- **Not changed here (stale until the next landing refresh):** `demo/gestures/{34-drag,35-search,36-boxes}.json` name
+  sidebar cells that shift one or two rows (the `all` row is no longer the box's top edge, and the `no team` header adds a
+  row), so a re-take must re-read them.
+
+---
+
 ## 2026-11-21 — the sidebar's search bar (D1 of the jump picker's mockups), PR2
 
 The owner picked D with the jump box (A): a search bar atop the sidebar for the agent you want to *see in place*, where
@@ -28,7 +65,8 @@ same thing in both.
   (`esc` is clear-and-return, one key). A sidebar too short for the bar and a list draws neither the bar nor the
   filter (`activeQuery`); the query is kept and applies again when the room is back.
 - **`all` is a rule when nothing loose is under it** (`Roster.Column`): a filter that matches no loose agent, or a
-  roster of teams alone (the manager stopped), no longer draws the top edge of an empty box.
+  roster of teams alone (the manager stopped), no longer draws the top edge of an empty box. (**Superseded 2026-11-25**:
+  `all` is always a plain rule, the first row of the list, and the no-team box is its own box; `Column` is gone.)
 - **One source, five readers.** `rosterAgents` replaces the roster's own reads at the draw, the click, the window,
   `cursorAgent` and `pickAgent`; the strip, the board, the channel logic and the jump box keep `OnRoster`. A new reader
   of "the sidebar's agents" is `rosterAgents`, never `OnRoster`.
@@ -328,7 +366,7 @@ could be reached only with ⇧↑↓.
   was asked about would each land in one place too: a key that first scrolls a hidden selection back into
   view would be one guard in `App.key` ahead of the keys those three serve, and the board's carry would be
   its `landing` called from `wheelRoster`. Nothing selected hides nothing (the keys fall back as they did).
-  The pinned `all` is always drawn, and so is the conversation holding the keys, as its pane: ⌃F in it
+  The pinned `all` is always drawn (**superseded 2026-11-25: `all` scrolls like a row**), and so is the conversation holding the keys, as its pane: ⌃F in it
   forks it however its row scrolled - but a subagent row under it is a row like any. A refused key says the
   selection is out of view (`pickOutOfView`). The room's `/` and `@` menus only offer, so they stay on the
   selection (`cursorAgent`).
@@ -6617,14 +6655,14 @@ right sidebar only; `/board`'s team dividers stay `──── name ───�
 
 - **A section is a box**: the header is its top edge (`╭── name ──╮`, one row, through `titledEdge`), members stand
   between `│ ` and ` │`, and a `╰──╯` row closes under the last. The agents above the first team are a box too, under
-  the pinned `all`, whose row stays the one-row top edge (`allRows` is unchanged). The blank row between sections stays.
+  the pinned `all`, whose row stays the one-row top edge (`allRows` is unchanged; **superseded 2026-11-25**: `all` is a plain rule that scrolls, over a `no team` box). The blank row between sections stays.
 - **The closing row rides on the section's last item**, as the header and the gap ride on its first
   (`rosterItem.footer`, `trail`). The window still cuts between items, so `heights`, `grow`, `lastTop`, `window`, the
   wheel and the seam read `rowsForRow` and needed no change; `At` skips the closing row (no one's, like the gap) and
   counts the subagent rows above it. The last window ends on a closing row.
 - **A cut box runs on**: a window that starts or ends inside a team draws walls with no edge on that side, and the
   count row stays one full-width row outside every box. The pinned `all` edge is sticky: scrolled over a team's
-  walls it still names the channel a click picks.
+  walls it still names the channel a click picks (**superseded 2026-11-25**: `all` scrolls away with the list).
 - **Rows have the column less four** (`boxInset` each side), 19 at the default 23. `headLine` keeps its budget, now
   at 19: a name is cut at the wall (a hard cut, no ellipsis, as before) and the unread badge is kept; the goal, loop
   and token figures are dropped whole sooner (a working agent's `↓ 550` fits a name of eleven columns, not twelve),
